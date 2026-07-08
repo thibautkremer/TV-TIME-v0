@@ -363,16 +363,19 @@
     }
 
     // POINT 5: La fonction saveLocalDB synchronise désormais directement avec Supabase l'élément qu'on lui passe
-    async function saveLocalDB(syncItem = null) {
+   async function saveLocalDB(syncItem = null) {
+        // 1. Sauvegarde légère : On ne garde que les 50 derniers médias modifiés en local
+        // Cela évite de dépasser les 5 Mo tout en gardant une accélération pour l'affichage
         try {
-            localStorage.setItem('personal_tracker_db', JSON.stringify(library));
+            const cache = library.slice(0, 50); 
+            localStorage.setItem('personal_tracker_db', JSON.stringify(cache));
         } catch (e) {
-            console.warn("localStorage plein, mode Cloud.");
+            console.warn("Cache local complet, seule la synchro Cloud est active.");
         }
         
         updateHeaderCount();
         
-        // Pousse immédiatement la modification vers Supabase
+        // 2. Priorité absolue : Supabase
         if (syncItem && typeof supabaseClient !== 'undefined') {
             try {
                 await supabaseClient.from('user_library').upsert({
@@ -382,11 +385,11 @@
                     last_modified: syncItem.last_modified || Date.now()
                 }, { onConflict: 'user_id,media_id' });
             } catch (e) {
-                console.error("Erreur Sync vers Cloud", e);
+                console.error("Erreur critique de synchro Cloud :", e);
             }
         }
     }
-
+    
     async function syncToCloud() {
         const statusEl = document.getElementById('cloudStatus');
         statusEl.textContent = '⏳ Sync...';
@@ -952,10 +955,13 @@
         const container = document.getElementById('modalSeasonGraph');
         container.innerHTML = '';
         eps.forEach(ep => {
-            const r = ep.rating || 7.0;
+            // Extraction sécurisée de la note
+            const val = (typeof ep.rating === 'object' && ep.rating !== null) ? (ep.rating.average || 0) : (ep.rating || 0);
+            const r = val > 0 ? val : 7.0; // Fallback à 7 si la note est 0
             const h = Math.max(10, (r / 10) * 100);
+            
             const colorClass = seasonColors[(ep.season - 1) % seasonColors.length] || 'bg-cyan-600';
-            container.innerHTML += `<div class="flex-1 min-w-[12px] ${colorClass} hover:opacity-80 rounded-t cursor-pointer flex flex-col justify-end items-center relative z-10" style="height: ${h}%" title="E${ep.number}: ${r}"><span class="text-[8px] text-white font-bold mb-0.5 opacity-80">${r}</span></div>`;
+            container.innerHTML += `<div class="flex-1 min-w-[12px] ${colorClass} hover:opacity-translate-y-1 transition rounded-t cursor-pointer flex flex-col justify-end items-center relative z-10" style="height: ${h}%" title="E${ep.number}: ${r}"><span class="text-[8px] text-white font-bold mb-0.5 opacity-80">${r > 0 ? r : ''}</span></div>`;
         });
     }
 
@@ -995,7 +1001,11 @@
 
         list.innerHTML = eps.map(ep => {
             const isFuture = !ep.airdate || ep.airdate > todayString;
-            const rateStr = ep.rating > 0 ? `<span class="text-[9px] text-yellow-400 font-bold ml-2">★ ${ep.rating.toFixed(1)}</span>` : '';
+            
+            // Extraction sécurisée de la note
+            const val = (typeof ep.rating === 'object' && ep.rating !== null) ? (ep.rating.average || 0) : (ep.rating || 0);
+            const rateStr = val > 0 ? `<span class="text-[9px] text-yellow-400 font-bold ml-2">★ ${val.toFixed(1)}</span>` : '';
+            
             const btnClass = isFuture ? 'bg-gray-800/50 text-gray-600' : (ep.watched ? 'bg-emerald-900 text-emerald-400' : 'bg-gray-700 hover:bg-gray-600');
             const btnAction = isLib ? `<button onclick="event.stopPropagation(); ${!isFuture ? `toggleEpCascade(${ep.id}, '${ep.season}')` : ''}" class="px-2 py-1 rounded text-[10px] shrink-0 font-bold transition ${btnClass}" ${isFuture?'disabled':''}>${ep.watched ? '✓ Vu' : 'Vu'}</button>` : '';
 
