@@ -1140,29 +1140,38 @@
         btn.innerHTML = `<span class="animate-pulse">🔄 Mise à jour en cours...</span>`;
         btn.disabled = true;
 
+        // Fonction pour gérer le timeout (2 secondes)
+        const fetchWithTimeout = async (url, ms = 2000) => {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), ms);
+            try {
+                const response = await fetch(url, { signal: controller.signal });
+                clearTimeout(timeoutId);
+                return response;
+            } catch (err) {
+                clearTimeout(timeoutId);
+                throw err;
+            }
+        };
+
         for (let i = 0; i < library.length; i++) {
             let item = library[i];
-            
-            // Mise à jour du texte du bouton pour suivre la progression
             btn.innerHTML = `🔄 ${i + 1}/${library.length} - ${item.title.substring(0, 15)}...`;
 
             try {
                 if (item.type === 'series') {
-                    // On ajoute une pause de 1 seconde entre chaque appel pour ne pas déclencher le 429
-                    await sleep(1000); 
-
-                    const res = await fetch(`${TVMAZE_API}/shows/${item.apiId}?embed=episodes`);
+                    // Utilisation du fetch avec timeout
+                    const res = await fetchWithTimeout(`${TVMAZE_API}/shows/${item.apiId}?embed=episodes`);
                     
-                    if (res.status === 404) continue; // Si non trouvé, on passe au suivant
+                    if (res.status === 404) continue;
                     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
                     const data = await res.json();
                     
+                    // Mise à jour des infos
                     item.rating = data.rating?.average || item.rating;
                     item.runtime = data.runtime || data.averageRuntime || item.runtime;
                     item.summary = data.summary?.replace(/<[^>]*>/g, '') || item.summary;
-                    item.status_production = data.status || item.status_production;
-                    item.network = data.network?.name || data.webChannel?.name || item.network;
                     
                     const apiEps = data._embedded?.episodes || [];
                     let newEpsList = [];
@@ -1181,11 +1190,22 @@
                     item.last_modified = Date.now();
                 }
             } catch(e) { 
-                console.warn(`Erreur sur ${item.title}:`, e);
-                // Si on a une erreur 429, on attend un peu plus longtemps avant de reprendre
-                if (e.message.includes('429')) await sleep(5000); 
+                console.warn(`Saut de ${item.title} (Timeout ou Erreur):`, e);
+                // Si ça bloque, on passe au suivant automatiquement
+                continue; 
             }
         }
+        
+        saveLocalDB();
+        renderProfile();
+        if(!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
+        
+        btn.innerHTML = `<span>✅ Mise à jour terminée !</span>`;
+        setTimeout(() => {
+            btn.innerHTML = `<span>🔄 Mettre à jour (Infos & Épisodes API)</span>`;
+            btn.disabled = false;
+        }, 3000);
+    }
         
         saveLocalDB();
         renderProfile();
