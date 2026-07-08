@@ -1161,6 +1161,7 @@
             try {
                 if (item.type === 'series') {
                     // Utilisation du fetch avec timeout
+                    await sleep(1000); 
                     const res = await fetchWithTimeout(`${TVMAZE_API}/shows/${item.apiId}?embed=episodes`);
                     
                     if (res.status === 404) continue;
