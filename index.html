@@ -161,16 +161,16 @@
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <!-- LIGNE 1 -->
             <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center">
-                <div id="stat-hours" class="text-sm font-black text-teal-400 tracking-wide">0 h</div>
-                <div class="text-[10px] text-gray-400 mt-1">Temps regardé</div>
+                <div id="stat-hours" class="text-lg font-black text-teal-400 tracking-wide">0 h</div>
+                <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Temps regardé</div>
             </div>
             <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center">
-                <div id="stat-backlog-hours" class="text-sm font-black text-purple-400 tracking-wide">0 h</div>
-                <div class="text-[10px] text-gray-400 mt-1">Backlog</div>
+                <div id="stat-backlog-hours" class="text-lg font-black text-purple-400 tracking-wide">0 h</div>
+                <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Backlog</div>
             </div>
             <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center">
-                <div id="stat-avg-rating" class="text-sm font-black text-yellow-400 tracking-wide">0.0</div>
-                <div class="text-[10px] text-gray-400 mt-1">Note globale</div>
+                <div id="stat-avg-rating" class="text-lg font-black text-yellow-400 tracking-wide">0.0</div>
+                <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Note globale</div>
             </div>
             <div id="stat-movies-finished" class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center">
                  <!-- Injecté par JS -->
@@ -365,8 +365,6 @@
     }
 
     async function saveLocalDB(syncItem = null) {
-        // 1. Sauvegarde légère : On ne garde que les 50 derniers médias modifiés en local
-        // Cela évite de dépasser les 5 Mo tout en gardant une accélération pour l'affichage
         try {
             const cache = library.slice(0, 50); 
             localStorage.setItem('personal_tracker_db', JSON.stringify(cache));
@@ -376,7 +374,6 @@
         
         updateHeaderCount();
         
-        // 2. Priorité absolue : Supabase
         if (syncItem && typeof supabaseClient !== 'undefined') {
             try {
                 await supabaseClient.from('user_library').upsert({
@@ -1147,6 +1144,28 @@
         const animes = library.filter(i => (i.genres || []).includes('Anime') || (i.genres || []).includes('Animation'));
         const movies = library.filter(i => i.type === 'movie');
     
+        // 0. Calcul du Temps Regardé et du Backlog
+        let watchedMin = 0;
+        let backlogMin = 0;
+
+        library.forEach(item => {
+            if (item.type === 'movie') {
+                const r = parseInt(item.runtime) || 120; // 120 min par défaut si non renseigné
+                if (item.status === 'Watched') watchedMin += r;
+                else if (item.status !== 'Abandoned') backlogMin += r; // On n'ajoute pas les abandons au backlog
+            } else if (item.type === 'series') {
+                const defR = parseInt(item.runtime) || 24; // 24 min par défaut (standard Anime/Sitcom)
+                (item.episodes || []).forEach(ep => {
+                    const r = parseInt(ep.runtime) || defR;
+                    if (ep.watched) watchedMin += r;
+                    else if (item.status !== 'Abandoned') backlogMin += r;
+                });
+            }
+        });
+
+        document.getElementById('stat-hours').textContent = formatDurationProfile(watchedMin);
+        document.getElementById('stat-backlog-hours').textContent = formatDurationProfile(backlogMin);
+
         // 1. Calcul Note Globale
         const ratedItems = library.filter(i => i.rating && i.rating > 0);
         const avgRating = ratedItems.length > 0 ? (ratedItems.reduce((acc, i) => acc + i.rating, 0) / ratedItems.length).toFixed(1) : '0.0';
