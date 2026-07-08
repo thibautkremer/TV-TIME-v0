@@ -1232,41 +1232,61 @@
     }
 
     async function massUpdateLibrary() {
-        console.log("🚀 Lancement du Mass Update complet (Statuts, Notes & Plateformes)...");
+        console.log("🚀 Lancement du Mass Update complet...");
         let updatedCount = 0;
-        const OMDB_API_KEY = '1e01c814';
+        let skippedCount = 0;
+        let errorCount = 0;
+        
+        // ⚠️ Si l'erreur 401 persiste, il faudra générer une nouvelle clé gratuite sur omdbapi.com
+        const OMDB_API_KEY = '1e01c814'; 
 
-        for (let item of library) {
+        for (let i = 0; i < library.length; i++) {
+            let item = library[i];
+            console.log(`[${i + 1}/${library.length}] ⏳ Traitement de : "${item.title}"...`);
+
             try {
                 let changed = false;
                 let data = null;
 
+                // 1. Appel API
                 if (item.type === 'series' && item.apiId) {
                     const res = await fetch(`https://api.tvmaze.com/shows/${item.apiId}?embed=episodes`);
+                    if (!res.ok) throw new Error(`TVMaze HTTP Error: ${res.status}`);
                     data = await res.json();
                 } else if (item.type === 'movie' && item.apiId) {
                     const url = `https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&i=${item.apiId}&plot=full`;
                     const res = await fetch(url);
+                    if (!res.ok) throw new Error(`OMDb HTTP Error: ${res.status} (Probablement API Key bloquée)`);
                     data = await res.json();
+                    
+                    // OMDb renvoie parfois un statut 200 mais avec une erreur JSON à l'intérieur
+                    if (data.Response === "False") throw new Error(`OMDb API: ${data.Error}`);
                 }
 
-                if (!data) continue;
+                if (!data) {
+                    console.log(`   ⏭️ Ignoré : Aucun ID d'API valide.`);
+                    skippedCount++;
+                    continue;
+                }
 
+                // 2. Mise à jour du Statut (Séries uniquement)
                 if (item.type === 'series' && data.status && item.status_production !== data.status) {
                     item.status_production = data.status;
                     changed = true;
-                    console.log(`   🔄 Statut mis à jour pour "${item.title}": ${data.status}`);
+                    console.log(`   🔄 Statut : ${data.status}`);
                 }
 
+                // 3. Mise à jour de la Plateforme (Network)
                 if (item.type === 'series') {
                     const newNetwork = data.network?.name || data.webChannel?.name;
                     if (newNetwork && (item.network === 'Trakt Import' || item.network !== newNetwork)) {
                         item.network = newNetwork;
                         changed = true;
-                        console.log(`   🌐 Plateforme mise à jour pour "${item.title}": ${item.network}`);
+                        console.log(`   🌐 Plateforme : ${item.network}`);
                     }
                 }
 
+                // 4. Mise à jour des notes
                 let newRating = null;
                 if (item.type === 'series') {
                     newRating = data.rating?.average;
@@ -1275,13 +1295,13 @@
                 }
 
                 const cleanedRating = (typeof newRating === 'object' && newRating !== null) ? newRating.average : newRating;
-                
                 if (cleanedRating && item.rating !== cleanedRating) {
                     item.rating = cleanedRating;
                     changed = true;
-                    console.log(`   ⭐ Note mise à jour pour "${item.title}": ${cleanedRating}`);
+                    console.log(`   ⭐ Note : ${cleanedRating}`);
                 }
 
+                // 5. Sauvegarde
                 if (changed) {
                     item.last_modified = Date.now();
                     await supabaseClient.from('user_library').upsert({
@@ -1292,17 +1312,23 @@
                     }, { onConflict: 'user_id,media_id' });
                     
                     updatedCount++;
-                    console.log(`✅ [TRANSMI] : "${item.title}" mis à jour.`);
+                    console.log(`   ✅ Sauvegardé sur le Cloud.`);
+                } else {
+                    skippedCount++;
+                    console.log(`   ➖ Déjà à jour.`);
                 }
 
+                // Pause de 800ms pour éviter le ban pour "trop de requêtes"
                 await new Promise(r => setTimeout(r, 800));
 
             } catch (e) {
-                console.error(`❌ Erreur lors de la mise à jour de ${item.title}:`, e);
+                errorCount++;
+                console.error(`   ❌ ERREUR : ${e.message}`);
             }
         }
 
-        alert(`Mass Update terminé !\n${updatedCount} médias mis à jour (Notes, Statuts et Plateformes).`);
+        console.log("🏁 MASS UPDATE TERMINÉ 🏁");
+        alert(`Bilan de la mise à jour :\n\n✅ ${updatedCount} mis à jour\n➖ ${skippedCount} déjà parfaits\n❌ ${errorCount} erreurs (voir console)`);
         location.reload();
     }
 
