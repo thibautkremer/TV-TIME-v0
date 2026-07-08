@@ -696,15 +696,26 @@
         const bgColorClass = media.type === 'movie' ? 'bg-amber-900/60' : (isAnime ? 'bg-purple-900/60' : 'bg-teal-900/60');
         const typeFlag = media.type === 'movie' ? 'FILM' : (isAnime ? 'ANIME' : 'SÉRIE');
         const typeClass = media.type === 'movie' ? 'bg-amber-600' : (isAnime ? 'bg-purple-600' : 'bg-teal-600');
-
+    
         const div = document.createElement('div');
         div.className = 'bg-gray-800 rounded-xl border border-gray-700 overflow-hidden cursor-pointer shadow-sm relative flex flex-col hover:border-gray-500 transition-colors';
         div.onclick = () => isLib ? openLibraryModal(media.id) : openPreviewModal(media);
         
+        // --- LOGIQUE IMAGE AMÉLIORÉE ---
+        const DEFAULT_IMG = 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSzNFY2uiCR89dXMmbtsvSRDxJtnpN8NJFkcNtJIz-kCA&s=10';
+        
+        // On valide l'image : elle doit exister, ne pas être 'N/A', et ne pas être le nom du fichier cassé
+        const isImageValid = media.image && 
+                             media.image !== 'N/A' && 
+                             media.image !== 'image_par_defaut.jpg';
+        
+        const imgSrc = isImageValid ? media.image : DEFAULT_IMG;
+        // -------------------------------
+    
         const rating = media.rating > 0 ? media.rating.toFixed(1) : 'N/A';
         const ratingOverlay = `<div class="absolute top-1 right-1 bg-black/80 text-yellow-400 text-[10px] font-black px-1.5 py-0.5 rounded z-10 shadow border border-gray-800/50">★ ${rating}</div>`;
         const dateOverlay = !isLib && media.premiered ? `<div class="absolute bottom-1 right-1 bg-black/80 text-gray-300 text-[9px] font-black px-1.5 py-0.5 rounded z-10 border border-gray-800/50">${media.premiered.substring(0,4)}</div>` : '';
-
+    
         let libOverlay = '';
         let libProgress = '';
         if (isLib && media.type === 'series') {
@@ -721,10 +732,9 @@
         } else if (isLib && media.type === 'movie' && media.status === 'Watched') {
             libOverlay = `<button onclick="event.stopPropagation(); resetToUnwatched('${media.id}')" class="absolute bottom-1 right-1 bg-gray-900/90 hover:bg-amber-900 border border-gray-700 text-amber-400 text-[9px] px-1.5 py-0.5 rounded font-black transition shadow z-20">↺ Non vu</button>`;
         }
-
+    
         const quickActions = !isLib ? `<div class="mt-auto flex gap-1 pt-1" id="actions-${media.id}">${buildCardActionsHTML(media.id)}</div>` : '';
-        const imgSrc = (media.image && media.image !== 'N/A') ? media.image : 'https://placehold.co/155x217/1f2937/4b5563?text=Pas+d+image';
-
+    
         div.innerHTML = `
             <div class="relative w-full">
                 <img src="${imgSrc}" class="media-poster bg-gray-900" loading="lazy" />
@@ -1191,7 +1201,8 @@
         const btn = document.getElementById('btn-mass-update');
         btn.innerHTML = `<span class="animate-pulse">🔄 Mise à jour en cours...</span>`;
         btn.disabled = true;
-
+    
+        // Fonction pour gérer le timeout
         const fetchWithTimeout = async (url, ms = 2000) => {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), ms);
@@ -1204,25 +1215,33 @@
                 throw err;
             }
         };
-
+    
         for (let i = 0; i < library.length; i++) {
             let item = library[i];
             if (item.type !== 'series') continue; 
             
             btn.innerHTML = `🔄 ${i + 1}/${library.length} - ${item.title.substring(0, 15)}...`;
-
+    
             try {
                 await sleep(1000); 
                 const res = await fetchWithTimeout(`${TVMAZE_API}/shows/${item.apiId}?embed=episodes`);
                 
                 if (res.status === 404) continue;
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
+    
                 const data = await res.json();
                 
+                // Mise à jour des infos
                 item.rating = data.rating?.average || item.rating;
                 item.runtime = data.runtime || data.averageRuntime || item.runtime;
                 item.summary = data.summary?.replace(/<[^>]*>/g, '') || item.summary;
+                
+                // --- MISE À JOUR DE L'IMAGE ---
+                // TVMaze renvoie un objet { medium: "...", original: "..." }
+                // On prend le medium par défaut, sinon l'original, sinon on garde l'actuel
+                if (data.image) {
+                    item.image = data.image.medium || data.image.original || item.image;
+                }
                 
                 const apiEps = data._embedded?.episodes || [];
                 let newEpsList = [];
@@ -1239,6 +1258,7 @@
                 item.episodes = newEpsList;
                 item.status = newEpsList.every(e => e.watched || (!e.airdate || e.airdate > todayString)) ? 'Watched' : 'In Progress';
                 item.last_modified = Date.now();
+                
             } catch(e) { 
                 console.warn(`Saut de ${item.title} (Timeout ou Erreur):`, e);
                 continue; 
@@ -1249,12 +1269,12 @@
         renderProfile();
         if(!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
         
-        btn.innerHTML = `<span>✅ Mise à jour terminée !</span>`;
+        btn.innerHTML = `<span>✅ Mise à jour terminée (Images incluses) !</span>`;
         setTimeout(() => {
             btn.innerHTML = `<span>🔄 Mettre à jour (Infos & Épisodes API)</span>`;
             btn.disabled = false;
         }, 3000);
-    } 
+    }
 
     async function importLibrary(event) {
         const files = event.target.files;
