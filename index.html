@@ -156,30 +156,45 @@
             </button>
         </div>
 
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md col-span-2">
-                <div id="stat-hours" class="text-sm font-black text-teal-400 tracking-wide">0 h</div>
-                <div class="text-[10px] sm:text-xs text-gray-400 mt-1">Temps regardé</div>
-            </div>
-            <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md col-span-2">
-                <div id="stat-backlog-hours" class="text-sm font-black text-purple-400 tracking-wide">0 h</div>
-                <div class="text-[10px] sm:text-xs text-gray-400 mt-1">Backlog restant</div>
-            </div>
-            
-            <div id="stat-episodes-watched" class="bg-gray-800 p-3 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center items-center">
-                <!-- Rempli en JS -->
-            </div>
-            <div id="stat-series-followed" class="bg-gray-800 p-3 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center items-center">
-                <!-- Rempli en JS -->
-            </div>
-            <div id="stat-movies-finished" class="bg-gray-800 p-3 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center items-center">
-               <!-- Rempli en JS -->
-            </div>
-            <div class="bg-gray-800 p-3 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center items-center">
-                <div id="stat-avg-rating" class="text-xl font-black text-yellow-400">0.0</div>
-                <div class="text-[9px] text-gray-400 mt-1 uppercase">Note globale</div>
-            </div>
+        <!-- Temps total regardé -->
+        <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md col-span-2">
+            <div id="stat-hours" class="text-sm font-black text-teal-400 tracking-wide">0 h</div>
+            <div class="text-[10px] sm:text-xs text-gray-400 mt-1">Temps regardé</div>
         </div>
+        
+        <!-- Backlog restant -->
+        <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md col-span-2">
+            <div id="stat-backlog-hours" class="text-sm font-black text-purple-400 tracking-wide">0 h</div>
+            <div class="text-[10px] sm:text-xs text-gray-400 mt-1">Backlog restant</div>
+        </div>
+    
+        <!-- Stats Séries (Teal) -->
+        <div id="stat-series-grid" class="bg-gray-800 p-3 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center items-center">
+            <div class="text-lg font-black text-teal-400">0 / 0</div>
+            <div class="text-sm font-bold text-teal-400">0%</div>
+            <div class="text-[9px] uppercase text-gray-400">Séries finies</div>
+        </div>
+    
+        <!-- Stats Animes (Purple) -->
+        <div id="stat-animes-grid" class="bg-gray-800 p-3 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center items-center">
+            <div class="text-lg font-black text-purple-400">0 / 0</div>
+            <div class="text-sm font-bold text-purple-400">0%</div>
+            <div class="text-[9px] uppercase text-gray-400">Ép. Anime vus</div>
+        </div>
+    
+        <!-- Stats Films (Amber) -->
+        <div id="stat-movies-finished" class="bg-gray-800 p-3 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center items-center">
+            <div class="text-lg font-black text-amber-400">0 / 0</div>
+            <div class="text-sm font-bold text-amber-400">0%</div>
+            <div class="text-[9px] uppercase text-gray-400">Films vus</div>
+        </div>
+    
+        <!-- Note Globale (Yellow) -->
+        <div class="bg-gray-800 p-3 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center items-center">
+            <div id="stat-avg-rating" class="text-lg font-black text-yellow-400">0.0</div>
+            <div class="text-[9px] uppercase text-gray-400 mt-1">Note globale</div>
+        </div>
+    </div>
 
         <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-md space-y-2 mt-4">
             <h3 class="text-[11px] font-bold text-teal-400 uppercase tracking-wider">🏷️ Répartition par genres</h3>
@@ -1171,58 +1186,51 @@
         const movies = library.filter(i => i.type === 'movie');
     
         // 2. Calculs Séries (Hors Anime)
-        let sMin = 0, sEpWatched = 0, sTotalEps = 0, sFinished = 0, sBacklog = 0;
-        series.forEach(i => {
-            if (i.status === 'Watched') sFinished++;
-            (i.episodes || []).forEach(ep => {
-                sTotalEps++;
-                const rt = i.runtime || 40;
-                if (ep.watched) { sMin += rt; sEpWatched++; }
-                else if (ep.airdate && ep.airdate <= todayString && i.status !== 'Abandoned') sBacklog += rt;
-            });
-        });
+        let sTotal = series.length;
+        let sWatched = series.filter(s => s.status === 'Watched').length;
+        let sPct = sTotal > 0 ? Math.round((sWatched / sTotal) * 100) : 0;
     
-        // 3. Calculs Animes (Purple)
-        let aMin = 0, aEpWatched = 0, aTotalEps = 0, aFinished = 0, aBacklog = 0;
-        animes.forEach(i => {
-            if (i.status === 'Watched') aFinished++;
-            (i.episodes || []).forEach(ep => {
-                aTotalEps++;
-                const rt = i.runtime || 24;
-                if (ep.watched) { aMin += rt; aEpWatched++; }
-                else if (ep.airdate && ep.airdate <= todayString && i.status !== 'Abandoned') aBacklog += rt;
-            });
+        // 3. Calculs Animes (Episodes vus)
+        let aTotalEps = 0, aWatchedEps = 0;
+        animes.forEach(a => {
+            aTotalEps += (a.episodes || []).length;
+            aWatchedEps += (a.episodes || []).filter(e => e.watched).length;
         });
+        const aPct = aTotalEps > 0 ? Math.round((aWatchedEps / aTotalEps) * 100) : 0;
     
         // 4. Calculs Films
-        let mMin = 0, mFinished = 0, mTotal = movies.length, mBacklog = 0;
-        movies.forEach(i => {
-            if (i.status === 'Watched') { mMin += (i.runtime || 120); mFinished++; }
-            else mBacklog += (i.runtime || 120);
+        let mTotal = movies.length;
+        let mFinished = movies.filter(m => m.status === 'Watched').length;
+        const mPct = mTotal > 0 ? Math.round((mFinished / mTotal) * 100) : 0;
+    
+        // Temps (Global)
+        let totalMin = 0, backlogMin = 0;
+        library.forEach(i => {
+            const rt = i.runtime || (i.type === 'movie' ? 120 : 40);
+            if (i.status === 'Watched') totalMin += rt * (i.episodes ? i.episodes.length : 1);
+            else backlogMin += rt; // Estimation simplifiée pour le backlog
         });
     
-        // Temps total
-        document.getElementById('stat-hours').textContent = formatDurationProfile(sMin + aMin + mMin);
-        document.getElementById('stat-backlog-hours').textContent = formatDurationProfile(sBacklog + aBacklog + mBacklog);
+        document.getElementById('stat-hours').textContent = formatDurationProfile(totalMin);
+        document.getElementById('stat-backlog-hours').textContent = formatDurationProfile(backlogMin);
     
-        // 5. Mise à jour des Stats UI (Grid)
+        // 5. Mise à jour des blocs Stats (HTML IDs existants)
         // Séries (Teal)
-        const sPct = sTotalEps > 0 ? Math.round((sEpWatched / sTotalEps) * 100) : 0;
         document.getElementById('stat-series-followed').innerHTML = `
-            <div class="text-lg font-black">${sEpWatched} / ${sTotalEps}</div>
+            <div class="text-lg font-black text-teal-400">${sWatched} / ${sTotal}</div>
             <div class="text-sm font-bold text-teal-400">${sPct}%</div>
-            <div class="text-[9px] uppercase text-gray-400">Ép. Séries vus</div>`;
+            <div class="text-[9px] uppercase text-gray-400">Séries finies</div>`;
     
         // Animes (Purple)
         document.getElementById('stat-episodes-watched').innerHTML = `
-            <div class="text-lg font-black text-purple-400">${aFinished} / ${animes.length}</div>
-            <div class="text-sm font-bold text-purple-400">${animes.length > 0 ? Math.round((aFinished/animes.length)*100) : 0}%</div>
-            <div class="text-[9px] uppercase text-gray-400">Animes finis</div>`;
+            <div class="text-lg font-black text-purple-400">${aWatchedEps} / ${aTotalEps}</div>
+            <div class="text-sm font-bold text-purple-400">${aPct}%</div>
+            <div class="text-[9px] uppercase text-gray-400">Ép. Anime vus</div>`;
     
         // Films (Amber)
         document.getElementById('stat-movies-finished').innerHTML = `
             <div class="text-lg font-black text-amber-400">${mFinished} / ${mTotal}</div>
-            <div class="text-sm font-bold text-amber-400">${mTotal > 0 ? Math.round((mFinished/mTotal)*100) : 0}%</div>
+            <div class="text-sm font-bold text-amber-400">${mPct}%</div>
             <div class="text-[9px] uppercase text-gray-400">Films vus</div>`;
     
         // 6. Répartition par Genres
@@ -1238,18 +1246,25 @@
                 </div>`).join('');
         }
     
-        // 7. Répartition par Plateformes (Remplace Top 10)
+        // 7. Répartition par Plateformes (Remplace le Top Séries)
         const nc = {};
-        library.filter(i => i.network && i.network !== 'Inconnu').forEach(i => nc[i.network] = (nc[i.network] || 0) + 1);
+        library.forEach(i => {
+            if (i.network && i.network !== 'Trakt Import' && i.network !== 'Inconnu') {
+                nc[i.network] = (nc[i.network] || 0) + 1;
+            }
+        });
         const sortedNets = Object.entries(nc).sort((a, b) => b[1] - a[1]);
         
-        document.getElementById('stat-top-10').innerHTML = `<h3 class="text-[11px] font-bold text-blue-400 uppercase tracking-wider mb-2">🌐 Plateformes</h3>` + 
-        sortedNets.slice(0, 5).map(([n, c]) => `
-            <div class="flex items-center justify-between bg-gray-900/50 p-2 rounded-lg border border-gray-700">
-                <span class="text-xs font-bold text-white">${n}</span>
-                <span class="text-blue-400 font-black text-xs">${c}</span>
-            </div>
-        `).join('');
+        document.getElementById('stat-top-10').innerHTML = `
+            <h3 class="text-[11px] font-bold text-blue-400 uppercase tracking-wider mb-2">🌐 Plateformes</h3>
+            <div class="grid grid-cols-2 gap-2">
+                ${sortedNets.slice(0, 6).map(([n, c]) => `
+                    <div class="flex items-center justify-between bg-gray-900/50 p-2 rounded-lg border border-gray-700">
+                        <span class="text-[10px] font-bold text-white truncate">${n}</span>
+                        <span class="text-blue-400 font-black text-[10px]">${c}</span>
+                    </div>
+                `).join('')}
+            </div>`;
     }
 
     const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
