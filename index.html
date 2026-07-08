@@ -1140,7 +1140,6 @@
         btn.innerHTML = `<span class="animate-pulse">🔄 Mise à jour en cours...</span>`;
         btn.disabled = true;
 
-        // Fonction pour gérer le timeout (2 secondes)
         const fetchWithTimeout = async (url, ms = 2000) => {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), ms);
@@ -1156,43 +1155,40 @@
 
         for (let i = 0; i < library.length; i++) {
             let item = library[i];
+            if (item.type !== 'series') continue; 
+            
             btn.innerHTML = `🔄 ${i + 1}/${library.length} - ${item.title.substring(0, 15)}...`;
 
             try {
-                if (item.type === 'series') {
-                    // Utilisation du fetch avec timeout
-                    await sleep(1000); 
-                    const res = await fetchWithTimeout(`${TVMAZE_API}/shows/${item.apiId}?embed=episodes`);
-                    
-                    if (res.status === 404) continue;
-                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                await sleep(1000); 
+                const res = await fetchWithTimeout(`${TVMAZE_API}/shows/${item.apiId}?embed=episodes`);
+                
+                if (res.status === 404) continue;
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-                    const data = await res.json();
+                const data = await res.json();
+                
+                item.rating = data.rating?.average || item.rating;
+                item.runtime = data.runtime || data.averageRuntime || item.runtime;
+                item.summary = data.summary?.replace(/<[^>]*>/g, '') || item.summary;
+                
+                const apiEps = data._embedded?.episodes || [];
+                let newEpsList = [];
+                apiEps.forEach(apiEp => {
+                    const existing = (item.episodes || []).find(e => e.id === apiEp.id);
+                    const isReleased = apiEp.airdate && apiEp.airdate <= todayString;
+                    const watched = isReleased ? (existing ? existing.watched : false) : false;
                     
-                    // Mise à jour des infos
-                    item.rating = data.rating?.average || item.rating;
-                    item.runtime = data.runtime || data.averageRuntime || item.runtime;
-                    item.summary = data.summary?.replace(/<[^>]*>/g, '') || item.summary;
-                    
-                    const apiEps = data._embedded?.episodes || [];
-                    let newEpsList = [];
-                    apiEps.forEach(apiEp => {
-                        const existing = (item.episodes || []).find(e => e.id === apiEp.id);
-                        const isReleased = apiEp.airdate && apiEp.airdate <= todayString;
-                        const watched = isReleased ? (existing ? existing.watched : false) : false;
-                        
-                        newEpsList.push({ 
-                            id: apiEp.id, season: apiEp.season, number: apiEp.number, name: apiEp.name,
-                            airdate: apiEp.airdate, runtime: apiEp.runtime, watched: watched 
-                        });
+                    newEpsList.push({ 
+                        id: apiEp.id, season: apiEp.season, number: apiEp.number, name: apiEp.name,
+                        airdate: apiEp.airdate, runtime: apiEp.runtime, watched: watched 
                     });
-                    item.episodes = newEpsList;
-                    item.status = newEpsList.every(e => e.watched || (!e.airdate || e.airdate > todayString)) ? 'Watched' : 'In Progress';
-                    item.last_modified = Date.now();
-                }
+                });
+                item.episodes = newEpsList;
+                item.status = newEpsList.every(e => e.watched || (!e.airdate || e.airdate > todayString)) ? 'Watched' : 'In Progress';
+                item.last_modified = Date.now();
             } catch(e) { 
                 console.warn(`Saut de ${item.title} (Timeout ou Erreur):`, e);
-                // Si ça bloque, on passe au suivant automatiquement
                 continue; 
             }
         }
@@ -1206,18 +1202,7 @@
             btn.innerHTML = `<span>🔄 Mettre à jour (Infos & Épisodes API)</span>`;
             btn.disabled = false;
         }, 3000);
-    }
-        
-        saveLocalDB();
-        renderProfile();
-        if(!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
-        
-        btn.innerHTML = `<span>✅ Mise à jour terminée !</span>`;
-        setTimeout(() => {
-            btn.innerHTML = `<span>🔄 Mettre à jour (Infos & Épisodes API)</span>`;
-            btn.disabled = false;
-        }, 3000);
-    }
+    } 
 
     async function importLibrary(event) {
         const files = event.target.files;
