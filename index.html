@@ -577,9 +577,10 @@
     // --- SUIVIS (LIBRARY) ---
     function renderLibrary() {
         const grid = document.getElementById('libraryGrid');
-        // Récupération des valeurs
-        const sFilter = document.getElementById('libraryStatusFilter').value;
-        const tFilter = document.getElementById('libraryTypeFilter').value;
+        
+        // Récupération des filtres
+        const sFilter = document.getElementById('libraryStatusFilter').value; // 'not_finished' par défaut
+        const tFilter = document.getElementById('libraryTypeFilter').value;   // 'all' par défaut
         const dFilter = document.getElementById('libraryDiffusionFilter').value;
         const gFilter = document.getElementById('smartGenreFilter').value;
         const nFilter = document.getElementById('smartNetworkFilter').value;
@@ -587,23 +588,26 @@
         
         grid.innerHTML = '';
         
-        // Filtrage strict
+        // 1. Filtrage
         let filtered = library.filter(item => {
-            // 1. Filtre type
+            // Recherche textuelle (Priorité absolue, fonctionne même si les autres filtres sont sur 'all')
+            if (searchInput !== "" && !item.title.toLowerCase().includes(searchInput)) return false;
+    
+            // Filtre Type
             if (tFilter !== 'all' && item.type !== tFilter) return false;
             
-            // 2. Filtre statut
+            // Filtre Statut
             if (sFilter === 'not_finished' && item.status !== 'In Progress') return false;
             if (sFilter === 'watched' && item.status !== 'Watched') return false;
             if (sFilter === 'abandoned' && item.status !== 'Abandoned') return false;
             
-            // 3. Filtre genre
+            // Filtre Genre
             if (gFilter !== 'all' && !(item.genres || []).includes(gFilter)) return false;
             
-            // 4. Filtre plateforme
+            // Filtre Plateforme
             if (nFilter !== 'all' && !(item.network || '').includes(nFilter)) return false;
             
-            // 5. Filtre diffusion
+            // Filtre Diffusion
             if (item.type === 'series' && dFilter !== 'all') {
                 const sp = (item.status_production || '').toLowerCase();
                 const isCanceled = item.user_forced_cancel || sp.includes('cancel');
@@ -611,19 +615,33 @@
                 if (dFilter === 'running' && (isCanceled || !sp.includes('running'))) return false;
                 if (dFilter === 'ended' && (isCanceled || !sp.includes('ended'))) return false;
             }
-    
-            // 6. Recherche textuelle (indépendant des autres filtres)
-            if (searchInput !== "" && !item.title.toLowerCase().includes(searchInput)) return false;
             
             return true;
         });
     
-        // Tri
-        filtered.sort((a, b) => getProgress(b) - getProgress(a));
+        // 2. Tri personnalisé
+        filtered.sort((a, b) => {
+            const progA = getProgress(a);
+            const progB = getProgress(b);
+            
+            // Critère 1 : Avancement décroissant (le plus avancé en premier)
+            if (progA !== progB) return progB - progA;
+            
+            // Critère 2 : Si égalité d'avancement, Séries avant Films
+            // (series = -1, film = 1 pour forcer l'ordre)
+            const weightA = (a.type === 'series' ? 1 : 2);
+            const weightB = (b.type === 'series' ? 1 : 2);
+            return weightA - weightB;
+        });
     
+        // 3. Affichage
         const frag = document.createDocumentFragment();
         filtered.forEach(item => frag.appendChild(createMediaCard(item, true)));
         grid.appendChild(frag);
+        
+        if (filtered.length === 0) {
+            grid.innerHTML = '<p class="col-span-full text-center text-gray-500 text-sm py-10">Aucun résultat.</p>';
+        }
     }
 
     function getProgress(item) {
