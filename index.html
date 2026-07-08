@@ -1122,28 +1122,70 @@
         `).join('');
     }
 
+    // Fonction utilitaire pour créer une pause
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
     async function massUpdateLibrary() {
         const btn = document.getElementById('btn-mass-update');
         btn.innerHTML = `<span class="animate-pulse">🔄 Mise à jour en cours...</span>`;
-        for (let item of library) {
-            if (item.type === 'series') {
-                try {
+        btn.disabled = true;
+
+        for (let i = 0; i < library.length; i++) {
+            let item = library[i];
+            
+            // Mise à jour du texte du bouton pour suivre la progression
+            btn.innerHTML = `🔄 ${i + 1}/${library.length} - ${item.title.substring(0, 15)}...`;
+
+            try {
+                if (item.type === 'series') {
+                    // On ajoute une pause de 1 seconde entre chaque appel pour ne pas déclencher le 429
+                    await sleep(1000); 
+
                     const res = await fetch(`${TVMAZE_API}/shows/${item.apiId}?embed=episodes`);
+                    
+                    if (res.status === 404) continue; // Si non trouvé, on passe au suivant
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
                     const data = await res.json();
+                    
                     item.rating = data.rating?.average || item.rating;
-                    if(data._embedded?.episodes) {
-                        item.episodes = item.episodes.map(e => {
-                            const apiEp = data._embedded.episodes.find(ae => ae.id === e.id);
-                            return {...e, rating: apiEp?.rating?.average || e.rating};
+                    item.runtime = data.runtime || data.averageRuntime || item.runtime;
+                    item.summary = data.summary?.replace(/<[^>]*>/g, '') || item.summary;
+                    item.status_production = data.status || item.status_production;
+                    item.network = data.network?.name || data.webChannel?.name || item.network;
+                    
+                    const apiEps = data._embedded?.episodes || [];
+                    let newEpsList = [];
+                    apiEps.forEach(apiEp => {
+                        const existing = (item.episodes || []).find(e => e.id === apiEp.id);
+                        const isReleased = apiEp.airdate && apiEp.airdate <= todayString;
+                        const watched = isReleased ? (existing ? existing.watched : false) : false;
+                        
+                        newEpsList.push({ 
+                            id: apiEp.id, season: apiEp.season, number: apiEp.number, name: apiEp.name,
+                            airdate: apiEp.airdate, runtime: apiEp.runtime, watched: watched 
                         });
-                    }
-                } catch(e) {}
+                    });
+                    item.episodes = newEpsList;
+                    item.status = newEpsList.every(e => e.watched || (!e.airdate || e.airdate > todayString)) ? 'Watched' : 'In Progress';
+                    item.last_modified = Date.now();
+                }
+            } catch(e) { 
+                console.warn(`Erreur sur ${item.title}:`, e);
+                // Si on a une erreur 429, on attend un peu plus longtemps avant de reprendre
+                if (e.message.includes('429')) await sleep(5000); 
             }
         }
-        library.forEach(i => i.last_modified = Date.now());
-        saveLocalDB(); renderProfile();
-        btn.innerHTML = `<span>🔄 Mettre à jour (Infos & Épisodes API)</span>`;
-        alert('Mise à jour terminée !');
+        
+        saveLocalDB();
+        renderProfile();
+        if(!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
+        
+        btn.innerHTML = `<span>✅ Mise à jour terminée !</span>`;
+        setTimeout(() => {
+            btn.innerHTML = `<span>🔄 Mettre à jour (Infos & Épisodes API)</span>`;
+            btn.disabled = false;
+        }, 3000);
     }
 
     async function importLibrary(event) {
