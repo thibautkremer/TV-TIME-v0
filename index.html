@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TV TIME REBORN</title>
-    <!-- Icône Popcorn aux couleurs de l'application -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M30 40 L70 40 L65 90 L35 90 Z' fill='%230D9488'/><path d='M20 40 Q50 10 80 40' fill='%23FBBF24'/><circle cx='40' cy='30' r='10' fill='%23FBBF24'/><circle cx='60' cy='25' r='12' fill='%23FBBF24'/></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -30,7 +29,7 @@
             🍿 TV TIME <span class="text-white text-xs px-2 py-0.5 bg-teal-600 rounded">REBORN</span>
         </h1>
         <div class="flex items-center gap-2">
-            <button onclick="forceSync()" id="cloudStatus" class="cursor-pointer text-[10px] px-2 py-0.5 bg-gray-900 text-gray-400 rounded-full font-bold">○ Local</button>
+            <button onclick="forceSync()" id="cloudStatus" class="cursor-pointer text-[10px] px-2 py-0.5 bg-gray-900 text-gray-400 rounded-full font-bold transition-colors shadow">○ Local</button>
             <span id="libCount" class="text-[10px] px-2 py-0.5 bg-teal-950 text-teal-400 rounded-full font-bold border border-teal-900/50 hidden">0</span>
         </div>
     </div>
@@ -290,9 +289,14 @@
     // ==========================================
     // CONFIGURATION & VARIABLES GLOBALES
     // ==========================================
-    const TVMAZE_API = 'https://api.tvmaze.com';
+    const SUPABASE_URL = 'https://vjhegncviufyguzdrpdp.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_hLYKWsVftWedOIbDinl0mQ_9uGREGsw';
     const OMDB_API   = `https://www.omdbapi.com/?apikey=1e01c814`;
+    const TVMAZE_API = 'https://api.tvmaze.com';
     
+    let supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const localUserId = 'tvr_master_user_2026';
+
     let library = JSON.parse(localStorage.getItem('personal_tracker_db')) || [];
     let currentMediaType = 'series', searchResults = [];
     let showsCache = [];
@@ -337,13 +341,15 @@
         updateHeaderCount();
         preloadShowsCache();
         
+        loadFromCloud(); // Initialisation de la synchronisation au démarrage
+        
         const sSentinel = document.getElementById('searchSentinel');
         if (sSentinel) searchObserver.observe(sSentinel);
         const dSentinel = document.getElementById('discoverSentinel');
         if (dSentinel) discoverObserver.observe(dSentinel);
     });
 
-    // --- UTILS BASE LOCALE ---
+    // --- UTILS BASE LOCALE & CLOUD ---
     function deduplicateLibrary() {
         const unique = [];
         const seen = new Set();
@@ -356,11 +362,70 @@
         library = unique;
     }
 
-    function saveLocalDB() {
+    function saveLocalDB(triggerSync = true) {
         try {
             localStorage.setItem('personal_tracker_db', JSON.stringify(library));
             updateHeaderCount();
-        } catch (e) { alert("Erreur d'espace de stockage."); }
+            if(triggerSync) syncToCloud();
+        } catch (e) { alert("Erreur d'espace de stockage local."); }
+    }
+
+    // --- NOUVELLE LOGIQUE CLOUD POUR LA TABLE user_library ---
+    async function syncToCloud() {
+        const statusEl = document.getElementById('cloudStatus');
+        statusEl.textContent = '⏳ Sync...';
+        
+        try {
+            // On prépare les données pour une insertion par ligne (media_id)
+            const updates = library.map(item => ({
+                user_id: localUserId,
+                media_id: item.id,
+                media_data: item,
+                last_modified: item.last_modified || Date.now()
+            }));
+
+            // Upsert sur la table user_library
+            const { error } = await supabaseClient
+                .from('user_library')
+                .upsert(updates, { onConflict: 'user_id,media_id' });
+            
+            if (error) throw error;
+            statusEl.textContent = '🟢 Cloud';
+            statusEl.className = 'cursor-pointer text-[10px] px-2 py-0.5 bg-gray-900 text-emerald-400 rounded-full font-bold transition-colors shadow border border-emerald-900/50';
+        } catch(e) {
+            console.error("Erreur de synchronisation", e);
+            statusEl.textContent = '🔴 Erreur Sync';
+        }
+    }
+
+    async function loadFromCloud() {
+        const statusEl = document.getElementById('cloudStatus');
+        statusEl.textContent = '⏳ Check...';
+        
+        try {
+            const { data, error } = await supabaseClient
+                .from('user_library')
+                .select('media_data')
+                .eq('user_id', localUserId);
+
+            if (data && data.length > 0) {
+                // On fusionne les données reçues avec le local
+                library = data.map(row => row.media_data);
+                saveLocalDB(false); // Sauvegarde locale sans resynchroniser immédiatement
+                statusEl.textContent = '🟢 Cloud';
+                statusEl.className = 'cursor-pointer text-[10px] px-2 py-0.5 bg-gray-900 text-emerald-400 rounded-full font-bold transition-colors shadow border border-emerald-900/50';
+                
+                // Refresh UI
+                if(!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
+                if(!document.getElementById('tab-profile').classList.contains('hidden')) renderProfile();
+            }
+        } catch(e) {
+            console.error("Erreur de chargement Cloud", e);
+        }
+    }
+
+    async function forceSync() {
+        await loadFromCloud();
     }
 
     function updateHeaderCount() {
@@ -623,6 +688,7 @@
             const idx = item.episodes.indexOf(nextEp);
             for(let i=0; i<=idx; i++) item.episodes[i].watched = true; 
             item.status = item.episodes.every(e => e.watched || !e.airdate || e.airdate > todayString) ? 'Watched' : 'In Progress';
+            item.last_modified = Date.now();
             saveLocalDB(); renderLibrary();
         }
     }
@@ -632,6 +698,7 @@
         if(!item) return;
         if(item.type === 'series') item.episodes?.forEach(e => e.watched = false);
         item.status = 'In Progress';
+        item.last_modified = Date.now();
         saveLocalDB(); renderLibrary();
     }
 
@@ -746,7 +813,7 @@
         fBtn.textContent = '✕ Retirer'; fBtn.className = "w-full py-3 bg-gray-900 text-red-400 border border-red-900/50 font-bold rounded-xl text-xs";
         fBtn.onclick = () => { library = library.filter(i=>i.id!==item.id); saveLocalDB(); closeModal(); renderLibrary(); };
         wBtn.textContent = '↺ Non vu'; wBtn.className = "w-full py-3 bg-gray-900 text-amber-400 border border-amber-900/50 font-bold rounded-xl text-xs";
-        wBtn.onclick = () => { if(item.episodes) item.episodes.forEach(e=>e.watched=false); item.status='In Progress'; saveLocalDB(); closeModal(); renderLibrary(); };
+        wBtn.onclick = () => { if(item.episodes) item.episodes.forEach(e=>e.watched=false); item.status='In Progress'; item.last_modified = Date.now(); saveLocalDB(); closeModal(); renderLibrary(); };
 
         if (item.type === 'series' && item.episodes) {
             document.getElementById('modalSeriesContent').classList.remove('hidden');
@@ -770,6 +837,7 @@
     function toggleForceCancel() {
         if(activeModalMediaIndex === null) return;
         library[activeModalMediaIndex].user_forced_cancel = !library[activeModalMediaIndex].user_forced_cancel;
+        library[activeModalMediaIndex].last_modified = Date.now();
         saveLocalDB(); openLibraryModal(library[activeModalMediaIndex].id); 
     }
 
@@ -854,6 +922,7 @@
         else { for(let i=epIndex; i<item.episodes.length; i++) item.episodes[i].watched = false; }
         
         item.status = item.episodes.every(e => e.watched || (!e.airdate || e.airdate > todayString)) ? 'Watched' : 'In Progress';
+        item.last_modified = Date.now();
         saveLocalDB();
         
         const prog = getProgress(item);
@@ -873,7 +942,6 @@
             const baseMedia = library.find(i=>i.id===currentId) || searchResults.find(i=>i.id===currentId) || discoverResults.find(i=>i.id===currentId);
             const bGenres = baseMedia?.genres || [];
             
-            // Suggestion intelligente via scoring
             modalSuggestionsPool = showsCache.filter(s => `series-${s.id}` !== currentId).map(s => {
                 let score = 0;
                 s.genres?.forEach(g => { if(bGenres.includes(g)) score += 2; });
@@ -1072,6 +1140,7 @@
                 } catch(e) {}
             }
         }
+        library.forEach(i => i.last_modified = Date.now());
         saveLocalDB(); renderProfile();
         btn.innerHTML = `<span>🔄 Mettre à jour (Infos & Épisodes API)</span>`;
         alert('Mise à jour terminée !');
@@ -1100,6 +1169,7 @@
                                     if (!exist[key]) exist[key] = raw[key];
                                 }
                             }
+                            exist.last_modified = Date.now();
                         } else library.push({...raw, last_modified: Date.now()});
                     });
                 } catch(err) { alert('Erreur JSON sur '+file.name); }
@@ -1111,7 +1181,7 @@
     }
 
     function clearAll() {
-        if (!confirm('Vider le cache local ?')) return;
+        if (!confirm('Vider le cache local ? La sauvegarde Cloud restera intacte. (Pour effacer le Cloud, videz la table Supabase manuellement).')) return;
         library = []; localStorage.removeItem('personal_tracker_db'); renderLibrary(); renderProfile();
     }
 </script>
