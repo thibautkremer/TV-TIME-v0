@@ -145,60 +145,56 @@
     </div>
 
     <!-- TAB: PROFILE -->
-    <!-- TAB: PROFILE -->
-<div id="tab-profile" class="space-y-4 hidden">
-    <!-- Boutons d'action -->
-    <div class="grid grid-cols-2 gap-2">
-        <label class="bg-teal-600 hover:bg-teal-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition text-center cursor-pointer shadow">
-            📂 Import Data<input type="file" multiple onchange="importLibrary(event)" class="hidden" accept=".json,.csv" />
-        </label>
-        <button onclick="clearAll()" class="bg-gray-800 hover:bg-red-950 border border-red-900/40 text-red-400 text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow">🗑 Vider Cache</button>
-        <button id="btn-mass-update" onclick="massUpdateLibrary()" class="bg-purple-800 hover:bg-purple-700 border border-purple-600 text-purple-200 text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition col-span-2 flex justify-center items-center gap-2">
-            <span>🔄 Mettre à jour (Infos & Épisodes API)</span>
-        </button>
-    </div>
+    <div id="tab-profile" class="space-y-4 hidden">
+        <!-- Boutons d'action -->
+        <div class="grid grid-cols-2 gap-2">
+            <label class="bg-teal-600 hover:bg-teal-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition text-center cursor-pointer shadow">
+                📂 Import Data<input type="file" multiple onchange="importLibrary(event)" class="hidden" accept=".json,.csv" />
+            </label>
+            <button onclick="clearAll()" class="bg-gray-800 hover:bg-red-950 border border-red-900/40 text-red-400 text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow">🗑 Vider Cache</button>
+            <button id="btn-mass-update" onclick="massUpdateLibrary()" class="bg-purple-800 hover:bg-purple-700 border border-purple-600 text-purple-200 text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition col-span-2 flex justify-center items-center gap-2">
+                <span>🔄 Mettre à jour (Infos & Épisodes API)</span>
+            </button>
+        </div>
 
-    <!-- Stats Principales -->
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <!-- Temps -->
-        <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md">
-            <div id="stat-hours" class="text-sm font-black text-teal-400 tracking-wide">0 h</div>
-            <div class="text-[10px] text-gray-400 mt-1">Temps regardé</div>
-        </div>
-        <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md">
-            <div id="stat-backlog-hours" class="text-sm font-black text-purple-400 tracking-wide">0 h</div>
-            <div class="text-[10px] text-gray-400 mt-1">Backlog</div>
-        </div>
-        <!-- Note -->
-        <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md">
-            <div id="stat-avg-rating" class="text-sm font-black text-yellow-400 tracking-wide">0.0</div>
-            <div class="text-[10px] text-gray-400 mt-1">Note globale</div>
-        </div>
-        <!-- Films -->
-        <div id="stat-movies-finished" class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md">
-             <!-- Injecté par JS -->
-        </div>
-    </div>
+        <!-- Stats Unifiées (Grille 4x2) -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <!-- LIGNE 1 -->
+            <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center">
+                <div id="stat-hours" class="text-sm font-black text-teal-400 tracking-wide">0 h</div>
+                <div class="text-[10px] text-gray-400 mt-1">Temps regardé</div>
+            </div>
+            <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center">
+                <div id="stat-backlog-hours" class="text-sm font-black text-purple-400 tracking-wide">0 h</div>
+                <div class="text-[10px] text-gray-400 mt-1">Backlog</div>
+            </div>
+            <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center">
+                <div id="stat-avg-rating" class="text-sm font-black text-yellow-400 tracking-wide">0.0</div>
+                <div class="text-[10px] text-gray-400 mt-1">Note globale</div>
+            </div>
+            <div id="stat-movies-finished" class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center">
+                 <!-- Injecté par JS -->
+            </div>
 
-    <!-- Stats Détaillées (Séries/Animes) -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div id="stat-series-grid" class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-md"></div>
-        <div id="stat-series-eps-grid" class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-md"></div>
-        <div id="stat-anime-eps-grid" class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-md"></div>
-    </div>
+            <!-- LIGNE 2 -->
+            <div id="stat-series-grid" class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center"></div>
+            <div id="stat-series-eps-grid" class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center"></div>
+            <div id="stat-anime-grid" class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center"></div>
+            <div id="stat-anime-eps-grid" class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center"></div>
+        </div>
 
-    <!-- Répartition Genres -->
-    <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-md space-y-2">
-        <h3 class="text-[11px] font-bold text-teal-400 uppercase tracking-wider">🏷️ Répartition par genres</h3>
-        <div id="stat-genre-bars" class="space-y-3 mt-3"></div>
+        <!-- Répartition Genres -->
+        <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-md space-y-2">
+            <h3 class="text-[11px] font-bold text-teal-400 uppercase tracking-wider">🏷️ Répartition par genres</h3>
+            <div id="stat-genre-bars" class="space-y-3 mt-3"></div>
+        </div>
+        
+        <!-- Plateformes (Barres horizontales) -->
+        <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-md space-y-2">
+            <h3 class="text-[11px] font-bold text-blue-400 uppercase tracking-wider">🌐 Plateformes</h3>
+            <div id="stat-network-bars" class="space-y-3 mt-3"></div>
+        </div>
     </div>
-    
-    <!-- Plateformes (Barres horizontales) -->
-    <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-md space-y-2">
-        <h3 class="text-[11px] font-bold text-blue-400 uppercase tracking-wider">🌐 Plateformes</h3>
-        <div id="stat-network-bars" class="space-y-3 mt-3"></div>
-    </div>
-</div>
 </main>
 
 <!-- MODAL DES MEDIAS -->
@@ -368,8 +364,7 @@
         library = unique;
     }
 
-    // POINT 5: La fonction saveLocalDB synchronise désormais directement avec Supabase l'élément qu'on lui passe
-   async function saveLocalDB(syncItem = null) {
+    async function saveLocalDB(syncItem = null) {
         // 1. Sauvegarde légère : On ne garde que les 50 derniers médias modifiés en local
         // Cela évite de dépasser les 5 Mo tout en gardant une accélération pour l'affichage
         try {
@@ -472,8 +467,8 @@
     // --- RECHERCHE ---
     function setMediaType(type) {
         currentMediaType = type;
-        document.getElementById('btn-series').className = type === 'series' ? 'py-2 text-sm font-bold rounded-lg bg-teal-600 text-white' : 'py-2 text-sm font-bold rounded-lg text-gray-400';
-        document.getElementById('btn-movie').className = type === 'movie' ? 'py-2 text-sm font-bold rounded-lg bg-teal-600 text-white' : 'py-2 text-sm font-bold rounded-lg text-gray-400';
+        document.getElementById('btn-series').className = type === 'series' ? 'py-2 text-sm font-bold rounded-lg bg-teal-600 text-white shadow' : 'py-2 text-sm font-bold rounded-lg text-gray-400';
+        document.getElementById('btn-movie').className = type === 'movie' ? 'py-2 text-sm font-bold rounded-lg bg-teal-600 text-white shadow' : 'py-2 text-sm font-bold rounded-lg text-gray-400';
         resetAndDisplaySearch();
     }
 
@@ -529,19 +524,17 @@
 
     function setDiscoverType(type) {
         discoverMediaType = type;
-        document.getElementById('btn-disc-type-series').className = type === 'series' ? 'px-3 py-1 text-[10px] font-bold rounded shadow bg-teal-600 text-white' : 'px-3 py-1 text-[10px] font-bold rounded text-gray-400 hover:text-white';
-        document.getElementById('btn-disc-type-movie').className = type === 'movie' ? 'px-3 py-1 text-[10px] font-bold rounded shadow bg-teal-600 text-white' : 'px-3 py-1 text-[10px] font-bold rounded text-gray-400 hover:text-white';
+        document.getElementById('btn-disc-type-series').className = type === 'series' ? 'px-3 py-1 text-[10px] font-bold rounded shadow bg-teal-600 text-white transition' : 'px-3 py-1 text-[10px] font-bold rounded text-gray-400 hover:text-white transition';
+        document.getElementById('btn-disc-type-movie').className = type === 'movie' ? 'px-3 py-1 text-[10px] font-bold rounded shadow bg-teal-600 text-white transition' : 'px-3 py-1 text-[10px] font-bold rounded text-gray-400 hover:text-white transition';
         discoverPage = 1; renderDiscoverTab(true);
     }
 
-    // Dans setDiscoverMode
     function setDiscoverMode(mode) {
         currentDiscoverMode = mode;
         ['mix', 'top', 'trending'].forEach(m => {
             const btn = document.getElementById(`btn-disc-${m}`);
             btn.className = m === mode ? "py-1.5 text-xs font-bold rounded bg-teal-600 text-white shadow" : "py-1.5 text-xs font-bold rounded bg-gray-700 text-gray-300";
         });
-        // Rafraichit la liste immédiatement
         discoverPage = 1; 
         renderDiscoverTab(true); 
     }
@@ -589,7 +582,6 @@
     }
 
     // --- SUIVIS (LIBRARY) ---
-    // POINT 1 : Correction du filtrage. La recherche s'applique indépendamment du type et les champs manquants (suite import) sont gérés
     function renderLibrary() {
         const grid = document.getElementById('libraryGrid');
         
@@ -607,26 +599,20 @@
             const iType = item.type || 'series';
             const iStatus = item.status || 'In Progress';
 
-            // Recherche textuelle (Si on tape un texte, il s'impose sur les autres filtres pour retrouver ses vieux imports)
             if (searchInput !== "") {
                 return title.includes(searchInput);
             }
     
-            // Filtre Type
             if (tFilter !== 'all' && iType !== tFilter) return false;
             
-            // Filtre Statut
             if (sFilter === 'not_finished' && iStatus !== 'In Progress') return false;
             if (sFilter === 'watched' && iStatus !== 'Watched') return false;
             if (sFilter === 'abandoned' && iStatus !== 'Abandoned') return false;
             
-            // Filtre Genre
             if (gFilter !== 'all' && !(item.genres || []).includes(gFilter)) return false;
             
-            // Filtre Plateforme
             if (nFilter !== 'all' && !(item.network || '').includes(nFilter)) return false;
             
-            // Filtre Diffusion
             if (iType === 'series' && dFilter !== 'all') {
                 const sp = (item.status_production || '').toLowerCase();
                 const isCanceled = item.user_forced_cancel || sp.includes('cancel');
@@ -638,7 +624,6 @@
             return true;
         });
     
-        // Tri personnalisé
         filtered.sort((a, b) => {
             const progA = getProgress(a);
             const progB = getProgress(b);
@@ -666,13 +651,15 @@
     // --- CARTES MEDIAS ---
     function buildCardActionsHTML(mediaId) {
         const inLib = library.some(i => i.id === mediaId);
-        if (inLib) return `<button onclick="event.stopPropagation(); handleRemove('${mediaId}')" class="w-full text-center text-[9px] bg-gray-900 hover:bg-red-950 text-gray-500 hover:text-red-400 border border-gray-700 py-1 rounded">✕ Retirer</button>`;
-        return `<button onclick="event.stopPropagation(); handleQuickAdd(this.parentElement, '${mediaId}', false)" class="flex-1 text-[9px] bg-teal-600 text-white font-bold py-1 rounded">+ Voir</button>
-                <button onclick="event.stopPropagation(); handleQuickAdd(this.parentElement, '${mediaId}', true)" class="flex-1 text-[9px] bg-emerald-700 text-white font-bold py-1 rounded">✓ Vu</button>`;
+        if (inLib) return `<button onclick="event.stopPropagation(); handleRemove('${mediaId}')" class="w-full text-center text-[10px] bg-gray-900 hover:bg-gray-800 text-gray-500 hover:text-red-400 border border-gray-700 py-1.5 rounded transition shadow-sm">✕ Retirer</button>`;
+        return `
+        <div class="flex gap-1.5 w-full">
+            <button onclick="event.stopPropagation(); handleQuickAdd(this.parentElement.parentElement, '${mediaId}', false)" class="flex-1 text-center text-[10px] bg-teal-600 hover:bg-teal-500 text-white font-bold py-1.5 rounded transition shadow-sm">+ Voir</button>
+            <button onclick="event.stopPropagation(); handleQuickAdd(this.parentElement.parentElement, '${mediaId}', true)" class="flex-1 text-center text-[10px] bg-emerald-700 hover:bg-emerald-600 text-white font-bold py-1.5 rounded transition shadow-sm">✓ Vu</button>
+        </div>`;
     }
 
     async function handleRemove(mediaId) {
-        // Suppression dans Supabase
         if (supabaseClient) {
             try {
                 await supabaseClient
@@ -685,36 +672,31 @@
             }
         }
     
-        // Suppression locale
         library = library.filter(i => i.id !== mediaId);
-        saveLocalDB(); // Pas d'item à synchroniser car on vient de le supprimer !
+        saveLocalDB(); 
         
-        // Mise à jour UI
         if (!document.getElementById('tab-library').classList.contains('hidden')) {
             renderLibrary();
         }
         renderProfile();
         
-        // POINT 2 : Met à jour la carte sur la page de recherche/découverte
         document.querySelectorAll(`[id="actions-${mediaId}"]`).forEach(el => el.innerHTML = buildCardActionsHTML(mediaId));
     }
 
     async function handleQuickAdd(container, mediaId, watched) {
-        container.innerHTML = `<span class="text-[9px] text-teal-400 py-1 font-bold animate-pulse w-full text-center">Ajout...</span>`;
+        container.innerHTML = `<span class="text-[9px] text-teal-400 py-1.5 font-bold animate-pulse w-full text-center block">Ajout...</span>`;
         await quickAdd(mediaId, watched);
         document.querySelectorAll(`[id="actions-${mediaId}"]`).forEach(el => el.innerHTML = buildCardActionsHTML(mediaId));
     }
 
     function createMediaCard(media, isLib = false) {
         const isAnime = media.genres?.includes('Anime') || media.genres?.includes('Animation');
-        // Code couleur conservé
         const bgColorClass = media.type === 'movie' ? 'bg-amber-900/60' : (isAnime ? 'bg-purple-900/60' : 'bg-teal-900/60');
         
         const div = document.createElement('div');
         div.className = 'bg-gray-800 rounded-xl border border-gray-700 overflow-hidden cursor-pointer shadow-sm relative flex flex-col hover:border-gray-500 transition-colors';
         
         div.onclick = (e) => {
-            // Ne pas ouvrir la modale si on clique sur la croix de suppression
             if (e.target.closest('.remove-btn')) return;
             const inLib = library.find(i => i.id === media.id);
             if (isLib || inLib) openLibraryModal(media.id);
@@ -727,10 +709,8 @@
         
         const rating = media.rating > 0 ? media.rating.toFixed(1) : 'N/A';
         
-        // Overlay: Note en haut à gauche
         const ratingOverlay = `<div class="absolute top-1 left-1 bg-black/70 text-yellow-400 text-[10px] font-black px-1.5 py-0.5 rounded z-10 border border-gray-800">★ ${rating}</div>`;
         
-        // Bouton Suppression en haut à droite (seulement si isLib)
         const removeBtn = isLib ? `<button onclick="handleRemove('${media.id}')" class="remove-btn absolute top-1 right-1 bg-black/70 text-red-500 text-[10px] font-black px-1.5 py-0.5 rounded z-10 border border-gray-800 hover:bg-red-900">✕</button>` : '';
     
         let libOverlay = '';
@@ -802,7 +782,7 @@
         
         const newItem = { ...media, episodes, status: watched ? 'Watched' : 'In Progress', addedAt: Date.now(), last_modified: Date.now() };
         library.push(newItem);
-        saveLocalDB(newItem); // POINT 5: Synchro immédiate vers Cloud !
+        saveLocalDB(newItem);
     }
 
     // --- MODALES ---
@@ -893,7 +873,6 @@
         
         fBtn.textContent = '✕ Retirer'; fBtn.className = "w-full py-3 bg-gray-900 text-red-400 border border-red-900/50 font-bold rounded-xl text-xs";
         
-        // POINT 4: On fait appel à la vraie fonction handleRemove qui nettoie aussi le Cloud !
         fBtn.onclick = async () => { 
             await handleRemove(item.id); 
             closeModal(); 
@@ -951,9 +930,8 @@
         const container = document.getElementById('modalSeasonGraph');
         container.innerHTML = '';
         eps.forEach(ep => {
-            // Extraction sécurisée de la note
             const val = (typeof ep.rating === 'object' && ep.rating !== null) ? (ep.rating.average || 0) : (ep.rating || 0);
-            const r = val > 0 ? val : 7.0; // Fallback à 7 si la note est 0
+            const r = val > 0 ? val : 7.0; 
             const h = Math.max(10, (r / 10) * 100);
             
             const colorClass = seasonColors[(ep.season - 1) % seasonColors.length] || 'bg-cyan-600';
@@ -998,7 +976,6 @@
         list.innerHTML = eps.map(ep => {
             const isFuture = !ep.airdate || ep.airdate > todayString;
             
-            // Extraction sécurisée de la note
             const val = (typeof ep.rating === 'object' && ep.rating !== null) ? (ep.rating.average || 0) : (ep.rating || 0);
             const rateStr = val > 0 ? `<span class="text-[9px] text-yellow-400 font-bold ml-2">★ ${val.toFixed(1)}</span>` : '';
             
@@ -1042,12 +1019,10 @@
             await ensureShowsPool();
             const baseMedia = library.find(i=>i.id===currentId) || searchResults.find(i=>i.id===currentId) || discoverResults.find(i=>i.id===currentId);
             const bGenres = baseMedia?.genres || [];
-            // Extraction du titre principal pour le matching (Dragon Ball Z -> Dragon Ball)
             const baseTitle = baseMedia?.title.split(/[:\-]/)[0].trim().toLowerCase() || "";
             
             modalSuggestionsPool = showsCache.filter(s => `series-${s.id}` !== currentId).map(s => {
                 let score = 0;
-                // Boost franchise (ex: Dragon Ball)
                 if (baseTitle && (s.name.toLowerCase().includes(baseTitle) || baseTitle.includes(s.name.toLowerCase()))) score += 10;
                 s.genres?.forEach(g => { if(bGenres.includes(g)) score += 2; });
                 if(s.network?.name === baseMedia?.network) score += 1;
@@ -1067,7 +1042,6 @@
         slice.forEach(n => {
             const div = document.createElement('div');
             div.className = 'bg-gray-900 border border-gray-700 p-2 rounded-xl flex gap-3 items-center';
-            // On sépare la partie clic (image/titre) de la partie action (boutons)
             div.innerHTML = `
                 <img onclick="closeModal(); openPreviewModal(${JSON.stringify(n).replace(/"/g, '&quot;')})" src="${n.image || 'https://placehold.co/40x60'}" class="w-12 h-16 object-cover rounded border border-gray-800 cursor-pointer" />
                 <div class="flex-1 min-w-0" onclick="closeModal(); openPreviewModal(${JSON.stringify(n).replace(/"/g, '&quot;')})">
@@ -1134,7 +1108,6 @@
             eps.forEach(ep => {
                 const subTxt = ep.type === 'movie' ? `<span class="text-amber-500 font-bold">SORTIE FILM</span>` : ep.epName;
                 
-                // Récupération des infos du média pour la note et la plateforme
                 const mediaObj = library.find(m => m.id === ep.mediaId);
                 const rating = mediaObj?.rating > 0 ? `★ ${mediaObj.rating.toFixed(1)}` : 'N/A';
                 const platform = mediaObj?.network || '';
@@ -1148,10 +1121,7 @@
                         <span class="text-[10px] text-gray-500">${ep.airdate}</span>
                     </div>
                     
-                    <!-- Note en haut à droite -->
                     <span class="absolute top-2 right-2 text-[9px] text-yellow-500 font-bold">${rating}</span>
-                    
-                    <!-- Plateforme en bas à droite -->
                     <span class="absolute bottom-2 right-2 text-[9px] text-gray-600 font-bold">${platform}</span>
                 </div>`;
             });
@@ -1177,7 +1147,7 @@
         const animes = library.filter(i => (i.genres || []).includes('Anime') || (i.genres || []).includes('Animation'));
         const movies = library.filter(i => i.type === 'movie');
     
-        // 1. Calcul Note Globale (Point 3)
+        // 1. Calcul Note Globale
         const ratedItems = library.filter(i => i.rating && i.rating > 0);
         const avgRating = ratedItems.length > 0 ? (ratedItems.reduce((acc, i) => acc + i.rating, 0) / ratedItems.length).toFixed(1) : '0.0';
         document.getElementById('stat-avg-rating').textContent = avgRating;
@@ -1187,32 +1157,39 @@
         document.getElementById('stat-series-grid').innerHTML = `
             <div class="text-lg font-black text-teal-400">${sFinished} / ${series.length}</div>
             <div class="text-xs font-bold text-teal-400">${series.length > 0 ? Math.round((sFinished/series.length)*100) : 0}%</div>
-            <div class="text-[9px] uppercase text-gray-400 mt-1">Séries finies</div>`;
+            <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Séries finies</div>`;
     
         // 3. Stats Episodes Séries
         let seTotal = 0, seWatched = 0;
         series.forEach(s => { seTotal += (s.episodes||[]).length; seWatched += (s.episodes||[]).filter(e=>e.watched).length; });
         document.getElementById('stat-series-eps-grid').innerHTML = `
-            <div class="text-lg font-black text-blue-400">${seWatched} / ${seTotal}</div>
-            <div class="text-xs font-bold text-blue-400">${seTotal > 0 ? Math.round((seWatched/seTotal)*100) : 0}%</div>
-            <div class="text-[9px] uppercase text-gray-400 mt-1">Ép. Séries vus</div>`;
+            <div class="text-lg font-black text-teal-400">${seWatched} / ${seTotal}</div>
+            <div class="text-xs font-bold text-teal-400">${seTotal > 0 ? Math.round((seWatched/seTotal)*100) : 0}%</div>
+            <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Ép. Séries vus</div>`;
+            
+        // 4. Stats Animes (Animes entiers)
+        const aFinished = animes.filter(a => a.status === 'Watched').length;
+        document.getElementById('stat-anime-grid').innerHTML = `
+            <div class="text-lg font-black text-purple-400">${aFinished} / ${animes.length}</div>
+            <div class="text-xs font-bold text-purple-400">${animes.length > 0 ? Math.round((aFinished/animes.length)*100) : 0}%</div>
+            <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Anime finis</div>`;
     
-        // 4. Stats Episodes Animes (Point 2)
+        // 5. Stats Episodes Animes
         let aeTotal = 0, aeWatched = 0;
         animes.forEach(a => { aeTotal += (a.episodes||[]).length; aeWatched += (a.episodes||[]).filter(e=>e.watched).length; });
         document.getElementById('stat-anime-eps-grid').innerHTML = `
             <div class="text-lg font-black text-purple-400">${aeWatched} / ${aeTotal}</div>
             <div class="text-xs font-bold text-purple-400">${aeTotal > 0 ? Math.round((aeWatched/aeTotal)*100) : 0}%</div>
-            <div class="text-[9px] uppercase text-gray-400 mt-1">Ép. Anime vus</div>`;
+            <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Ép. Anime vus</div>`;
     
-        // 5. Films
+        // 6. Films
         const mFinished = movies.filter(m => m.status === 'Watched').length;
         document.getElementById('stat-movies-finished').innerHTML = `
             <div class="text-lg font-black text-amber-400">${mFinished} / ${movies.length}</div>
             <div class="text-xs font-bold text-amber-400">${movies.length > 0 ? Math.round((mFinished/movies.length)*100) : 0}%</div>
-            <div class="text-[9px] uppercase text-gray-400 mt-1">Films vus</div>`;
+            <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Films vus</div>`;
     
-        // 6. Barres Genres
+        // 7. Barres Genres
         const gc = {};
         library.forEach(i => (i.genres || []).forEach(g => gc[g] = (gc[g] || 0) + 1));
         const sortedGenres = Object.entries(gc).sort((a, b) => b[1] - a[1]);
@@ -1223,7 +1200,7 @@
                 <div class="w-full h-2 bg-gray-700 rounded-full overflow-hidden"><div class="h-full bg-teal-500" style="width:${Math.round(c / maxG * 100)}%"></div></div>
             </div>`).join('');
     
-        // 7. Barres Plateformes (Point 1)
+        // 8. Barres Plateformes
         const nc = {};
         library.forEach(i => { if (i.network && i.network !== 'Inconnu') nc[i.network] = (nc[i.network] || 0) + 1; });
         const sortedNets = Object.entries(nc).sort((a, b) => b[1] - a[1]);
@@ -1235,90 +1212,80 @@
             </div>`).join('');
     }
 
-    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
     async function massUpdateLibrary() {
-    console.log("🚀 Lancement du Mass Update complet (Statuts, Notes & Plateformes)...");
-    let updatedCount = 0;
-    const OMDB_API_KEY = '1e01c814';
+        console.log("🚀 Lancement du Mass Update complet (Statuts, Notes & Plateformes)...");
+        let updatedCount = 0;
+        const OMDB_API_KEY = '1e01c814';
 
-    for (let item of library) {
-        try {
-            let changed = false;
-            let data = null;
+        for (let item of library) {
+            try {
+                let changed = false;
+                let data = null;
 
-            // 1. Appel API selon le type
-            if (item.type === 'series' && item.apiId) {
-                const res = await fetch(`https://api.tvmaze.com/shows/${item.apiId}?embed=episodes`);
-                data = await res.json();
-            } else if (item.type === 'movie' && item.apiId) {
-                const url = `https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&i=${item.apiId}&plot=full`;
-                const res = await fetch(url);
-                data = await res.json();
-            }
-
-            if (!data) continue;
-
-            // 2. Mise à jour du Statut (Séries uniquement)
-            if (item.type === 'series' && data.status && item.status_production !== data.status) {
-                item.status_production = data.status;
-                changed = true;
-                console.log(`   🔄 Statut mis à jour pour "${item.title}": ${data.status}`);
-            }
-
-            // 3. Mise à jour de la Plateforme (Network)
-            // Remplace "Trakt Import" ou toute valeur erronée par la donnée officielle
-            if (item.type === 'series') {
-                const newNetwork = data.network?.name || data.webChannel?.name;
-                if (newNetwork && (item.network === 'Trakt Import' || item.network !== newNetwork)) {
-                    item.network = newNetwork;
-                    changed = true;
-                    console.log(`   🌐 Plateforme mise à jour pour "${item.title}": ${item.network}`);
+                if (item.type === 'series' && item.apiId) {
+                    const res = await fetch(`https://api.tvmaze.com/shows/${item.apiId}?embed=episodes`);
+                    data = await res.json();
+                } else if (item.type === 'movie' && item.apiId) {
+                    const url = `https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&i=${item.apiId}&plot=full`;
+                    const res = await fetch(url);
+                    data = await res.json();
                 }
-            }
 
-            // 4. Mise à jour des notes (Série ou Film)
-            let newRating = null;
-            if (item.type === 'series') {
-                newRating = data.rating?.average;
-            } else if (item.type === 'movie' && data.imdbRating && data.imdbRating !== "N/A") {
-                newRating = parseFloat(data.imdbRating);
-            }
+                if (!data) continue;
 
-            // Nettoyage format (objet -> nombre)
-            const cleanedRating = (typeof newRating === 'object' && newRating !== null) ? newRating.average : newRating;
-            
-            if (cleanedRating && item.rating !== cleanedRating) {
-                item.rating = cleanedRating;
-                changed = true;
-                console.log(`   ⭐ Note mise à jour pour "${item.title}": ${cleanedRating}`);
-            }
+                if (item.type === 'series' && data.status && item.status_production !== data.status) {
+                    item.status_production = data.status;
+                    changed = true;
+                    console.log(`   🔄 Statut mis à jour pour "${item.title}": ${data.status}`);
+                }
 
-            // 5. Synchronisation Supabase (uniquement si changement)
-            if (changed) {
-                item.last_modified = Date.now();
-                await supabaseClient.from('user_library').upsert({
-                    user_id: localUserId,
-                    media_id: item.id,
-                    media_data: item,
-                    last_modified: item.last_modified
-                }, { onConflict: 'user_id,media_id' });
+                if (item.type === 'series') {
+                    const newNetwork = data.network?.name || data.webChannel?.name;
+                    if (newNetwork && (item.network === 'Trakt Import' || item.network !== newNetwork)) {
+                        item.network = newNetwork;
+                        changed = true;
+                        console.log(`   🌐 Plateforme mise à jour pour "${item.title}": ${item.network}`);
+                    }
+                }
+
+                let newRating = null;
+                if (item.type === 'series') {
+                    newRating = data.rating?.average;
+                } else if (item.type === 'movie' && data.imdbRating && data.imdbRating !== "N/A") {
+                    newRating = parseFloat(data.imdbRating);
+                }
+
+                const cleanedRating = (typeof newRating === 'object' && newRating !== null) ? newRating.average : newRating;
                 
-                updatedCount++;
-                console.log(`✅ [TRANSMI] : "${item.title}" mis à jour.`);
+                if (cleanedRating && item.rating !== cleanedRating) {
+                    item.rating = cleanedRating;
+                    changed = true;
+                    console.log(`   ⭐ Note mise à jour pour "${item.title}": ${cleanedRating}`);
+                }
+
+                if (changed) {
+                    item.last_modified = Date.now();
+                    await supabaseClient.from('user_library').upsert({
+                        user_id: localUserId,
+                        media_id: item.id,
+                        media_data: item,
+                        last_modified: item.last_modified
+                    }, { onConflict: 'user_id,media_id' });
+                    
+                    updatedCount++;
+                    console.log(`✅ [TRANSMI] : "${item.title}" mis à jour.`);
+                }
+
+                await new Promise(r => setTimeout(r, 800));
+
+            } catch (e) {
+                console.error(`❌ Erreur lors de la mise à jour de ${item.title}:`, e);
             }
-
-            // Pause pour éviter d'être banni par les APIs
-            await new Promise(r => setTimeout(r, 800));
-
-        } catch (e) {
-            console.error(`❌ Erreur lors de la mise à jour de ${item.title}:`, e);
         }
-    }
 
-    alert(`Mass Update terminé !\n${updatedCount} médias mis à jour (Notes, Statuts et Plateformes).`);
-    location.reload();
-}
+        alert(`Mass Update terminé !\n${updatedCount} médias mis à jour (Notes, Statuts et Plateformes).`);
+        location.reload();
+    }
 
     async function importLibrary(event) {
         const files = event.target.files;
@@ -1340,7 +1307,6 @@
                             library.push({...raw, last_modified: Date.now()});
                         }
                         
-                        // ON SYNCHRONISE DIRECTEMENT
                         if (supabaseClient) {
                             await supabaseClient.from('user_library').upsert({ 
                                 user_id: localUserId, 
