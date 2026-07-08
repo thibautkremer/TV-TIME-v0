@@ -1307,6 +1307,12 @@
         if (!confirm('Vider le cache local ? La sauvegarde Cloud restera intacte. (Pour effacer le Cloud, videz la table Supabase manuellement).')) return;
         library = []; localStorage.removeItem('personal_tracker_db'); renderLibrary(); renderProfile();
     }
+
+    window.addEventListener('focus', () => {
+    // Dès que tu cliques sur l'onglet B, on recharge les données
+    loadFromCloud();
+    console.log("Mise à jour automatique pour consultation...");
+});
 </script>
 </body>
 </html>
