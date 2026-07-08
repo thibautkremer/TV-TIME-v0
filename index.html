@@ -109,7 +109,7 @@
                 <option value="all">Tous visionnages</option>
                 <option value="not_finished" selected>En cours</option>
                 <option value="watched">Terminé</option>
-                <option value="abandoned">Abandonné</option>
+                <option value="not_started">Non commencé</option>
             </select>
             <select id="libraryDiffusionFilter" onchange="renderLibrary()" class="bg-gray-800 border border-gray-700 rounded-lg text-xs px-2 py-1.5 text-gray-300 shrink-0">
                 <option value="all">Toutes diffusions</option>
@@ -526,85 +526,69 @@
     // --- RECHERCHE ---
     async function searchMoviesAPI(query) {
         try {
-            // 1. Recherche de la liste des films
             const res = await fetch(`${OMDB_API}&s=${encodeURIComponent(query)}&type=movie`);
             const data = await res.json();
-            
             if (data.Response !== "True" || !data.Search) return [];
-    
-            // 2. On récupère les détails (Note + Résumé) pour chaque film trouvé
-            // On utilise Promise.all pour charger tous les détails en parallèle
-            return await Promise.all(data.Search.map(async (m) => {
-                let fullDetails = { Plot: '', imdbRating: '0' }; // Valeurs par défaut
-                
-                try {
-                    // Requête secondaire pour obtenir les détails du film via son ID (imdbID)
-                    const detailRes = await fetch(`${OMDB_API}&i=${m.imdbID}&plot=short`);
-                    const detailData = await detailRes.json();
-                    if (detailData.Response === "True") {
-                        fullDetails = detailData;
-                    }
-                } catch(e) {
-                    console.warn(`Impossible de récupérer les détails pour ${m.Title}`);
-                }
-    
-                return {
-                    id: `movie-${m.imdbID}`, 
-                    apiId: m.imdbID, 
-                    title: m.Title, 
-                    type: 'movie', 
-                    image: m.Poster !== 'N/A' ? m.Poster : '', 
-                    rating: parseFloat(fullDetails.imdbRating) || 0, // Conversion de la note en nombre
-                    genres: [], 
-                    premiered: m.Year, 
-                    runtime: 120, // Valeur standard si non dispo
-                    summary: fullDetails.Plot !== 'N/A' ? fullDetails.Plot : '' // La description récupérée
-                };
+            return data.Search.map(m => ({
+                id: `movie-${m.imdbID}`, apiId: m.imdbID, title: m.Title, type: 'movie',
+                image: m.Poster !== 'N/A' ? m.Poster : '',
+                rating: 0, genres: [], premiered: m.Year, runtime: 120, summary: ''
             }));
-    
-        } catch(e) {
-            console.error("Erreur recherche OMDB enrichie:", e);
-            return [];
-        }
+        } catch(e) { return []; }
+    }
+
+    async function enrichMovieDetails(mediaId) {
+        const media = globalMediaCache.get(mediaId);
+        if (!media || media.type !== 'movie' || media._enriched) return media;
+        try {
+            const data = await fetch(`${OMDB_API}&i=${media.apiId}&plot=short`).then(r=>r.json());
+            if (data.Response === "True") {
+                media.rating = parseFloat(data.imdbRating) || 0;
+                media.runtime = parseInt(data.Runtime) || 120;
+                media.summary = data.Plot !== 'N/A' ? data.Plot : '';
+                media.genres = data.Genre ? data.Genre.split(', ') : [];
+                media._enriched = true;
+                globalMediaCache.set(mediaId, media);
+                const libItem = library.find(i => i.id === mediaId);
+                if (libItem) { Object.assign(libItem, { rating: media.rating, runtime: media.runtime, summary: media.summary, genres: media.genres }); saveLocalDB(libItem.id); }
+            }
+        } catch(e) {}
+        return media;
     }
 
     async function triggerFuzzySearch(query) {
         const searchId = ++currentSearchId;
-        await ensureShowsPool();
-        if (searchId !== currentSearchId) return;
-
-        const qWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 1);
+        const qLower = query.toLowerCase().trim();
+        const qWords = qLower.split(/\s+/).filter(w => w.length > 1);
         try {
-            const searchPromises = [
+            // Fire ALL API calls immediately — no waiting for local pool
+            const promises = [
                 searchMoviesAPI(query),
-                fetch(`${TVMAZE_API}/search/shows?q=${encodeURIComponent(query)}`).then(r => r.json()).catch(()=>[])
+                fetch(`${TVMAZE_API}/search/shows?q=${encodeURIComponent(query)}`).then(r=>r.json()).catch(()=>[]),
+                // Broader first-word search helps multi-word queries like "house of" → "House of the Dragon"
+                qWords.length > 1
+                    ? fetch(`${TVMAZE_API}/search/shows?q=${encodeURIComponent(qWords[0])}`).then(r=>r.json()).catch(()=>[])
+                    : Promise.resolve([])
             ];
-            // Broader single-word search for multi-word queries (fixes "house of" → "House of the Dragon")
-            if (qWords.length > 1) {
-                searchPromises.push(
-                    fetch(`${TVMAZE_API}/search/shows?q=${encodeURIComponent(qWords[0])}`).then(r => r.json()).catch(()=>[])
-                );
-            }
-
-            const [movieRes, tvmazeRes, tvmazeBroadRes = []] = await Promise.all(searchPromises);
+            const [movieRes, tvRes, tvBroadRes] = await Promise.all(promises);
             if (searchId !== currentSearchId) return;
 
-            let results = [...movieRes];
-            if (Array.isArray(tvmazeRes)) results = results.concat(tvmazeRes.map(i => normalizeShow(i.show)));
-            if (Array.isArray(tvmazeBroadRes)) results = results.concat(tvmazeBroadRes.map(i => normalizeShow(i.show)));
+            let results = [...(movieRes||[])];
+            if (Array.isArray(tvRes)) results = results.concat(tvRes.filter(i=>i&&i.show).map(i=>normalizeShow(i.show)));
+            if (Array.isArray(tvBroadRes)) results = results.concat(tvBroadRes.filter(i=>i&&i.show).map(i=>normalizeShow(i.show)));
 
-            // Local cache: all-words exact match
-            const localExact = showsCache.filter(s => qWords.every(w => s.name.toLowerCase().includes(w))).map(normalizeShow);
-            results = [...results, ...localExact];
+            // Augment with local cache if already loaded
+            if (showsCache.length > 0) {
+                const localAll = showsCache.filter(s => {
+                    const n = s.name.toLowerCase();
+                    return qWords.length > 0
+                        ? qWords.every(w => n.includes(w)) || qWords.some(w => w.length >= 3 && n.includes(w))
+                        : n.includes(qLower);
+                }).slice(0, 50).map(normalizeShow);
+                results = [...results, ...localAll];
+            }
 
-            // Partial match fallback: any word with 3+ chars (adds breadth)
-            const localPartial = showsCache.filter(s => {
-                const n = s.name.toLowerCase();
-                return qWords.some(w => w.length >= 3 && n.includes(w));
-            }).slice(0, 40).map(normalizeShow);
-            results = [...results, ...localPartial];
-
-            results = results.filter((v,i,a) => a.findIndex(t => t.id===v.id) === i).slice(0, 100);
+            results = results.filter(Boolean).filter((v,i,a)=>a.findIndex(t=>t.id===v.id)===i).slice(0,120);
             results.forEach(m => globalMediaCache.set(m.id, m));
             searchResults = results;
             resetAndDisplaySearch();
@@ -686,20 +670,9 @@
             discoverResults = pool.filter(s => s.status === 'Running' && s.rating?.average > 0).sort((a,b) => b.updated - a.updated).slice(0, 200).map(normalizeShow);
         }
     } else {
-        // --- NOUVELLE LOGIQUE : Découverte de films via OMDB (Robuste) ---
-        // On simule une "Découverte" en cherchant des mots-clés populaires
-        const categories = ['2026', 'action', 'sci-fi', 'animation', 'comedy', 'adventure'];
-        let moviePool = [];
-        
-        for (let cat of categories) {
-            try {
-                const results = await searchMoviesAPI(cat);
-                moviePool = moviePool.concat(results);
-            } catch (e) { continue; }
-        }
-        
-        // On supprime les doublons (si un film apparaît dans plusieurs catégories)
-        discoverResults = [...new Map(moviePool.map(item => [item.id, item])).values()]
+        const categories = ['batman', 'marvel', 'spider', 'star wars', 'avatar', 'interstellar', 'inception', 'matrix', 'gladiator', 'dune'];
+        const allResults = await Promise.all(categories.map(cat => searchMoviesAPI(cat).catch(()=>[])));
+        discoverResults = [...new Map(allResults.flat().map(item => [item.id, item])).values()]
             .filter(v => !libIds.has(v.id))
             .sort(() => 0.5 - Math.random());
     }
@@ -769,7 +742,7 @@
             if (tFilter !== 'all' && item.type !== tFilter) return false;
             if (sFilter === 'not_finished' && item.status !== 'In Progress') return false;
             if (sFilter === 'watched' && item.status !== 'Watched') return false;
-            if (sFilter === 'abandoned' && item.status !== 'Abandoned') return false;
+            if (sFilter === 'not_started' && (item.status === 'Watched' || getProgress(item) > 0)) return false;
 
             if (item.type === 'series' && dFilter !== 'all') {
                 const sp = (item.status_production || '').toLowerCase();
@@ -862,8 +835,12 @@
                 libOverlay = `<button onclick="event.stopPropagation(); checkNextEp('${media.id}')" class="absolute bottom-1 right-1 bg-teal-600/90 hover:bg-teal-500 text-white text-[9px] px-1.5 py-0.5 rounded font-black transition shadow z-20">✓ S${nextEp.season}E${nextEp.number}</button>`;
             }
             libProgress = `<div class="absolute bottom-0 inset-x-0 h-1.5 bg-gray-700/80 z-10"><div class="h-full bg-teal-500" style="width:${prog}%"></div></div>`;
-        } else if (isLib && media.type === 'movie' && media.status === 'Watched') {
-            libOverlay = `<button onclick="event.stopPropagation(); resetToUnwatched('${media.id}')" class="absolute bottom-1 right-1 bg-gray-900/90 hover:bg-amber-900 border border-gray-700 text-amber-400 text-[9px] px-1.5 py-0.5 rounded font-black transition shadow z-20">↺ Non vu</button>`;
+        } else if (isLib && media.type === 'movie') {
+            if (media.status === 'Watched') {
+                libOverlay = `<button onclick="event.stopPropagation(); resetToUnwatched('${media.id}')" class="absolute bottom-1 right-1 bg-gray-900/90 hover:bg-amber-900 border border-gray-700 text-amber-400 text-[9px] px-1.5 py-0.5 rounded font-black transition shadow z-20">↺ Non vu</button>`;
+            } else {
+                libOverlay = `<button onclick="event.stopPropagation(); markMovieWatched('${media.id}')" class="absolute bottom-1 right-1 bg-emerald-600/90 hover:bg-emerald-500 text-white text-[9px] px-1.5 py-0.5 rounded font-black transition shadow z-20">✓ Vu</button>`;
+            }
         }
 
         const badgeHTML = !isLib ? `<span class="absolute top-1 left-1 text-[8px] font-black px-1.5 py-0.5 rounded ${typeClass} text-white z-10 shadow">${typeFlag}</span>` : '';
@@ -913,12 +890,22 @@
         renderLibrary();
     }
 
+    function markMovieWatched(id) {
+        const item = library.find(i => i.id === id);
+        if (!item) return;
+        item.status = 'Watched';
+        item.last_modified = Date.now();
+        saveLocalDB(item.id);
+        renderLibrary();
+    }
+
     // --- MODALES ---
     function normalizeShow(show) {
         const obj = {
             id: `series-${show.id}`, apiId: show.id, title: show.name, type: 'series',
-            image: show.image?.medium || '', summary: show.summary?.replace(/<[^>]*>/g, '') || '',
-            rating: show.rating?.average || 0, genres: show.genres || [], status_production: show.status || 'Running',
+            image: show.image?.medium || show.image?.original || '', summary: show.summary?.replace(/<[^>]*>/g, '') || '',
+            rating: show.rating?.average || 0, genres: show.genres || [],
+            status_production: show.status || 'Running',
             premiered: show.premiered ? show.premiered.split('-')[0] : 'N/A',
             runtime: show.runtime || show.averageRuntime || 0,
             network: show.network?.name || show.webChannel?.name || 'Inconnu'
@@ -978,7 +965,8 @@
                 const apiEps = await res.json();
                 previewEpisodes = apiEps.map(apiEp => ({
                     id: apiEp.id, season: apiEp.season, number: apiEp.number, name: apiEp.name,
-                    airdate: apiEp.airdate, runtime: apiEp.runtime, watched: false
+                    airdate: apiEp.airdate, runtime: apiEp.runtime, watched: false,
+                    ratingSource: apiEp.rating?.average || 0
                 }));
                 buildSeasonTabs(previewEpisodes, false);
                 renderGlobalGraph(previewEpisodes);
@@ -987,6 +975,18 @@
 
         document.getElementById('modalViewSuggestionsBtn').onclick = () => renderSuggestions(media.genres?.[0]||'Anime', media.id);
         document.getElementById('mediaModal').classList.remove('hidden');
+        // Enrich movie details in background
+        if (media.type === 'movie' && !media._enriched) {
+            enrichMovieDetails(media.id).then(enriched => {
+                if (enriched && document.getElementById('mediaModal') && !document.getElementById('mediaModal').classList.contains('hidden')) {
+                    if (enriched.summary) document.getElementById('modalSummary').textContent = enriched.summary;
+                    if (enriched.rating > 0) {
+                        document.getElementById('modalGlobalRatingText').textContent = enriched.rating.toFixed(1);
+                        document.getElementById('modalGlobalRatingBar').style.width = `${(enriched.rating/10)*100}%`;
+                    }
+                }
+            });
+        }
     }
 
     function openLibraryModal(id) {
@@ -1121,20 +1121,37 @@
         const tabs = document.getElementById('modalSeasonTabs');
         tabs.innerHTML = '';
         document.getElementById('modalEpisodesBlock').classList.remove('hidden');
-        
-        seasons.forEach((s, i) => {
+
+        // Default season: for library → season with first unwatched aired ep; for preview → last season
+        let defaultSeason;
+        if (isLib) {
+            const firstUnwatched = episodes.find(e => !e.watched && e.airdate && e.airdate <= todayString);
+            defaultSeason = firstUnwatched ? firstUnwatched.season : seasons[seasons.length - 1];
+        } else {
+            defaultSeason = seasons[seasons.length - 1];
+        }
+
+        seasons.forEach(s => {
             const btn = document.createElement('button');
             const colorClass = seasonColors[(s - 1) % seasonColors.length] || 'bg-teal-600';
-            btn.className = `px-3 py-1 text-xs font-bold rounded-lg shrink-0 ${i===0? `${colorClass} text-white`:'bg-gray-700 text-gray-300'}`;
+            const isDefault = s === defaultSeason;
+            btn.className = `px-3 py-1 text-xs font-bold rounded-lg shrink-0 ${isDefault ? `${colorClass} text-white` : 'bg-gray-700 text-gray-300'}`;
             btn.textContent = `S${s}`;
             btn.onclick = (e) => {
-                Array.from(tabs.children).forEach(b=>b.className = 'px-3 py-1 text-xs font-bold rounded-lg shrink-0 bg-gray-700 text-gray-300');
+                Array.from(tabs.children).forEach(b => b.className = 'px-3 py-1 text-xs font-bold rounded-lg shrink-0 bg-gray-700 text-gray-300');
                 e.target.className = `px-3 py-1 text-xs font-bold rounded-lg shrink-0 ${colorClass} text-white`;
                 renderEpisodes(episodes.filter(ep => ep.season === s), isLib);
             };
             tabs.appendChild(btn);
         });
-        if (seasons.length > 0) renderEpisodes(episodes.filter(ep => ep.season === seasons[0]), isLib);
+
+        if (defaultSeason !== undefined) {
+            renderEpisodes(episodes.filter(ep => ep.season === defaultSeason), isLib);
+            setTimeout(() => {
+                const activeBtn = Array.from(tabs.children).find(b => b.textContent === `S${defaultSeason}`);
+                if (activeBtn) activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            }, 50);
+        }
     }
 
     // --- EPISODES ---
@@ -1146,18 +1163,42 @@
             const isReleased = ep.airdate && ep.airdate <= todayString;
             const isFuture = !isReleased;
             const dateSpan = isFuture ? `<span class="text-amber-400 font-bold ml-1">${ep.airdate||'TBA'}</span>` : `<span class="text-gray-500 ml-1">${ep.airdate || ''}</span>`;
-            
+
+            const epRating = ep.ratingSource || ep.rating?.average || 0;
+            const ratingBadge = epRating > 0
+                ? `<span class="text-[9px] text-yellow-400 font-bold bg-yellow-950/40 px-1.5 py-0.5 rounded border border-yellow-700/30 shrink-0">★ ${epRating.toFixed(1)}</span>`
+                : '';
+
             const btnClass = isFuture ? 'bg-gray-800/50 text-gray-600 cursor-not-allowed border border-gray-700/30' : (ep.watched ? 'bg-emerald-900 text-emerald-400 hover:bg-emerald-800' : 'bg-gray-700 hover:bg-gray-600');
             const btnAction = isLib ? `<button onclick="event.stopPropagation(); ${!isFuture ? `toggleEpCascade(${ep.id}, '${ep.season}')` : ''}" class="px-2 py-1 rounded text-[10px] shrink-0 font-bold transition ${btnClass}" ${isFuture?'disabled':''}>${ep.watched ? '✓ Vu' : 'Vu'}</button>` : '';
 
             return `
-            <div class="flex flex-col gap-1">
-                <div class="p-2 rounded-xl bg-gray-900/60 border border-gray-700/50 text-xs flex justify-between items-center">
-                    <span class="truncate text-gray-300">E${ep.number} – <b class="text-white">${ep.name || 'Épisode '+ep.number}</b> ${dateSpan}</span>
+            <div class="flex flex-col gap-1" id="ep-row-${ep.id}">
+                <div class="p-2 rounded-xl bg-gray-900/60 border border-gray-700/50 text-xs flex justify-between items-center gap-1 cursor-pointer hover:bg-gray-900" onclick="toggleEpSummary(${ep.id}, this.closest('[id]'))">
+                    <span class="truncate text-gray-300 flex-1">E${ep.number} – <b class="text-white">${ep.name || 'Épisode '+ep.number}</b> ${dateSpan}</span>
+                    ${ratingBadge}
                     ${btnAction}
                 </div>
+                <div id="ep-summary-${ep.id}" class="hidden text-[10px] text-gray-400 px-3 pb-2 leading-relaxed"></div>
             </div>`;
         }).join('');
+    }
+
+    function toggleEpSummary(epId, rowEl) {
+        const summaryEl = document.getElementById(`ep-summary-${epId}`);
+        if (!summaryEl) return;
+        if (!summaryEl.classList.contains('hidden')) { summaryEl.classList.add('hidden'); return; }
+        if (summaryEl.dataset.loaded) { summaryEl.classList.remove('hidden'); return; }
+        summaryEl.classList.remove('hidden');
+        summaryEl.textContent = 'Chargement…';
+        fetch(`${TVMAZE_API}/episodes/${epId}`)
+            .then(r=>r.json())
+            .then(data => {
+                const txt = data.summary ? data.summary.replace(/<[^>]*>/g, '') : 'Aucun résumé disponible.';
+                summaryEl.textContent = txt;
+                summaryEl.dataset.loaded = '1';
+            })
+            .catch(() => { summaryEl.textContent = 'Résumé indisponible.'; summaryEl.dataset.loaded = '1'; });
     }
 
     function toggleEpCascade(epId, seasonStr) {
@@ -1196,7 +1237,8 @@
                     const isReleased = apiEp.airdate && apiEp.airdate <= todayString;
                     return {
                         id: apiEp.id, season: apiEp.season, number: apiEp.number, name: apiEp.name,
-                        airdate: apiEp.airdate, runtime: apiEp.runtime, watched: watched && isReleased
+                        airdate: apiEp.airdate, runtime: apiEp.runtime, watched: watched && isReleased,
+                        ratingSource: apiEp.rating?.average || 0
                     };
                 });
             } catch(e) {}
@@ -1235,9 +1277,10 @@
                             const isReleased = apiEp.airdate && apiEp.airdate <= todayString;
                             const watched = isReleased ? (existing ? existing.watched : false) : false;
                             
-                            newEpsList.push({ 
+                            newEpsList.push({
                                 id: apiEp.id, season: apiEp.season, number: apiEp.number, name: apiEp.name,
-                                airdate: apiEp.airdate, runtime: apiEp.runtime, watched: watched 
+                                airdate: apiEp.airdate, runtime: apiEp.runtime, watched: watched,
+                                ratingSource: apiEp.rating?.average || 0
                             });
                         });
                         item.episodes = newEpsList;
@@ -1410,7 +1453,7 @@
             }
         });
 
-        if (!futureEps.length) { container.innerHTML = `<p class="text-xs text-gray-500 text-center py-12">Aucune sortie planifiée.</p>`; return; }
+        if (!futureEps.length) { container.innerHTML = `<p class="text-xs text-gray-500 text-center py-12">Aucune sortie planifiée.<br><span class="text-[10px]">Ajoutez des séries en cours de diffusion ou des films à venir.</span></p>`; return; }
         
         futureEps.sort((a,b) => a.airdate.localeCompare(b.airdate));
         
@@ -1436,7 +1479,7 @@
                 const subTxt = ep.type === 'movie' ? `<span class="text-amber-500 font-bold bg-amber-900/30 px-1 py-0.5 rounded">SORTIE FILM</span>` : `S${ep.season}E${ep.number} – ${ep.epName}`;
                 container.innerHTML += `
                 <div onclick="openLibraryModal('${ep.mediaId}')" class="bg-gray-800 border border-gray-700 p-3 rounded-xl flex gap-3 items-center shadow cursor-pointer hover:border-gray-500 transition">
-                    <img src="${ep.showImage}" class="w-10 h-14 object-cover rounded-lg bg-gray-900 shrink-0" />
+                    <img src="${ep.showImage || 'https://placehold.co/40x56/1f2937/4b5563'}" class="w-10 h-14 object-cover rounded-lg bg-gray-900 shrink-0" />
                     <div class="flex-1 min-w-0">
                         <div class="text-[9px] uppercase font-black text-teal-400 truncate">${ep.showTitle}</div>
                         <h4 class="font-bold text-white text-xs truncate mt-0.5">${subTxt}</h4>
