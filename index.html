@@ -362,12 +362,22 @@
         library = unique;
     }
 
-    function saveLocalDB(triggerSync = true) {
+   function saveLocalDB(mediaId = null) {
+        // 1. On tente d'écrire en local, mais on met dans un try/catch pour éviter le plantage
         try {
             localStorage.setItem('personal_tracker_db', JSON.stringify(library));
-            updateHeaderCount();
-            if(triggerSync) syncToCloud();
-        } catch (e) { alert("Erreur d'espace de stockage local."); }
+        } catch (e) {
+            console.warn("localStorage plein, passage en mode priorité Cloud.");
+        }
+        
+        // 2. Mise à jour de l'UI
+        updateHeaderCount();
+        
+        // 3. PRIORITÉ : On force la synchronisation Cloud immédiatement 
+        // puisque le local n'est plus fiable en cas de saturation
+        if (mediaId) {
+            queueForSync(mediaId);
+        }
     }
 
     // --- NOUVELLE LOGIQUE CLOUD POUR LA TABLE user_library ---
