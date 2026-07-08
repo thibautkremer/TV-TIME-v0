@@ -1231,80 +1231,75 @@
     const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
     async function massUpdateLibrary() {
-        const btn = document.getElementById('btn-mass-update');
-        btn.innerHTML = `<span class="animate-pulse">🔄 Mise à jour en cours...</span>`;
-        btn.disabled = true;
+        console.log("🚀 Lancement du Mass Update complet (Statuts & Notes)...");
+        let updatedCount = 0;
+        const OMDB_API_KEY = '1e01c814';
     
-        const fetchWithTimeout = async (url, ms = 2000) => {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), ms);
+        for (let item of library) {
             try {
-                const response = await fetch(url, { signal: controller.signal });
-                clearTimeout(timeoutId);
-                return response;
-            } catch (err) {
-                clearTimeout(timeoutId);
-                throw err;
-            }
-        };
+                let changed = false;
+                let data = null;
     
-        for (let i = 0; i < library.length; i++) {
-            let item = library[i];
-            if (item.type !== 'series') continue; 
-            
-            btn.innerHTML = `🔄 ${i + 1}/${library.length} - ${item.title.substring(0, 15)}...`;
-    
-            try {
-                await sleep(1000); 
-                const res = await fetchWithTimeout(`${TVMAZE_API}/shows/${item.apiId}?embed=episodes`);
-                
-                if (res.status === 404) continue;
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    
-                const data = await res.json();
-                
-                item.rating = data.rating?.average || item.rating;
-                item.runtime = data.runtime || data.averageRuntime || item.runtime;
-                item.summary = data.summary?.replace(/<[^>]*>/g, '') || item.summary;
-                item.status_production = data.status || item.status_production;
-                
-                if (data.image) {
-                    item.image = data.image.medium || data.image.original || item.image;
+                // 1. Appel API selon le type
+                if (item.type === 'series' && item.apiId) {
+                    const res = await fetch(`https://api.tvmaze.com/shows/${item.apiId}?embed=episodes`);
+                    data = await res.json();
+                } else if (item.type === 'movie' && item.apiId) {
+                    const url = `https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&i=${item.apiId}&plot=full`;
+                    const res = await fetch(url);
+                    data = await res.json();
                 }
+    
+                if (!data) continue;
+    
+                // 2. Mise à jour du Statut (Série annulée ?)
+                if (item.type === 'series' && data.status && item.status_production !== data.status) {
+                    console.log(`   🔄 Statut mis à jour pour "${item.title}": ${data.status}`);
+                    item.status_production = data.status;
+                    changed = true;
+                }
+    
+                // 3. Mise à jour des notes (Série ou Film)
+                let newRating = null;
+                if (item.type === 'series') {
+                    newRating = data.rating?.average; // TVMaze renvoie parfois un objet ou nombre
+                } else if (item.type === 'movie' && data.imdbRating && data.imdbRating !== "N/A") {
+                    newRating = parseFloat(data.imdbRating);
+                }
+    
+                // Vérification et nettoyage (on s'assure que c'est un nombre)
+                const cleanedRating = (typeof newRating === 'object' && newRating !== null) ? newRating.average : newRating;
                 
-                const apiEps = data._embedded?.episodes || [];
-                let newEpsList = [];
-                apiEps.forEach(apiEp => {
-                    const existing = (item.episodes || []).find(e => e.id === apiEp.id);
-                    const isReleased = apiEp.airdate && apiEp.airdate <= todayString;
-                    const watched = isReleased ? (existing ? existing.watched : false) : false;
+                if (cleanedRating && item.rating !== cleanedRating) {
+                    item.rating = cleanedRating;
+                    changed = true;
+                    console.log(`   ⭐ Note mise à jour pour "${item.title}": ${cleanedRating}`);
+                }
+    
+                // 4. Synchronisation Supabase (si changement détecté)
+                if (changed) {
+                    item.last_modified = Date.now();
+                    await supabaseClient.from('user_library').upsert({
+                        user_id: localUserId,
+                        media_id: item.id,
+                        media_data: item,
+                        last_modified: item.last_modified
+                    }, { onConflict: 'user_id,media_id' });
                     
-                    newEpsList.push({ 
-                        id: apiEp.id, season: apiEp.season, number: apiEp.number, name: apiEp.name,
-                        airdate: apiEp.airdate, runtime: apiEp.runtime, watched: watched 
-                    });
-                });
-                item.episodes = newEpsList;
-                item.status = newEpsList.every(e => e.watched || (!e.airdate || e.airdate > todayString)) ? 'Watched' : 'In Progress';
-                item.last_modified = Date.now();
-                
-            } catch(e) { 
-                console.warn(`Saut de ${item.title} (Timeout ou Erreur):`, e);
-                continue; 
+                    updatedCount++;
+                    console.log(`✅ [TRANSMI] : "${item.title}" mis à jour.`);
+                }
+    
+                // Pause de sécurité pour les API
+                await new Promise(r => setTimeout(r, 800));
+    
+            } catch (e) {
+                console.error(`❌ Erreur sur ${item.title}:`, e);
             }
         }
-        
-        saveLocalDB();
-        await syncToCloud(); // Important pour pousser les changements de masse vers la base !
-        
-        renderProfile();
-        if(!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
-        
-        btn.innerHTML = `<span>✅ Mise à jour terminée !</span>`;
-        setTimeout(() => {
-            btn.innerHTML = `<span>🔄 Mettre à jour (Infos & Épisodes API)</span>`;
-            btn.disabled = false;
-        }, 3000);
+    
+        alert(`Mass Update terminé !\n${updatedCount} médias mis à jour (Notes et Statuts).`);
+        location.reload();
     }
 
     async function importLibrary(event) {
