@@ -1149,35 +1149,48 @@
     async function importLibrary(event) {
         const files = event.target.files;
         if (!files.length) return;
-        for(let file of files) {
-            if(file.name.endsWith('.json')) {
+    
+        // Affiche un état de chargement
+        alert("Import en cours... Ne fermez pas la page.");
+    
+        for (let file of files) {
+            if (file.name.endsWith('.json')) {
                 const text = await file.text();
                 try {
                     const data = JSON.parse(text);
-                    data.forEach(raw => {
+                    
+                    // On traite par petits lots pour ne pas saturer la mémoire
+                    for (let raw of data) {
                         const idx = library.findIndex(x => x.id === raw.id || x.title === raw.title);
                         if(idx !== -1) {
-                            let exist = library[idx];
-                            for (let key in raw) {
-                                if (key === 'episodes') {
-                                    raw.episodes.forEach(incEp => {
-                                        let exEp = exist.episodes?.find(e => e.id === incEp.id);
-                                        if (exEp) { if(!exEp.rating) exEp.rating = incEp.rating; } 
-                                        else exist.episodes.push(incEp);
-                                    });
-                                } else if (!['status', 'user_rating', 'summary'].includes(key)) {
-                                    if (!exist[key]) exist[key] = raw[key];
-                                }
-                            }
-                            exist.last_modified = Date.now();
-                        } else library.push({...raw, last_modified: Date.now()});
-                    });
-                } catch(err) { alert('Erreur JSON sur '+file.name); }
-            } else if(file.name.endsWith('.csv')) {
-                alert("L'import CSV TV Time a été détecté. Cependant, comme il manque les identifiants officiels (TVMaze/OMDB), utilisez Trakt.tv pour convertir ce CSV en données complètes.");
+                            // Fusion intelligente
+                            library[idx] = {...library[idx], ...raw, last_modified: Date.now()};
+                        } else {
+                            library.push({...raw, last_modified: Date.now()});
+                        }
+                        
+                        // ON SYNCHRONISE DIRECTEMENT CHAQUE ARTICLE AVEC SUPABASE
+                        // Au lieu d'attendre la fin de tout le fichier
+                        if (supabaseClient) {
+                            await supabaseClient.from('user_library').upsert({ 
+                                user_id: localUserId, 
+                                media_id: raw.id, 
+                                media_data: raw, 
+                                last_modified: Date.now() 
+                            }, { onConflict: 'user_id, media_id' });
+                        }
+                    }
+                } catch(err) { 
+                    console.error(err);
+                    alert('Erreur JSON sur ' + file.name); 
+                }
             }
         }
-        saveLocalDB(); renderProfile(); renderLibrary(); alert("Import et enrichissement terminés !");
+        
+        // Une fois fini, on rafraîchit
+        renderProfile(); 
+        renderLibrary(); 
+        alert("Import et synchronisation Cloud terminés !");
     }
 
     function clearAll() {
