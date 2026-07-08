@@ -145,67 +145,70 @@
     </div>
 
     <!-- TAB: PROFILE -->
-    <div id="tab-profile" class="space-y-4 hidden">
-        <div class="grid grid-cols-2 gap-2">
-            <label class="bg-teal-600 hover:bg-teal-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition text-center cursor-pointer shadow">
-                📂 Import Data<input type="file" multiple onchange="importLibrary(event)" class="hidden" accept=".json,.csv" />
-            </label>
-            <button onclick="clearAll()" class="bg-gray-800 hover:bg-red-950 border border-red-900/40 text-red-400 text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow">🗑 Vider Cache Local</button>
-            <button id="btn-mass-update" onclick="massUpdateLibrary()" class="bg-purple-800 hover:bg-purple-700 border border-purple-600 text-purple-200 text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition col-span-2 flex justify-center items-center gap-2">
-                <span>🔄 Mettre à jour (Infos & Épisodes API)</span>
-            </button>
-        </div>
+<div id="tab-profile" class="space-y-4 hidden">
+    <!-- Boutons d'action -->
+    <div class="grid grid-cols-2 gap-2">
+        <label class="bg-teal-600 hover:bg-teal-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition text-center cursor-pointer shadow">
+            📂 Import Data<input type="file" multiple onchange="importLibrary(event)" class="hidden" accept=".json,.csv" />
+        </label>
+        <button onclick="clearAll()" class="bg-gray-800 hover:bg-red-950 border border-red-900/40 text-red-400 text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow">🗑 Vider Cache</button>
+        <button id="btn-mass-update" onclick="massUpdateLibrary()" class="bg-purple-800 hover:bg-purple-700 border border-purple-600 text-purple-200 text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition col-span-2 flex justify-center items-center gap-2">
+            <span>🔄 Mettre à jour (Infos & Épisodes API)</span>
+        </button>
+    </div>
 
-        <!-- Temps total regardé -->
+    <!-- Stats Principales -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <!-- Temps total -->
         <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md col-span-2">
             <div id="stat-hours" class="text-sm font-black text-teal-400 tracking-wide">0 h</div>
             <div class="text-[10px] sm:text-xs text-gray-400 mt-1">Temps regardé</div>
         </div>
-        
-        <!-- Backlog restant -->
+        <!-- Backlog -->
         <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md col-span-2">
             <div id="stat-backlog-hours" class="text-sm font-black text-purple-400 tracking-wide">0 h</div>
             <div class="text-[10px] sm:text-xs text-gray-400 mt-1">Backlog restant</div>
         </div>
-    
-        <!-- Stats Séries (Teal) -->
-        <div id="stat-series-grid" class="bg-gray-800 p-3 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center items-center">
+
+        <!-- Stats Séries (Teal) - ID harmonisé -->
+        <div id="stat-series-followed" class="bg-gray-800 p-3 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center items-center">
             <div class="text-lg font-black text-teal-400">0 / 0</div>
             <div class="text-sm font-bold text-teal-400">0%</div>
             <div class="text-[9px] uppercase text-gray-400">Séries finies</div>
         </div>
-    
-        <!-- Stats Animes (Purple) -->
-        <div id="stat-animes-grid" class="bg-gray-800 p-3 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center items-center">
+
+        <!-- Stats Animes (Purple) - ID harmonisé -->
+        <div id="stat-episodes-watched" class="bg-gray-800 p-3 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center items-center">
             <div class="text-lg font-black text-purple-400">0 / 0</div>
             <div class="text-sm font-bold text-purple-400">0%</div>
             <div class="text-[9px] uppercase text-gray-400">Ép. Anime vus</div>
         </div>
-    
+
         <!-- Stats Films (Amber) -->
         <div id="stat-movies-finished" class="bg-gray-800 p-3 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center items-center">
             <div class="text-lg font-black text-amber-400">0 / 0</div>
             <div class="text-sm font-bold text-amber-400">0%</div>
             <div class="text-[9px] uppercase text-gray-400">Films vus</div>
         </div>
-    
-        <!-- Note Globale (Yellow) -->
+
+        <!-- Note Globale -->
         <div class="bg-gray-800 p-3 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center items-center">
             <div id="stat-avg-rating" class="text-lg font-black text-yellow-400">0.0</div>
             <div class="text-[9px] uppercase text-gray-400 mt-1">Note globale</div>
         </div>
     </div>
 
-        <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-md space-y-2 mt-4">
-            <h3 class="text-[11px] font-bold text-teal-400 uppercase tracking-wider">🏷️ Répartition par genres</h3>
-            <div id="stat-genre-bars" class="space-y-3 mt-3"></div>
-        </div>
-        
-        <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-md space-y-2 mt-4">
-            <h3 class="text-[11px] font-bold text-teal-400 uppercase tracking-wider">🏆 Top Séries</h3>
-            <div id="stat-top-10" class="space-y-2 text-xs"></div>
-        </div>
+    <!-- Répartition Genres -->
+    <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-md space-y-2">
+        <h3 class="text-[11px] font-bold text-teal-400 uppercase tracking-wider">🏷️ Répartition par genres</h3>
+        <div id="stat-genre-bars" class="space-y-3 mt-3"></div>
     </div>
+    
+    <!-- Plateformes (Top 10 remplacé) -->
+    <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-md space-y-2">
+        <div id="stat-top-10" class="space-y-2 text-xs"></div>
+    </div>
+</div>
 </main>
 
 <!-- MODAL DES MEDIAS -->
