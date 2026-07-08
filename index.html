@@ -1255,76 +1255,87 @@
     const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
     async function massUpdateLibrary() {
-        console.log("🚀 Lancement du Mass Update complet (Statuts & Notes)...");
-        let updatedCount = 0;
-        const OMDB_API_KEY = '1e01c814';
-    
-        for (let item of library) {
-            try {
-                let changed = false;
-                let data = null;
-    
-                // 1. Appel API selon le type
-                if (item.type === 'series' && item.apiId) {
-                    const res = await fetch(`https://api.tvmaze.com/shows/${item.apiId}?embed=episodes`);
-                    data = await res.json();
-                } else if (item.type === 'movie' && item.apiId) {
-                    const url = `https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&i=${item.apiId}&plot=full`;
-                    const res = await fetch(url);
-                    data = await res.json();
-                }
-    
-                if (!data) continue;
-    
-                // 2. Mise à jour du Statut (Série annulée ?)
-                if (item.type === 'series' && data.status && item.status_production !== data.status) {
-                    console.log(`   🔄 Statut mis à jour pour "${item.title}": ${data.status}`);
-                    item.status_production = data.status;
-                    changed = true;
-                }
-    
-                // 3. Mise à jour des notes (Série ou Film)
-                let newRating = null;
-                if (item.type === 'series') {
-                    newRating = data.rating?.average; // TVMaze renvoie parfois un objet ou nombre
-                } else if (item.type === 'movie' && data.imdbRating && data.imdbRating !== "N/A") {
-                    newRating = parseFloat(data.imdbRating);
-                }
-    
-                // Vérification et nettoyage (on s'assure que c'est un nombre)
-                const cleanedRating = (typeof newRating === 'object' && newRating !== null) ? newRating.average : newRating;
-                
-                if (cleanedRating && item.rating !== cleanedRating) {
-                    item.rating = cleanedRating;
-                    changed = true;
-                    console.log(`   ⭐ Note mise à jour pour "${item.title}": ${cleanedRating}`);
-                }
-    
-                // 4. Synchronisation Supabase (si changement détecté)
-                if (changed) {
-                    item.last_modified = Date.now();
-                    await supabaseClient.from('user_library').upsert({
-                        user_id: localUserId,
-                        media_id: item.id,
-                        media_data: item,
-                        last_modified: item.last_modified
-                    }, { onConflict: 'user_id,media_id' });
-                    
-                    updatedCount++;
-                    console.log(`✅ [TRANSMI] : "${item.title}" mis à jour.`);
-                }
-    
-                // Pause de sécurité pour les API
-                await new Promise(r => setTimeout(r, 800));
-    
-            } catch (e) {
-                console.error(`❌ Erreur sur ${item.title}:`, e);
+    console.log("🚀 Lancement du Mass Update complet (Statuts, Notes & Plateformes)...");
+    let updatedCount = 0;
+    const OMDB_API_KEY = '1e01c814';
+
+    for (let item of library) {
+        try {
+            let changed = false;
+            let data = null;
+
+            // 1. Appel API selon le type
+            if (item.type === 'series' && item.apiId) {
+                const res = await fetch(`https://api.tvmaze.com/shows/${item.apiId}?embed=episodes`);
+                data = await res.json();
+            } else if (item.type === 'movie' && item.apiId) {
+                const url = `https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&i=${item.apiId}&plot=full`;
+                const res = await fetch(url);
+                data = await res.json();
             }
+
+            if (!data) continue;
+
+            // 2. Mise à jour du Statut (Séries uniquement)
+            if (item.type === 'series' && data.status && item.status_production !== data.status) {
+                item.status_production = data.status;
+                changed = true;
+                console.log(`   🔄 Statut mis à jour pour "${item.title}": ${data.status}`);
+            }
+
+            // 3. Mise à jour de la Plateforme (Network)
+            // Remplace "Trakt Import" ou toute valeur erronée par la donnée officielle
+            if (item.type === 'series') {
+                const newNetwork = data.network?.name || data.webChannel?.name;
+                if (newNetwork && (item.network === 'Trakt Import' || item.network !== newNetwork)) {
+                    item.network = newNetwork;
+                    changed = true;
+                    console.log(`   🌐 Plateforme mise à jour pour "${item.title}": ${item.network}`);
+                }
+            }
+
+            // 4. Mise à jour des notes (Série ou Film)
+            let newRating = null;
+            if (item.type === 'series') {
+                newRating = data.rating?.average;
+            } else if (item.type === 'movie' && data.imdbRating && data.imdbRating !== "N/A") {
+                newRating = parseFloat(data.imdbRating);
+            }
+
+            // Nettoyage format (objet -> nombre)
+            const cleanedRating = (typeof newRating === 'object' && newRating !== null) ? newRating.average : newRating;
+            
+            if (cleanedRating && item.rating !== cleanedRating) {
+                item.rating = cleanedRating;
+                changed = true;
+                console.log(`   ⭐ Note mise à jour pour "${item.title}": ${cleanedRating}`);
+            }
+
+            // 5. Synchronisation Supabase (uniquement si changement)
+            if (changed) {
+                item.last_modified = Date.now();
+                await supabaseClient.from('user_library').upsert({
+                    user_id: localUserId,
+                    media_id: item.id,
+                    media_data: item,
+                    last_modified: item.last_modified
+                }, { onConflict: 'user_id,media_id' });
+                
+                updatedCount++;
+                console.log(`✅ [TRANSMI] : "${item.title}" mis à jour.`);
+            }
+
+            // Pause pour éviter d'être banni par les APIs
+            await new Promise(r => setTimeout(r, 800));
+
+        } catch (e) {
+            console.error(`❌ Erreur lors de la mise à jour de ${item.title}:`, e);
         }
-    
-        alert(`Mass Update terminé !\n${updatedCount} médias mis à jour (Notes et Statuts).`);
-        location.reload();
     }
+
+    alert(`Mass Update terminé !\n${updatedCount} médias mis à jour (Notes, Statuts et Plateformes).`);
+    location.reload();
+}
 
     async function importLibrary(event) {
         const files = event.target.files;
