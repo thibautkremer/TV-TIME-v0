@@ -4,7 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TV TIME REBORN</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- Correction : Lien Tailwind stable et ajout d'un favicon vide pour éviter l'erreur 404 -->
+    <link rel="icon" href="data:,">
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="preconnect" href="https://api.tvmaze.com">
     <link rel="preconnect" href="https://api.trakt.tv">
@@ -105,6 +107,7 @@
                 <option value="series">Séries</option>
                 <option value="movie">Films</option>
             </select>
+            <!-- Filtre défini sur "En cours" par défaut -->
             <select id="libraryStatusFilter" onchange="renderLibrary()" class="bg-gray-800 border border-gray-700 rounded-lg text-xs px-2 py-1.5 text-gray-300 shrink-0">
                 <option value="all">Tous visionnages</option>
                 <option value="not_finished" selected>En cours</option>
@@ -682,6 +685,7 @@
         renderLibrary();
     }
 
+    // Correction : Utilisation d'un DocumentFragment pour des performances maximales
     function renderLibrary() {
         const grid = document.getElementById('libraryGrid');
         const sFilter = document.getElementById('libraryStatusFilter').value;
@@ -691,7 +695,7 @@
         
         grid.innerHTML = '';
         
-        library.filter(item => {
+        let filtered = library.filter(item => {
             if(!item || !item.id) return false; 
             if (tFilter !== 'all' && item.type !== tFilter) return false;
             if (sFilter === 'not_finished' && item.status !== 'In Progress') return false;
@@ -713,7 +717,17 @@
                 if (!titleMatch && !genreMatch && !networkMatch) return false;
             }
             return true;
-        }).forEach((item) => { grid.appendChild(createMediaCard(item, true)); });
+        });
+
+        // Tri par défaut : les plus anciens commencés s'affichent en premier
+        filtered.sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0));
+
+        const fragment = document.createDocumentFragment();
+        filtered.forEach(item => { 
+            fragment.appendChild(createMediaCard(item, true)); 
+        });
+        
+        grid.appendChild(fragment);
     }
 
     function getProgress(item) {
@@ -786,9 +800,12 @@
         const badgeHTML = !isLib ? `<span class="absolute top-1 left-1 text-[8px] font-black px-1.5 py-0.5 rounded ${typeClass} text-white z-10 shadow">${typeFlag}</span>` : '';
         const titleBg = isLib ? bgColorClass : 'bg-gray-800';
 
+        // Correction pour les images N/A provenant de l'API OMDB
+        const imgSrc = (media.image && media.image !== 'N/A') ? media.image : 'https://placehold.co/155x217/1f2937/4b5563?text=Pas+d+image';
+
         div.innerHTML = `
             <div class="relative w-full">
-                <img src="${media.image || 'https://placehold.co/155x217/1f2937/4b5563'}" class="media-poster bg-gray-900" loading="lazy" />
+                <img src="${imgSrc}" class="media-poster bg-gray-900" loading="lazy" />
                 ${badgeHTML}
                 ${ratingOverlay}
                 ${dateOverlay}
@@ -844,7 +861,8 @@
     async function openPreviewModal(media) {
         modalMode = 'preview';
         document.getElementById('modalTitle').textContent = media.title;
-        document.getElementById('modalPoster').src = media.image || 'https://placehold.co/155x217';
+        // Correction N/A
+        document.getElementById('modalPoster').src = (media.image && media.image !== 'N/A') ? media.image : 'https://placehold.co/155x217/1f2937/4b5563?text=Pas+d+image';
         document.getElementById('modalSummary').textContent = media.summary || 'Aucun résumé.';
         document.getElementById('modalPremiereDate').textContent = media.premiered || 'N/A';
         document.getElementById('modalRuntime').textContent = media.runtime > 0 ? `${media.runtime} min` : '-- min';
@@ -911,7 +929,8 @@
         if(!item) return;
         
         document.getElementById('modalTitle').textContent = item.title;
-        document.getElementById('modalPoster').src = item.image || 'https://placehold.co/155x217';
+        // Correction N/A
+        document.getElementById('modalPoster').src = (item.image && item.image !== 'N/A') ? item.image : 'https://placehold.co/155x217/1f2937/4b5563?text=Pas+d+image';
         document.getElementById('modalSummary').textContent = item.summary;
         document.getElementById('modalPremiereDate').textContent = item.premiered || 'N/A';
         document.getElementById('modalRuntime').textContent = item.runtime > 0 ? `${item.runtime} min` : '-- min';
@@ -966,14 +985,8 @@
     }
 
     function closeModal() {
-        // C'est l'étape cruciale pour éviter l'erreur de "null element" à la réouverture
-        suggestionsObserver.disconnect();
-        
         document.getElementById('mediaModal').classList.add('hidden');
         activeModalMediaIndex = null;
-        
-        // Optionnel : Nettoyer le contenu pour qu'il soit vide à la prochaine ouverture
-        document.getElementById('modalSuggestionsBlock').classList.add('hidden');
     }
 
     // --- GRAPHES ---
