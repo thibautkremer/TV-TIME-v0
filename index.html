@@ -145,18 +145,7 @@
     </div>
 
     <!-- TAB: PROFILE -->
-    <div id="tab-profile" class="space-y-4 hidden">
-        <!-- Boutons d'action -->
-        <div class="grid grid-cols-2 gap-2">
-            <label class="bg-teal-600 hover:bg-teal-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition text-center cursor-pointer shadow">
-                📂 Import Data<input type="file" multiple onchange="importLibrary(event)" class="hidden" accept=".json,.csv" />
-            </label>
-            <button onclick="clearAll()" class="bg-gray-800 hover:bg-red-950 border border-red-900/40 text-red-400 text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow">🗑 Vider Cache</button>
-            <button id="btn-mass-update" onclick="massUpdateLibrary()" class="bg-purple-800 hover:bg-purple-700 border border-purple-600 text-purple-200 text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition col-span-2 flex justify-center items-center gap-2">
-                <span>🔄 Mettre à jour (Infos & Épisodes API)</span>
-            </button>
-        </div>
-
+    <div id="tab-profile" class="space-y-4 hidden">       
         <!-- Stats Unifiées (Grille 4x2) -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <!-- LIGNE 1 -->
@@ -193,6 +182,16 @@
         <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-md space-y-2">
             <h3 class="text-[11px] font-bold text-blue-400 uppercase tracking-wider">🌐 Plateformes</h3>
             <div id="stat-network-bars" class="space-y-3 mt-3"></div>
+        </div>
+        <!-- Boutons d'action -->
+        <div class="grid grid-cols-2 gap-2">
+            <button id="btn-mass-update" onclick="massUpdateLibrary()" class="bg-purple-800 hover:bg-purple-700 border border-purple-600 text-purple-200 text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition col-span-2 flex justify-center items-center gap-2">
+                <span>🔄 Mettre à jour (Infos & Épisodes API)</span>
+            </button>
+            <label class="bg-teal-600 hover:bg-teal-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition text-center cursor-pointer shadow">
+                📂 Import Data<input type="file" multiple onchange="importLibrary(event)" class="hidden" accept=".json,.csv" />
+            </label>
+            <button onclick="clearAll()" class="bg-gray-800 hover:bg-red-950 border border-red-900/40 text-red-400 text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow">🗑 Vider Cache</button>
         </div>
     </div>
 </main>
