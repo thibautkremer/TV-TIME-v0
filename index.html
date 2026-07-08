@@ -362,31 +362,36 @@
         library = unique;
     }
 
-   function saveLocalDB(mediaId = null) {
-        // 1. On tente d'écrire en local, mais on met dans un try/catch pour éviter le plantage
+    // POINT 5: La fonction saveLocalDB synchronise désormais directement avec Supabase l'élément qu'on lui passe
+    async function saveLocalDB(syncItem = null) {
         try {
             localStorage.setItem('personal_tracker_db', JSON.stringify(library));
         } catch (e) {
-            console.warn("localStorage plein, passage en mode priorité Cloud.");
+            console.warn("localStorage plein, mode Cloud.");
         }
         
-        // 2. Mise à jour de l'UI
         updateHeaderCount();
         
-        // 3. PRIORITÉ : On force la synchronisation Cloud immédiatement 
-        // puisque le local n'est plus fiable en cas de saturation
-        if (mediaId) {
-            queueForSync(mediaId);
+        // Pousse immédiatement la modification vers Supabase
+        if (syncItem && typeof supabaseClient !== 'undefined') {
+            try {
+                await supabaseClient.from('user_library').upsert({
+                    user_id: localUserId,
+                    media_id: syncItem.id,
+                    media_data: syncItem,
+                    last_modified: syncItem.last_modified || Date.now()
+                }, { onConflict: 'user_id,media_id' });
+            } catch (e) {
+                console.error("Erreur Sync vers Cloud", e);
+            }
         }
     }
 
-    // --- NOUVELLE LOGIQUE CLOUD POUR LA TABLE user_library ---
     async function syncToCloud() {
         const statusEl = document.getElementById('cloudStatus');
         statusEl.textContent = '⏳ Sync...';
         
         try {
-            // On prépare les données pour une insertion par ligne (media_id)
             const updates = library.map(item => ({
                 user_id: localUserId,
                 media_id: item.id,
@@ -394,7 +399,6 @@
                 last_modified: item.last_modified || Date.now()
             }));
 
-            // Upsert sur la table user_library
             const { error } = await supabaseClient
                 .from('user_library')
                 .upsert(updates, { onConflict: 'user_id,media_id' });
@@ -419,13 +423,11 @@
                 .eq('user_id', localUserId);
 
             if (data && data.length > 0) {
-                // On fusionne les données reçues avec le local
                 library = data.map(row => row.media_data);
-                saveLocalDB(false); // Sauvegarde locale sans resynchroniser immédiatement
+                saveLocalDB(false); 
                 statusEl.textContent = '🟢 Cloud';
                 statusEl.className = 'cursor-pointer text-[10px] px-2 py-0.5 bg-gray-900 text-emerald-400 rounded-full font-bold transition-colors shadow border border-emerald-900/50';
                 
-                // Refresh UI
                 if(!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
                 if(!document.getElementById('tab-profile').classList.contains('hidden')) renderProfile();
             }
@@ -575,12 +577,12 @@
     }
 
     // --- SUIVIS (LIBRARY) ---
+    // POINT 1 : Correction du filtrage. La recherche s'applique indépendamment du type et les champs manquants (suite import) sont gérés
     function renderLibrary() {
         const grid = document.getElementById('libraryGrid');
         
-        // Récupération des filtres
-        const sFilter = document.getElementById('libraryStatusFilter').value; // 'not_finished' par défaut
-        const tFilter = document.getElementById('libraryTypeFilter').value;   // 'all' par défaut
+        const sFilter = document.getElementById('libraryStatusFilter').value;
+        const tFilter = document.getElementById('libraryTypeFilter').value;
         const dFilter = document.getElementById('libraryDiffusionFilter').value;
         const gFilter = document.getElementById('smartGenreFilter').value;
         const nFilter = document.getElementById('smartNetworkFilter').value;
@@ -588,18 +590,23 @@
         
         grid.innerHTML = '';
         
-        // 1. Filtrage
         let filtered = library.filter(item => {
-            // Recherche textuelle (Priorité absolue, fonctionne même si les autres filtres sont sur 'all')
-            if (searchInput !== "" && !item.title.toLowerCase().includes(searchInput)) return false;
+            const title = (item.title || '').toLowerCase();
+            const iType = item.type || 'series';
+            const iStatus = item.status || 'In Progress';
+
+            // Recherche textuelle (Si on tape un texte, il s'impose sur les autres filtres pour retrouver ses vieux imports)
+            if (searchInput !== "") {
+                return title.includes(searchInput);
+            }
     
             // Filtre Type
-            if (tFilter !== 'all' && item.type !== tFilter) return false;
+            if (tFilter !== 'all' && iType !== tFilter) return false;
             
             // Filtre Statut
-            if (sFilter === 'not_finished' && item.status !== 'In Progress') return false;
-            if (sFilter === 'watched' && item.status !== 'Watched') return false;
-            if (sFilter === 'abandoned' && item.status !== 'Abandoned') return false;
+            if (sFilter === 'not_finished' && iStatus !== 'In Progress') return false;
+            if (sFilter === 'watched' && iStatus !== 'Watched') return false;
+            if (sFilter === 'abandoned' && iStatus !== 'Abandoned') return false;
             
             // Filtre Genre
             if (gFilter !== 'all' && !(item.genres || []).includes(gFilter)) return false;
@@ -608,7 +615,7 @@
             if (nFilter !== 'all' && !(item.network || '').includes(nFilter)) return false;
             
             // Filtre Diffusion
-            if (item.type === 'series' && dFilter !== 'all') {
+            if (iType === 'series' && dFilter !== 'all') {
                 const sp = (item.status_production || '').toLowerCase();
                 const isCanceled = item.user_forced_cancel || sp.includes('cancel');
                 if (dFilter === 'canceled' && !isCanceled) return false;
@@ -619,28 +626,22 @@
             return true;
         });
     
-        // 2. Tri personnalisé
+        // Tri personnalisé
         filtered.sort((a, b) => {
             const progA = getProgress(a);
             const progB = getProgress(b);
-            
-            // Critère 1 : Avancement décroissant (le plus avancé en premier)
             if (progA !== progB) return progB - progA;
-            
-            // Critère 2 : Si égalité d'avancement, Séries avant Films
-            // (series = -1, film = 1 pour forcer l'ordre)
-            const weightA = (a.type === 'series' ? 1 : 2);
-            const weightB = (b.type === 'series' ? 1 : 2);
+            const weightA = ((a.type || 'series') === 'series' ? 1 : 2);
+            const weightB = ((b.type || 'series') === 'series' ? 1 : 2);
             return weightA - weightB;
         });
     
-        // 3. Affichage
         const frag = document.createDocumentFragment();
         filtered.forEach(item => frag.appendChild(createMediaCard(item, true)));
         grid.appendChild(frag);
         
         if (filtered.length === 0) {
-            grid.innerHTML = '<p class="col-span-full text-center text-gray-500 text-sm py-10">Aucun résultat.</p>';
+            grid.innerHTML = '<p class="col-span-full text-center text-gray-500 text-sm py-10">Aucun résultat trouvé.</p>';
         }
     }
 
@@ -659,7 +660,7 @@
     }
 
     async function handleRemove(mediaId) {
-        // 1. Suppression dans Supabase
+        // Suppression dans Supabase
         if (supabaseClient) {
             try {
                 await supabaseClient
@@ -667,22 +668,23 @@
                     .delete()
                     .eq('user_id', localUserId)
                     .eq('media_id', mediaId);
-                console.log("Supprimé du Cloud:", mediaId);
             } catch (e) {
                 console.error("Erreur suppression Cloud:", e);
             }
         }
     
-        // 2. Suppression locale
+        // Suppression locale
         library = library.filter(i => i.id !== mediaId);
-        saveLocalDB(); // Met à jour le localStorage
+        saveLocalDB(); // Pas d'item à synchroniser car on vient de le supprimer !
         
-        // 3. Mise à jour UI
-        // On ne fait pas juste un innerHTML, on rend la library pour être propre
+        // Mise à jour UI
         if (!document.getElementById('tab-library').classList.contains('hidden')) {
             renderLibrary();
         }
-        renderProfile(); // Important pour mettre à jour les stats après suppression
+        renderProfile();
+        
+        // POINT 2 : Met à jour la carte sur la page de recherche/découverte
+        document.querySelectorAll(`[id="actions-${mediaId}"]`).forEach(el => el.innerHTML = buildCardActionsHTML(mediaId));
     }
 
     async function handleQuickAdd(container, mediaId, watched) {
@@ -699,18 +701,24 @@
     
         const div = document.createElement('div');
         div.className = 'bg-gray-800 rounded-xl border border-gray-700 overflow-hidden cursor-pointer shadow-sm relative flex flex-col hover:border-gray-500 transition-colors';
-        div.onclick = () => isLib ? openLibraryModal(media.id) : openPreviewModal(media);
         
-        // --- LOGIQUE IMAGE AMÉLIORÉE ---
+        // POINT 3: Si le média est dans la biblio, on ouvre TOUJOURS la vue biblio (avec Retirer et progression)
+        div.onclick = () => {
+            const inLib = library.find(i => i.id === media.id);
+            if (isLib || inLib) {
+                openLibraryModal(media.id);
+            } else {
+                openPreviewModal(media);
+            }
+        };
+        
         const DEFAULT_IMG = 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSzNFY2uiCR89dXMmbtsvSRDxJtnpN8NJFkcNtJIz-kCA&s=10';
         
-        // On valide l'image : elle doit exister, ne pas être 'N/A', et ne pas être le nom du fichier cassé
         const isImageValid = media.image && 
                              media.image !== 'N/A' && 
                              media.image !== 'image_par_defaut.jpg';
         
         const imgSrc = isImageValid ? media.image : DEFAULT_IMG;
-        // -------------------------------
     
         const rating = media.rating > 0 ? media.rating.toFixed(1) : 'N/A';
         const ratingOverlay = `<div class="absolute top-1 right-1 bg-black/80 text-yellow-400 text-[10px] font-black px-1.5 py-0.5 rounded z-10 shadow border border-gray-800/50">★ ${rating}</div>`;
@@ -761,7 +769,7 @@
             for(let i=0; i<=idx; i++) item.episodes[i].watched = true; 
             item.status = item.episodes.every(e => e.watched || !e.airdate || e.airdate > todayString) ? 'Watched' : 'In Progress';
             item.last_modified = Date.now();
-            saveLocalDB(); renderLibrary();
+            saveLocalDB(item); renderLibrary();
         }
     }
     
@@ -771,7 +779,7 @@
         if(item.type === 'series') item.episodes?.forEach(e => e.watched = false);
         item.status = 'In Progress';
         item.last_modified = Date.now();
-        saveLocalDB(); renderLibrary();
+        saveLocalDB(item); renderLibrary();
     }
 
     async function quickAdd(mediaId, watched) {
@@ -792,8 +800,10 @@
                 });
             } catch(e) {}
         }
-        library.push({ ...media, episodes, status: watched ? 'Watched' : 'In Progress', addedAt: Date.now(), last_modified: Date.now() });
-        saveLocalDB();
+        
+        const newItem = { ...media, episodes, status: watched ? 'Watched' : 'In Progress', addedAt: Date.now(), last_modified: Date.now() };
+        library.push(newItem);
+        saveLocalDB(newItem); // POINT 5: Synchro immédiate vers Cloud !
     }
 
     // --- MODALES ---
@@ -809,7 +819,7 @@
 
     function populateModalBase(media) {
         document.getElementById('modalTitle').textContent = media.title;
-        document.getElementById('modalPoster').src = (media.image && media.image !== 'N/A') ? media.image : 'https://placehold.co/155x217';
+        document.getElementById('modalPoster').src = (media.image && media.image !== 'N/A' && media.image !== 'image_par_defaut.jpg') ? media.image : 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSzNFY2uiCR89dXMmbtsvSRDxJtnpN8NJFkcNtJIz-kCA&s=10';
         document.getElementById('modalSummary').textContent = media.summary || 'Aucun résumé.';
         document.getElementById('modalPremiereDate').textContent = media.premiered || 'N/A';
         document.getElementById('modalRuntime').textContent = media.runtime > 0 ? `${media.runtime} min` : '-- min';
@@ -883,9 +893,22 @@
         const wBtn = document.getElementById('modalActionAllWatchedBtn');
         
         fBtn.textContent = '✕ Retirer'; fBtn.className = "w-full py-3 bg-gray-900 text-red-400 border border-red-900/50 font-bold rounded-xl text-xs";
-        fBtn.onclick = () => { library = library.filter(i=>i.id!==item.id); saveLocalDB(); closeModal(); renderLibrary(); };
+        
+        // POINT 4: On fait appel à la vraie fonction handleRemove qui nettoie aussi le Cloud !
+        fBtn.onclick = async () => { 
+            await handleRemove(item.id); 
+            closeModal(); 
+        };
+        
         wBtn.textContent = '↺ Non vu'; wBtn.className = "w-full py-3 bg-gray-900 text-amber-400 border border-amber-900/50 font-bold rounded-xl text-xs";
-        wBtn.onclick = () => { if(item.episodes) item.episodes.forEach(e=>e.watched=false); item.status='In Progress'; item.last_modified = Date.now(); saveLocalDB(); closeModal(); renderLibrary(); };
+        wBtn.onclick = () => { 
+            if(item.episodes) item.episodes.forEach(e=>e.watched=false); 
+            item.status='In Progress'; 
+            item.last_modified = Date.now(); 
+            saveLocalDB(item); 
+            closeModal(); 
+            renderLibrary(); 
+        };
 
         if (item.type === 'series' && item.episodes) {
             document.getElementById('modalSeriesContent').classList.remove('hidden');
@@ -910,7 +933,7 @@
         if(activeModalMediaIndex === null) return;
         library[activeModalMediaIndex].user_forced_cancel = !library[activeModalMediaIndex].user_forced_cancel;
         library[activeModalMediaIndex].last_modified = Date.now();
-        saveLocalDB(); openLibraryModal(library[activeModalMediaIndex].id); 
+        saveLocalDB(library[activeModalMediaIndex]); openLibraryModal(library[activeModalMediaIndex].id); 
     }
 
     // --- GRAPHIQUES ---
@@ -995,7 +1018,7 @@
         
         item.status = item.episodes.every(e => e.watched || (!e.airdate || e.airdate > todayString)) ? 'Watched' : 'In Progress';
         item.last_modified = Date.now();
-        saveLocalDB();
+        saveLocalDB(item);
         
         const prog = getProgress(item);
         document.getElementById('modalProgressText').textContent = `${prog}%`;
@@ -1194,7 +1217,6 @@
         `).join('');
     }
 
-    // Fonction utilitaire pour créer une pause
     const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
     async function massUpdateLibrary() {
@@ -1202,7 +1224,6 @@
         btn.innerHTML = `<span class="animate-pulse">🔄 Mise à jour en cours...</span>`;
         btn.disabled = true;
     
-        // Fonction pour gérer le timeout
         const fetchWithTimeout = async (url, ms = 2000) => {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), ms);
@@ -1231,14 +1252,10 @@
     
                 const data = await res.json();
                 
-                // Mise à jour des infos
                 item.rating = data.rating?.average || item.rating;
                 item.runtime = data.runtime || data.averageRuntime || item.runtime;
                 item.summary = data.summary?.replace(/<[^>]*>/g, '') || item.summary;
                 
-                // --- MISE À JOUR DE L'IMAGE ---
-                // TVMaze renvoie un objet { medium: "...", original: "..." }
-                // On prend le medium par défaut, sinon l'original, sinon on garde l'actuel
                 if (data.image) {
                     item.image = data.image.medium || data.image.original || item.image;
                 }
@@ -1266,10 +1283,12 @@
         }
         
         saveLocalDB();
+        await syncToCloud(); // Important pour pousser les changements de masse vers la base !
+        
         renderProfile();
         if(!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
         
-        btn.innerHTML = `<span>✅ Mise à jour terminée (Images incluses) !</span>`;
+        btn.innerHTML = `<span>✅ Mise à jour terminée !</span>`;
         setTimeout(() => {
             btn.innerHTML = `<span>🔄 Mettre à jour (Infos & Épisodes API)</span>`;
             btn.disabled = false;
@@ -1280,7 +1299,6 @@
         const files = event.target.files;
         if (!files.length) return;
     
-        // Affiche un état de chargement
         alert("Import en cours... Ne fermez pas la page.");
     
         for (let file of files) {
@@ -1289,18 +1307,15 @@
                 try {
                     const data = JSON.parse(text);
                     
-                    // On traite par petits lots pour ne pas saturer la mémoire
                     for (let raw of data) {
                         const idx = library.findIndex(x => x.id === raw.id || x.title === raw.title);
                         if(idx !== -1) {
-                            // Fusion intelligente
                             library[idx] = {...library[idx], ...raw, last_modified: Date.now()};
                         } else {
                             library.push({...raw, last_modified: Date.now()});
                         }
                         
-                        // ON SYNCHRONISE DIRECTEMENT CHAQUE ARTICLE AVEC SUPABASE
-                        // Au lieu d'attendre la fin de tout le fichier
+                        // ON SYNCHRONISE DIRECTEMENT
                         if (supabaseClient) {
                             await supabaseClient.from('user_library').upsert({ 
                                 user_id: localUserId, 
@@ -1317,7 +1332,6 @@
             }
         }
         
-        // Une fois fini, on rafraîchit
         renderProfile(); 
         renderLibrary(); 
         alert("Import et synchronisation Cloud terminés !");
@@ -1329,10 +1343,9 @@
     }
 
     window.addEventListener('focus', () => {
-    // Dès que tu cliques sur l'onglet B, on recharge les données
-    loadFromCloud();
-    console.log("Mise à jour automatique pour consultation...");
-});
+        loadFromCloud();
+        console.log("Mise à jour automatique pour consultation...");
+    });
 </script>
 </body>
 </html>
