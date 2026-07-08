@@ -1036,9 +1036,13 @@
             await ensureShowsPool();
             const baseMedia = library.find(i=>i.id===currentId) || searchResults.find(i=>i.id===currentId) || discoverResults.find(i=>i.id===currentId);
             const bGenres = baseMedia?.genres || [];
+            // Extraction du titre principal pour le matching (Dragon Ball Z -> Dragon Ball)
+            const baseTitle = baseMedia?.title.split(/[:\-]/)[0].trim().toLowerCase() || "";
             
             modalSuggestionsPool = showsCache.filter(s => `series-${s.id}` !== currentId).map(s => {
                 let score = 0;
+                // Boost franchise (ex: Dragon Ball)
+                if (baseTitle && (s.name.toLowerCase().includes(baseTitle) || baseTitle.includes(s.name.toLowerCase()))) score += 10;
                 s.genres?.forEach(g => { if(bGenres.includes(g)) score += 2; });
                 if(s.network?.name === baseMedia?.network) score += 1;
                 score += (s.rating?.average||0)/10;
@@ -1046,31 +1050,28 @@
             }).filter(i => i.score > 1).sort((a,b) => b.score - a.score).map(i => normalizeShow(i.show));
             
             modalSuggestionsPage = 1;
-            suggestionsObserver.disconnect();
-            const sent = document.getElementById('modalSuggestionsSentinel');
-            if (sent) suggestionsObserver.observe(sent);
             appendSuggestions();
         } catch(e) {}
     }
 
     function appendSuggestions() {
         const list = document.getElementById('modalSuggestionsList');
-        const start = (modalSuggestionsPage - 1) * 8; 
-        const slice = modalSuggestionsPool.slice(start, start + 8);
+        const slice = modalSuggestionsPool.slice(0, 8); 
         
         slice.forEach(n => {
-            const rate = n.rating > 0 ? n.rating.toFixed(1) : 'N/A';
             const div = document.createElement('div');
-            div.className = 'bg-gray-900 border border-gray-700 p-2 rounded-xl flex gap-3 items-center cursor-pointer';
-            div.onclick = () => { closeModal(); openPreviewModal(n); };
+            div.className = 'bg-gray-900 border border-gray-700 p-2 rounded-xl flex gap-3 items-center';
+            // On sépare la partie clic (image/titre) de la partie action (boutons)
             div.innerHTML = `
-                <img src="${n.image || 'https://placehold.co/40x60'}" class="w-12 h-16 object-cover rounded border border-gray-800" />
-                <div class="flex-1 min-w-0">
-                    <h4 class="text-xs font-bold text-white truncate">${n.title}</h4>
+                <img onclick="closeModal(); openPreviewModal(${JSON.stringify(n).replace(/"/g, '&quot;')})" src="${n.image || 'https://placehold.co/40x60'}" class="w-12 h-16 object-cover rounded border border-gray-800 cursor-pointer" />
+                <div class="flex-1 min-w-0" onclick="closeModal(); openPreviewModal(${JSON.stringify(n).replace(/"/g, '&quot;')})">
+                    <h4 class="text-xs font-bold text-white truncate cursor-pointer">${n.title}</h4>
                     <div class="flex items-center gap-1.5 mt-1">
                         <span class="text-[9px] text-gray-400 border border-gray-700 px-1 rounded">${n.premiered}</span>
-                        <span class="text-[9px] text-yellow-400 font-bold ml-1 bg-yellow-900/30 px-1.5 py-0.5 rounded border border-yellow-700/50">★ ${rate}</span>
                     </div>
+                </div>
+                <div class="flex flex-col gap-1 w-24">
+                    ${buildCardActionsHTML(n.id)}
                 </div>
             `;
             list.appendChild(div);
@@ -1255,6 +1256,7 @@
                 item.rating = data.rating?.average || item.rating;
                 item.runtime = data.runtime || data.averageRuntime || item.runtime;
                 item.summary = data.summary?.replace(/<[^>]*>/g, '') || item.summary;
+                item.status_production = data.status || item.status_production;
                 
                 if (data.image) {
                     item.image = data.image.medium || data.image.original || item.image;
