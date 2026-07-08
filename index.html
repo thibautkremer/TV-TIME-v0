@@ -577,6 +577,7 @@
     // --- SUIVIS (LIBRARY) ---
     function renderLibrary() {
         const grid = document.getElementById('libraryGrid');
+        // Récupération des valeurs
         const sFilter = document.getElementById('libraryStatusFilter').value;
         const tFilter = document.getElementById('libraryTypeFilter').value;
         const dFilter = document.getElementById('libraryDiffusionFilter').value;
@@ -585,14 +586,24 @@
         const searchInput = document.getElementById('librarySearch').value.toLowerCase().trim();
         
         grid.innerHTML = '';
+        
+        // Filtrage strict
         let filtered = library.filter(item => {
+            // 1. Filtre type
             if (tFilter !== 'all' && item.type !== tFilter) return false;
+            
+            // 2. Filtre statut
             if (sFilter === 'not_finished' && item.status !== 'In Progress') return false;
             if (sFilter === 'watched' && item.status !== 'Watched') return false;
             if (sFilter === 'abandoned' && item.status !== 'Abandoned') return false;
-            if (gFilter !== 'all' && !(item.genres||[]).includes(gFilter)) return false;
-            if (nFilter !== 'all' && !(item.network||'').includes(nFilter)) return false;
             
+            // 3. Filtre genre
+            if (gFilter !== 'all' && !(item.genres || []).includes(gFilter)) return false;
+            
+            // 4. Filtre plateforme
+            if (nFilter !== 'all' && !(item.network || '').includes(nFilter)) return false;
+            
+            // 5. Filtre diffusion
             if (item.type === 'series' && dFilter !== 'all') {
                 const sp = (item.status_production || '').toLowerCase();
                 const isCanceled = item.user_forced_cancel || sp.includes('cancel');
@@ -600,13 +611,16 @@
                 if (dFilter === 'running' && (isCanceled || !sp.includes('running'))) return false;
                 if (dFilter === 'ended' && (isCanceled || !sp.includes('ended'))) return false;
             }
+    
+            // 6. Recherche textuelle (indépendant des autres filtres)
             if (searchInput !== "" && !item.title.toLowerCase().includes(searchInput)) return false;
+            
             return true;
         });
-
-        // Tri par avancement décroissant
+    
+        // Tri
         filtered.sort((a, b) => getProgress(b) - getProgress(a));
-
+    
         const frag = document.createDocumentFragment();
         filtered.forEach(item => frag.appendChild(createMediaCard(item, true)));
         grid.appendChild(frag);
@@ -626,11 +640,31 @@
                 <button onclick="event.stopPropagation(); handleQuickAdd(this.parentElement, '${mediaId}', true)" class="flex-1 text-[9px] bg-emerald-700 text-white font-bold py-1 rounded">✓ Vu</button>`;
     }
 
-    function handleRemove(mediaId) {
+    async function handleRemove(mediaId) {
+        // 1. Suppression dans Supabase
+        if (supabaseClient) {
+            try {
+                await supabaseClient
+                    .from('user_library')
+                    .delete()
+                    .eq('user_id', localUserId)
+                    .eq('media_id', mediaId);
+                console.log("Supprimé du Cloud:", mediaId);
+            } catch (e) {
+                console.error("Erreur suppression Cloud:", e);
+            }
+        }
+    
+        // 2. Suppression locale
         library = library.filter(i => i.id !== mediaId);
-        saveLocalDB();
-        document.querySelectorAll(`[id="actions-${mediaId}"]`).forEach(el => el.innerHTML = buildCardActionsHTML(mediaId));
-        if (!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
+        saveLocalDB(); // Met à jour le localStorage
+        
+        // 3. Mise à jour UI
+        // On ne fait pas juste un innerHTML, on rend la library pour être propre
+        if (!document.getElementById('tab-library').classList.contains('hidden')) {
+            renderLibrary();
+        }
+        renderProfile(); // Important pour mettre à jour les stats après suppression
     }
 
     async function handleQuickAdd(container, mediaId, watched) {
