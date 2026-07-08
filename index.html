@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TV TIME REBORN</title>
-    <!-- Correction : Lien Tailwind stable et ajout d'un favicon vide pour éviter l'erreur 404 -->
-    <link rel="icon" href="data:,">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="preconnect" href="https://api.tvmaze.com">
     <link rel="preconnect" href="https://api.trakt.tv">
@@ -107,7 +105,6 @@
                 <option value="series">Séries</option>
                 <option value="movie">Films</option>
             </select>
-            <!-- Filtre défini sur "En cours" par défaut -->
             <select id="libraryStatusFilter" onchange="renderLibrary()" class="bg-gray-800 border border-gray-700 rounded-lg text-xs px-2 py-1.5 text-gray-300 shrink-0">
                 <option value="all">Tous visionnages</option>
                 <option value="not_finished" selected>En cours</option>
@@ -123,11 +120,13 @@
         </div>
         
         <div class="flex gap-2 overflow-x-auto pb-1 hide-scroll">
-            <button onclick="applySmartFilter('Anime')" class="shrink-0 text-[10px] px-2 py-1 rounded bg-purple-900/50 text-purple-300 border border-purple-700/50">Anime</button>
-            <button onclick="applySmartFilter('HBO')" class="shrink-0 text-[10px] px-2 py-1 rounded bg-gray-800 text-gray-300 border border-gray-700">HBO</button>
-            <button onclick="applySmartFilter('Netflix')" class="shrink-0 text-[10px] px-2 py-1 rounded bg-red-900/50 text-red-300 border border-red-700/50">Netflix</button>
-            <button onclick="applySmartFilter('movie')" class="shrink-0 text-[10px] px-2 py-1 rounded bg-amber-900/50 text-amber-300 border border-amber-700/50">Films Uniquement</button>
-            <button onclick="document.getElementById('librarySearch').value=''; renderLibrary();" class="shrink-0 text-[10px] px-2 py-1 rounded bg-gray-700 text-white">✕ Reset</button>
+            <select id="libraryGenreFilter" onchange="renderLibrary()" class="bg-gray-800 border border-gray-700 rounded-lg text-xs px-2 py-1.5 text-gray-300 shrink-0">
+                <option value="all">Tous genres</option>
+            </select>
+            <select id="libraryNetworkFilter" onchange="renderLibrary()" class="bg-gray-800 border border-gray-700 rounded-lg text-xs px-2 py-1.5 text-gray-300 shrink-0">
+                <option value="all">Toutes plateformes</option>
+            </select>
+            <button onclick="resetLibraryFilters()" class="shrink-0 text-[10px] px-2 py-1 rounded bg-gray-700 text-white border border-gray-600">✕ Reset</button>
         </div>
 
         <div class="mb-3">
@@ -174,19 +173,17 @@
                 <div class="text-[10px] sm:text-xs text-gray-400 mt-0.5">Backlog restant</div>
             </div>
             
-            <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md">
-                <div id="stat-series" class="text-xl font-black text-teal-400">0</div>
-                <div class="text-[10px] text-gray-400 mt-0.5">Séries suivies</div>
-            </div>
-            <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md">
-                <div id="stat-episodes-watched" class="text-xl font-black text-teal-500">0</div>
+            <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md col-span-2">
+                <div id="stat-episodes-fraction" class="text-sm font-bold text-teal-400">0 / 0</div>
+                <div id="stat-episodes-percent" class="text-2xl font-black text-teal-500">0%</div>
                 <div class="text-[10px] text-gray-400 mt-0.5">Épisodes vus</div>
             </div>
-            <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md">
-                <div id="stat-movies-finished" class="text-xl font-black text-amber-400">0</div>
+            <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md col-span-2">
+                <div id="stat-movies-fraction" class="text-sm font-bold text-amber-400">0 / 0</div>
+                <div id="stat-movies-percent" class="text-2xl font-black text-amber-400">0%</div>
                 <div class="text-[10px] text-gray-400 mt-0.5">Films vus</div>
             </div>
-            <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md">
+            <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md col-span-2 sm:col-span-4">
                 <div id="stat-avg-rating" class="text-xl font-black text-yellow-400">0.0</div>
                 <div class="text-[10px] text-gray-400 mt-0.5">Note moyenne</div>
             </div>
@@ -323,13 +320,18 @@
     let calFilter = 'all';
     
     let currentDiscoverMode = 'mix';
-    let discoverMediaType = 'series'; 
-    
+    let discoverMediaType = 'series';
+
     const PAGE_SIZE = 50;
     const MAX_RESULTS = 200;
+    const DISCOVER_PAGE_SIZE = 30;
     let searchPage = 1;
+    let currentSearchId = 0;
     let discoverResults = [];
     let discoverPage = 1;
+    let discoverShownIds = new Set();
+    let discoverTvmazePage = 0;
+    let discoverLoadingMore = false;
     let todayString = new Date().toISOString().split('T')[0];
 
     let modalSuggestionsPool = [];
@@ -337,16 +339,32 @@
 
     // Déclaration globale : on crée les instances d'observer ici
     const searchObserver = new IntersectionObserver(entries => {
-        if (entries[0].isIntersecting && searchPage * PAGE_SIZE < Math.min(searchResults.length, MAX_RESULTS)) { 
-            searchPage++; 
-            renderSearchGrid(false); 
+        if (entries[0].isIntersecting && searchPage * PAGE_SIZE < Math.min(searchResults.length, MAX_RESULTS)) {
+            searchPage++;
+            renderSearchGrid(false);
         }
     });
-    
-    const discoverObserver = new IntersectionObserver(entries => {
-        if (entries[0].isIntersecting && discoverPage * PAGE_SIZE < Math.min(discoverResults.length, MAX_RESULTS)) { 
-            discoverPage++; 
-            renderDiscoverGrid(false); 
+
+    const discoverObserver = new IntersectionObserver(async entries => {
+        if (!entries[0].isIntersecting || discoverLoadingMore) return;
+        if (discoverPage * DISCOVER_PAGE_SIZE < discoverResults.length) {
+            discoverPage++;
+            renderDiscoverGrid(false);
+        } else if (discoverMediaType === 'series') {
+            discoverLoadingMore = true;
+            discoverTvmazePage++;
+            try {
+                const newShows = await fetch(`${TVMAZE_API}/shows?page=${discoverTvmazePage}`).then(r=>r.json());
+                if (Array.isArray(newShows) && newShows.length > 0) {
+                    const libIds = new Set(library.map(i => i.id));
+                    const newNorm = newShows.filter(s => !libIds.has(`series-${s.id}`) && !discoverShownIds.has(`series-${s.id}`)).map(normalizeShow);
+                    discoverResults = [...discoverResults, ...newNorm];
+                    newNorm.forEach(m => globalMediaCache.set(m.id, m));
+                    discoverPage++;
+                    renderDiscoverGrid(false);
+                }
+            } catch(e) {}
+            discoverLoadingMore = false;
         }
     });
     
@@ -551,21 +569,42 @@
     }
 
     async function triggerFuzzySearch(query) {
-        await ensureShowsPool(); 
-        const qWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+        const searchId = ++currentSearchId;
+        await ensureShowsPool();
+        if (searchId !== currentSearchId) return;
+
+        const qWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 1);
         try {
-            const [movieRes, tvmazeRes] = await Promise.all([
+            const searchPromises = [
                 searchMoviesAPI(query),
                 fetch(`${TVMAZE_API}/search/shows?q=${encodeURIComponent(query)}`).then(r => r.json()).catch(()=>[])
-            ]);
-            
+            ];
+            // Broader single-word search for multi-word queries (fixes "house of" → "House of the Dragon")
+            if (qWords.length > 1) {
+                searchPromises.push(
+                    fetch(`${TVMAZE_API}/search/shows?q=${encodeURIComponent(qWords[0])}`).then(r => r.json()).catch(()=>[])
+                );
+            }
+
+            const [movieRes, tvmazeRes, tvmazeBroadRes = []] = await Promise.all(searchPromises);
+            if (searchId !== currentSearchId) return;
+
             let results = [...movieRes];
             if (Array.isArray(tvmazeRes)) results = results.concat(tvmazeRes.map(i => normalizeShow(i.show)));
-            
-            const localMatches = showsCache.filter(s => qWords.every(w => s.name.toLowerCase().includes(w))).map(normalizeShow);
-            
-            results = [...results, ...localMatches].filter((v,i,a)=>a.findIndex(t=>(t.id===v.id))===i).slice(0, 50);
-            
+            if (Array.isArray(tvmazeBroadRes)) results = results.concat(tvmazeBroadRes.map(i => normalizeShow(i.show)));
+
+            // Local cache: all-words exact match
+            const localExact = showsCache.filter(s => qWords.every(w => s.name.toLowerCase().includes(w))).map(normalizeShow);
+            results = [...results, ...localExact];
+
+            // Partial match fallback: any word with 3+ chars (adds breadth)
+            const localPartial = showsCache.filter(s => {
+                const n = s.name.toLowerCase();
+                return qWords.some(w => w.length >= 3 && n.includes(w));
+            }).slice(0, 40).map(normalizeShow);
+            results = [...results, ...localPartial];
+
+            results = results.filter((v,i,a) => a.findIndex(t => t.id===v.id) === i).slice(0, 100);
             results.forEach(m => globalMediaCache.set(m.id, m));
             searchResults = results;
             resetAndDisplaySearch();
@@ -626,23 +665,25 @@
 
     async function renderDiscoverTab(force = false) {
     if (!force && discoverResults.length > 0 && document.getElementById('discoverGrid').children.length > 0) return;
+    discoverTvmazePage = 0;
+    discoverLoadingMore = false;
     const libIds = new Set(library.map(i => i.id));
-    
+
     if (discoverMediaType === 'series') {
         await ensureShowsPool();
         let pool = showsCache.filter(s => !libIds.has(`series-${s.id}`));
-        
-        if(currentDiscoverMode === 'mix') {
+
+        if (currentDiscoverMode === 'mix') {
             const favoriteKeywords = ['Anime', 'Animation', 'Action', 'Fantasy'];
             let personalized = pool.filter(s => s.genres?.some(g => favoriteKeywords.includes(g)));
-            if(personalized.length < 50) personalized = [...personalized, ...pool];
-            discoverResults = personalized.sort(() => 0.5 - Math.random()).slice(0, 100).map(normalizeShow);
-        } 
+            if (personalized.length < 50) personalized = [...personalized, ...pool];
+            discoverResults = personalized.sort(() => 0.5 - Math.random()).slice(0, 200).map(normalizeShow);
+        }
         else if (currentDiscoverMode === 'top') {
-            discoverResults = pool.filter(s => s.rating?.average > 0).sort((a,b) => b.rating.average - a.rating.average).slice(0, 100).map(normalizeShow);
+            discoverResults = pool.filter(s => s.rating?.average > 0).sort((a,b) => b.rating.average - a.rating.average).slice(0, 200).map(normalizeShow);
         }
         else if (currentDiscoverMode === 'trending') {
-            discoverResults = pool.filter(s => s.status === 'Running' && s.rating?.average > 0).sort((a,b) => b.updated - a.updated).slice(0, 100).map(normalizeShow);
+            discoverResults = pool.filter(s => s.status === 'Running' && s.rating?.average > 0).sort((a,b) => b.updated - a.updated).slice(0, 200).map(normalizeShow);
         }
     } else {
         // --- NOUVELLE LOGIQUE : Découverte de films via OMDB (Robuste) ---
@@ -671,37 +712,65 @@
 
     function renderDiscoverGrid(clear = false) {
         const container = document.getElementById('discoverGrid');
-        if(clear) container.innerHTML = '';
-        
-        const start = (discoverPage - 1) * PAGE_SIZE;
-        const end = Math.min(start + PAGE_SIZE, MAX_RESULTS);
-        discoverResults.slice(start, end).forEach(m => container.appendChild(createMediaCard(m, false)));
+        if (clear) { container.innerHTML = ''; discoverShownIds = new Set(); }
+
+        const start = (discoverPage - 1) * DISCOVER_PAGE_SIZE;
+        const end = start + DISCOVER_PAGE_SIZE;
+        discoverResults.slice(start, end).forEach(m => {
+            if (!discoverShownIds.has(m.id)) {
+                discoverShownIds.add(m.id);
+                container.appendChild(createMediaCard(m, false));
+            }
+        });
     }
 
     // --- BIBLIOTHEQUE ---
-    function applySmartFilter(keyword) {
-        if(keyword === 'movie') { document.getElementById('libraryTypeFilter').value = 'movie'; document.getElementById('librarySearch').value = ''; }
-        else { document.getElementById('libraryTypeFilter').value = 'all'; document.getElementById('librarySearch').value = keyword; }
+    function populateLibraryFilterDropdowns() {
+        const genreEl = document.getElementById('libraryGenreFilter');
+        const networkEl = document.getElementById('libraryNetworkFilter');
+        if (!genreEl || !networkEl) return;
+        const currentGenre = genreEl.value;
+        const currentNetwork = networkEl.value;
+        const genreSet = new Set();
+        const networkSet = new Set();
+        library.forEach(item => {
+            (item.genres || []).forEach(g => { if (g) genreSet.add(g); });
+            if (item.network && item.network !== 'Inconnu') networkSet.add(item.network);
+        });
+        genreEl.innerHTML = '<option value="all">Tous genres</option>' +
+            [...genreSet].sort().map(g => `<option value="${g}"${g === currentGenre ? ' selected' : ''}>${g}</option>`).join('');
+        networkEl.innerHTML = '<option value="all">Toutes plateformes</option>' +
+            [...networkSet].sort().map(n => `<option value="${n}"${n === currentNetwork ? ' selected' : ''}>${n}</option>`).join('');
+    }
+
+    function resetLibraryFilters() {
+        document.getElementById('librarySearch').value = '';
+        const gEl = document.getElementById('libraryGenreFilter');
+        const nEl = document.getElementById('libraryNetworkFilter');
+        if (gEl) gEl.value = 'all';
+        if (nEl) nEl.value = 'all';
         renderLibrary();
     }
 
-    // Correction : Utilisation d'un DocumentFragment pour des performances maximales
     function renderLibrary() {
+        populateLibraryFilterDropdowns();
         const grid = document.getElementById('libraryGrid');
         const sFilter = document.getElementById('libraryStatusFilter').value;
         const dFilter = document.getElementById('libraryDiffusionFilter').value;
         const tFilter = document.getElementById('libraryTypeFilter').value;
+        const gFilter = document.getElementById('libraryGenreFilter')?.value || 'all';
+        const nFilter = document.getElementById('libraryNetworkFilter')?.value || 'all';
         const searchInput = document.getElementById('librarySearch').value.toLowerCase().trim();
-        
+
         grid.innerHTML = '';
-        
+
         let filtered = library.filter(item => {
-            if(!item || !item.id) return false; 
+            if (!item || !item.id) return false;
             if (tFilter !== 'all' && item.type !== tFilter) return false;
             if (sFilter === 'not_finished' && item.status !== 'In Progress') return false;
             if (sFilter === 'watched' && item.status !== 'Watched') return false;
             if (sFilter === 'abandoned' && item.status !== 'Abandoned') return false;
-            
+
             if (item.type === 'series' && dFilter !== 'all') {
                 const sp = (item.status_production || '').toLowerCase();
                 const isManualCanceled = item.user_forced_cancel === true;
@@ -709,8 +778,11 @@
                 if (dFilter === 'running' && (isManualCanceled || !sp.includes('running'))) return false;
                 if (dFilter === 'ended' && (isManualCanceled || !sp.includes('ended'))) return false;
             }
-            
-            if (searchInput !== "") {
+
+            if (gFilter !== 'all' && !(item.genres || []).includes(gFilter)) return false;
+            if (nFilter !== 'all' && item.network !== nFilter) return false;
+
+            if (searchInput !== '') {
                 const titleMatch = item.title ? item.title.toLowerCase().includes(searchInput) : false;
                 const genreMatch = item.genres ? item.genres.some(g => g.toLowerCase().includes(searchInput)) : false;
                 const networkMatch = item.network ? item.network.toLowerCase().includes(searchInput) : false;
@@ -719,15 +791,12 @@
             return true;
         });
 
-        // Tri par défaut : les plus anciens commencés s'affichent en premier
-        filtered.sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0));
+        // Sort "En cours" by progress descending (most advanced first)
+        if (sFilter === 'not_finished') {
+            filtered.sort((a, b) => getProgress(b) - getProgress(a));
+        }
 
-        const fragment = document.createDocumentFragment();
-        filtered.forEach(item => { 
-            fragment.appendChild(createMediaCard(item, true)); 
-        });
-        
-        grid.appendChild(fragment);
+        filtered.forEach(item => { grid.appendChild(createMediaCard(item, true)); });
     }
 
     function getProgress(item) {
@@ -798,15 +867,15 @@
         }
 
         const badgeHTML = !isLib ? `<span class="absolute top-1 left-1 text-[8px] font-black px-1.5 py-0.5 rounded ${typeClass} text-white z-10 shadow">${typeFlag}</span>` : '';
+        const isCanceled = isLib && media.type === 'series' && (media.user_forced_cancel === true || (media.status_production||'').toLowerCase().includes('cancel'));
+        const canceledBadge = isCanceled ? `<span class="absolute top-1 left-1 text-[8px] font-black px-1.5 py-0.5 rounded bg-red-600 text-white z-10 shadow">ANNULÉE</span>` : '';
         const titleBg = isLib ? bgColorClass : 'bg-gray-800';
-
-        // Correction pour les images N/A provenant de l'API OMDB
-        const imgSrc = (media.image && media.image !== 'N/A') ? media.image : 'https://placehold.co/155x217/1f2937/4b5563?text=Pas+d+image';
 
         div.innerHTML = `
             <div class="relative w-full">
-                <img src="${imgSrc}" class="media-poster bg-gray-900" loading="lazy" />
+                <img src="${media.image || 'https://placehold.co/155x217/1f2937/4b5563'}" class="media-poster bg-gray-900" loading="lazy" />
                 ${badgeHTML}
+                ${canceledBadge}
                 ${ratingOverlay}
                 ${dateOverlay}
                 ${libOverlay}
@@ -861,8 +930,7 @@
     async function openPreviewModal(media) {
         modalMode = 'preview';
         document.getElementById('modalTitle').textContent = media.title;
-        // Correction N/A
-        document.getElementById('modalPoster').src = (media.image && media.image !== 'N/A') ? media.image : 'https://placehold.co/155x217/1f2937/4b5563?text=Pas+d+image';
+        document.getElementById('modalPoster').src = media.image || 'https://placehold.co/155x217';
         document.getElementById('modalSummary').textContent = media.summary || 'Aucun résumé.';
         document.getElementById('modalPremiereDate').textContent = media.premiered || 'N/A';
         document.getElementById('modalRuntime').textContent = media.runtime > 0 ? `${media.runtime} min` : '-- min';
@@ -929,8 +997,7 @@
         if(!item) return;
         
         document.getElementById('modalTitle').textContent = item.title;
-        // Correction N/A
-        document.getElementById('modalPoster').src = (item.image && item.image !== 'N/A') ? item.image : 'https://placehold.co/155x217/1f2937/4b5563?text=Pas+d+image';
+        document.getElementById('modalPoster').src = item.image || 'https://placehold.co/155x217';
         document.getElementById('modalSummary').textContent = item.summary;
         document.getElementById('modalPremiereDate').textContent = item.premiered || 'N/A';
         document.getElementById('modalRuntime').textContent = item.runtime > 0 ? `${item.runtime} min` : '-- min';
@@ -982,11 +1049,29 @@
 
         document.getElementById('modalViewSuggestionsBtn').onclick = () => renderSuggestions(item.genres?.[0]||'Anime', item.id);
         document.getElementById('mediaModal').classList.remove('hidden');
+
+        // Background status refresh for series
+        if (item.type === 'series' && item.apiId) {
+            fetch(`${TVMAZE_API}/shows/${item.apiId}`).then(r=>r.json()).then(data => {
+                if (data.status && data.status !== item.status_production) {
+                    item.status_production = data.status;
+                    item.last_modified = Date.now();
+                    saveLocalDB(item.id);
+                    renderProductionBadge(item.status_production, item.user_forced_cancel);
+                }
+            }).catch(()=>{});
+        }
     }
 
     function closeModal() {
+        // C'est l'étape cruciale pour éviter l'erreur de "null element" à la réouverture
+        suggestionsObserver.disconnect();
+        
         document.getElementById('mediaModal').classList.add('hidden');
         activeModalMediaIndex = null;
+        
+        // Optionnel : Nettoyer le contenu pour qu'il soit vide à la prochaine ouverture
+        document.getElementById('modalSuggestionsBlock').classList.add('hidden');
     }
 
     // --- GRAPHES ---
@@ -1199,27 +1284,39 @@
     async function renderSuggestions(genre, currentId) {
         const block = document.getElementById('modalSuggestionsBlock');
         block.classList.remove('hidden');
-        block.innerHTML = `
-            <div id="modalSuggestionsList" class="space-y-2"></div>
-            <div id="modalSuggestionsSentinel" class="h-4"></div>
-        `;
-        
+        block.innerHTML = `<div class="text-xs text-gray-500 text-center py-4 animate-pulse">Chargement des suggestions...</div>`;
+
         try {
-            await ensureShowsPool();
-            modalSuggestionsPool = showsCache.filter(s => s.genres?.includes(genre) && `series-${s.id}` !== currentId).sort(() => 0.5 - Math.random());
+            // Direct TVMaze search: fast and targeted (no waiting for full shows pool)
+            const tvRes = await fetch(`${TVMAZE_API}/search/shows?q=${encodeURIComponent(genre)}`).then(r=>r.json()).catch(()=>[]);
+
+            const seen = new Set();
+            modalSuggestionsPool = [];
+
+            if (Array.isArray(tvRes)) {
+                tvRes.forEach(r => {
+                    if (r.show && r.show.id && `series-${r.show.id}` !== currentId) {
+                        seen.add(r.show.id);
+                        modalSuggestionsPool.push(r.show);
+                    }
+                });
+            }
+            // Merge with local cache if already loaded
+            showsCache.filter(s => s.genres?.includes(genre) && `series-${s.id}` !== currentId && !seen.has(s.id))
+                .sort(() => 0.5 - Math.random())
+                .forEach(s => { seen.add(s.id); modalSuggestionsPool.push(s); });
+
             modalSuggestionsPage = 1;
-            
-            // On nettoie l'ancien observer s'il y en avait un
+            block.innerHTML = `
+                <div id="modalSuggestionsList" class="space-y-2"></div>
+                <div id="modalSuggestionsSentinel" class="h-4"></div>
+            `;
             suggestionsObserver.disconnect();
-            
-            // On cible le sentinel fraîchement créé et on l'observe
             const sent = document.getElementById('modalSuggestionsSentinel');
             if (sent) suggestionsObserver.observe(sent);
-            
-            // On affiche la première page de suggestions
             appendSuggestions(true);
         } catch(e) {
-            console.error("Erreur lors du chargement des suggestions", e);
+            block.innerHTML = `<div class="text-xs text-gray-500 text-center py-4">Aucune suggestion disponible.</div>`;
         }
     }
 
@@ -1274,10 +1371,27 @@
 
         library.forEach(item => {
             if (item.type === 'movie') {
-                if (item.premiered && item.premiered.length >= 4 && item.premiered >= todayString && item.status !== 'Watched') {
-                    if (calFilter === 'today' && item.premiered !== todayString) return;
-                    futureEps.push({ mediaId: item.id, showTitle: item.title, showImage: item.image, epName: 'SORTIE FILM', season: null, number: null, airdate: item.premiered, type: 'movie' });
+                if (!item.premiered || item.status === 'Watched') return;
+                const yearStr = item.premiered.substring(0, 4);
+                const currentYearStr = todayString.substring(0, 4);
+                if (yearStr < currentYearStr) return;
+                const isFullDate = item.premiered.length >= 10;
+                const sortDate = isFullDate ? item.premiered : `${yearStr}-12-31`;
+                if (calFilter === 'today') { if (!isFullDate || item.premiered !== todayString) return; }
+                if (calFilter === 'week') {
+                    if (!isFullDate) return;
+                    const d = new Date(item.premiered); d.setHours(0,0,0,0);
+                    const diff = (d - today) / 86400000;
+                    if (diff < 0 || diff > 7) return;
                 }
+                if (calFilter === 'month') {
+                    if (!isFullDate) { if (yearStr !== currentYearStr) return; }
+                    else {
+                        const d = new Date(item.premiered);
+                        if (d.getMonth() !== today.getMonth() || d.getFullYear() !== today.getFullYear()) return;
+                    }
+                }
+                futureEps.push({ mediaId: item.id, showTitle: item.title, showImage: item.image, epName: 'SORTIE FILM', season: null, number: null, airdate: sortDate, displayDate: isFullDate ? item.premiered : yearStr, type: 'movie' });
             } else {
                 (item.episodes||[]).forEach(ep => {
                     if (!ep.airdate || ep.watched || item.status === 'Abandoned') return;
@@ -1291,7 +1405,7 @@
                         const epDate = new Date(ep.airdate);
                         if (epDate.getMonth() !== today.getMonth() || epDate.getFullYear() !== today.getFullYear()) return;
                     }
-                    futureEps.push({ mediaId: item.id, showTitle: item.title, showImage: item.image, epName: ep.name, season: ep.season, number: ep.number, airdate: ep.airdate, type: 'series' });
+                    futureEps.push({ mediaId: item.id, showTitle: item.title, showImage: item.image, epName: ep.name, season: ep.season, number: ep.number, airdate: ep.airdate, displayDate: ep.airdate, type: 'series' });
                 });
             }
         });
@@ -1302,11 +1416,21 @@
         
         const groups = {};
         futureEps.forEach(ep => { if (!groups[ep.airdate]) groups[ep.airdate] = []; groups[ep.airdate].push(ep); });
-        
+
         Object.entries(groups).forEach(([date, eps]) => {
+            const isYearOnly = date.endsWith('-12-31') && eps.every(e => e.type === 'movie' && e.displayDate && e.displayDate.length <= 4);
             const diff = Math.ceil((new Date(date) - today) / 86400000);
-            const label = diff === 0 ? "Aujourd'hui 🎉" : diff === 1 ? "Demain" : `<span class="text-[#FFD700] font-black drop-shadow-md">J-${diff}</span>`;
-            
+            let label;
+            if (isYearOnly) {
+                label = `<span class="text-amber-400 font-black">${eps[0].displayDate}</span>`;
+            } else if (diff === 0) {
+                label = "Aujourd'hui 🎉";
+            } else if (diff === 1) {
+                label = "Demain";
+            } else {
+                label = `<span class="text-[#FFD700] font-black drop-shadow-md">J-${diff}</span>`;
+            }
+
             container.innerHTML += `<div class="text-[11px] font-black text-teal-400 uppercase tracking-wider mt-3 mb-1">${label}</div>`;
             eps.forEach(ep => {
                 const subTxt = ep.type === 'movie' ? `<span class="text-amber-500 font-bold bg-amber-900/30 px-1 py-0.5 rounded">SORTIE FILM</span>` : `S${ep.season}E${ep.number} – ${ep.epName}`;
@@ -1316,7 +1440,7 @@
                     <div class="flex-1 min-w-0">
                         <div class="text-[9px] uppercase font-black text-teal-400 truncate">${ep.showTitle}</div>
                         <h4 class="font-bold text-white text-xs truncate mt-0.5">${subTxt}</h4>
-                        <span class="text-[10px] text-gray-500">${ep.airdate}</span>
+                        <span class="text-[10px] text-gray-500">${ep.displayDate || ep.airdate}</span>
                     </div>
                 </div>`;
             });
@@ -1337,29 +1461,29 @@
 
     function renderProfile() {
         let totalMin = 0, seriesCount = 0, moviesCount = 0;
-        let seriesFinished = 0, moviesFinished = 0, totalRating = 0, ratingCount = 0;
-        let epWatchedCount = 0, backlogMin = 0;
+        let moviesFinished = 0, totalRating = 0, ratingCount = 0;
+        let epWatchedCount = 0, epTotal = 0, backlogMin = 0;
         const gc = {};
-        
+
         library.forEach(item => {
             if (item.rating > 0) { totalRating += item.rating; ratingCount++; }
             (item.genres||[]).forEach(g => { gc[g] = (gc[g]||0) + 1; });
 
-            if (item.type === 'movie') { 
-                moviesCount++; 
-                if(item.status === 'Watched') {
-                    totalMin += (item.runtime > 0 ? item.runtime : 120); 
+            if (item.type === 'movie') {
+                moviesCount++;
+                if (item.status === 'Watched') {
+                    totalMin += (item.runtime > 0 ? item.runtime : 120);
                     moviesFinished++;
-                } else if (item.status !== 'Watched') {
+                } else {
                     backlogMin += (item.runtime > 0 ? item.runtime : 120);
                 }
             } else {
                 seriesCount++;
-                if(item.status === 'Watched') seriesFinished++;
+                epTotal += (item.episodes || []).length;
                 (item.episodes||[]).forEach(ep => {
                     const rt = item.runtime > 0 ? item.runtime : 40;
-                    if (ep.watched) { 
-                        totalMin += rt; 
+                    if (ep.watched) {
+                        totalMin += rt;
                         epWatchedCount++;
                     } else if (!ep.watched && ep.airdate && ep.airdate <= todayString && item.status !== 'Abandoned') {
                         backlogMin += rt;
@@ -1368,11 +1492,15 @@
             }
         });
 
+        const epPct = epTotal > 0 ? Math.round((epWatchedCount / epTotal) * 100) : 0;
+        const moviesPct = moviesCount > 0 ? Math.round((moviesFinished / moviesCount) * 100) : 0;
+
         document.getElementById('stat-hours').textContent = formatDuration(totalMin);
         document.getElementById('stat-backlog-hours').textContent = formatDuration(backlogMin);
-        document.getElementById('stat-series').textContent = seriesCount;
-        document.getElementById('stat-episodes-watched').textContent = epWatchedCount;
-        document.getElementById('stat-movies-finished').textContent = moviesFinished;
+        document.getElementById('stat-episodes-fraction').textContent = `${epWatchedCount} / ${epTotal}`;
+        document.getElementById('stat-episodes-percent').textContent = `${epPct}%`;
+        document.getElementById('stat-movies-fraction').textContent = `${moviesFinished} / ${moviesCount}`;
+        document.getElementById('stat-movies-percent').textContent = `${moviesPct}%`;
         document.getElementById('stat-avg-rating').textContent = ratingCount > 0 ? (totalRating / ratingCount).toFixed(1) : 'N/A';
         
         const totalMedia = seriesCount + moviesCount;
