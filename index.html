@@ -631,57 +631,83 @@
     // --- SUIVIS (LIBRARY) ---
     function renderLibrary() {
         const grid = document.getElementById('libraryGrid');
+        
+        const sFilter = document.getElementById('libraryStatusFilter').value;
+        const tFilter = document.getElementById('libraryTypeFilter').value;
+        const dFilter = document.getElementById('libraryDiffusionFilter').value;
+        const gFilter = document.getElementById('smartGenreFilter').value;
+        const nFilter = document.getElementById('smartNetworkFilter').value;
+        const sortVal = document.getElementById('librarySortFilter').value;
+        const searchInput = document.getElementById('librarySearch').value.toLowerCase().trim();
+        
         grid.innerHTML = '';
+        
+        let filtered = library.filter(item => {
+            const title = (item.title || '').toLowerCase();
+            const iType = item.type || 'series';
+            const iStatus = item.status || 'In Progress';
 
-        // Récupération des filtres
-        const typeFilter = document.getElementById('libraryTypeFilter').value;
-        const statusFilter = document.getElementById('libraryStatusFilter').value;
-        const diffFilter = document.getElementById('libraryDiffusionFilter').value;
-        const sortFilter = document.getElementById('librarySortFilter').value;
-        const genreFilter = document.getElementById('smartGenreFilter').value;
-        const netFilter = document.getElementById('smartNetworkFilter').value;
-        const search = document.getElementById('librarySearch').value.toLowerCase();
-
-        // Filtrage
-        let filtered = library.filter(m => {
-            if (typeFilter !== 'all' && m.type !== typeFilter) return false;
+            if (searchInput !== "") {
+                return title.includes(searchInput);
+            }
+    
+            if (tFilter !== 'all' && iType !== tFilter) return false;
             
-            // Filtres de statut
-            if (statusFilter === 'not_finished' && (m.status === 'Watched' || m.status === 'Abandoned')) return false;
-            if (statusFilter === 'watched' && m.status !== 'Watched') return false;
-            if (statusFilter === 'abandoned' && m.status !== 'Abandoned') return false;
-
-            // Filtres de diffusion
-            if (diffFilter !== 'all' && (m.status_production || '').toLowerCase() !== diffFilter) return false;
-
-            // Filtres de genre/network
-            if (genreFilter !== 'all' && !(m.genres || []).includes(genreFilter)) return false;
-            if (netFilter !== 'all' && m.network !== netFilter) return false;
-
-            // Recherche textuelle
-            if (search && !m.title.toLowerCase().includes(search)) return false;
-
+            if (sFilter === 'not_finished' && iStatus !== 'In Progress') return false;
+            if (sFilter === 'watched' && iStatus !== 'Watched') return false;
+            if (sFilter === 'abandoned' && iStatus !== 'Abandoned') return false;
+            
+            if (gFilter !== 'all' && !(item.genres || []).includes(gFilter)) return false;
+            
+            if (nFilter !== 'all' && !(item.network || '').includes(nFilter)) return false;
+            
+            if (iType === 'series' && dFilter !== 'all') {
+                const sp = (item.status_production || '').toLowerCase();
+                const isCanceled = item.user_forced_cancel || sp.includes('cancel');
+                if (dFilter === 'canceled' && !isCanceled) return false;
+                if (dFilter === 'running' && (isCanceled || !sp.includes('running'))) return false;
+                if (dFilter === 'ended' && (isCanceled || !sp.includes('ended'))) return false;
+            }
+            
             return true;
         });
-
-        // Tri
+    
         filtered.sort((a, b) => {
-            switch(sortFilter) {
-                case 'prog_asc': return getProgress(a) - getProgress(b);
-                case 'prog_desc': return getProgress(b) - getProgress(a);
-                case 'title_asc': return a.title.localeCompare(b.title);
-                case 'title_desc': return b.title.localeCompare(a.title);
-                case 'date_desc': return (b.addedAt || 0) - (a.addedAt || 0);
-                case 'date_asc': return (a.addedAt || 0) - (b.addedAt || 0);
-                case 'rating_desc': return getCalculatedRating(b) - getCalculatedRating(a);
-                case 'rating_asc': return getCalculatedRating(a) - getCalculatedRating(b);
-                default: return 0;
+            if (sortVal === 'title_asc') return (a.title || '').localeCompare(b.title || '');
+            if (sortVal === 'title_desc') return (b.title || '').localeCompare(a.title || '');
+            if (sortVal === 'date_desc') return (b.addedAt || b.last_modified || 0) - (a.addedAt || a.last_modified || 0);
+            if (sortVal === 'date_asc') return (a.addedAt || a.last_modified || 0) - (b.addedAt || b.last_modified || 0);
+            if (sortVal === 'rating_desc') return getCalculatedRating(b) - getCalculatedRating(a);
+            if (sortVal === 'rating_asc') return getCalculatedRating(a) - getCalculatedRating(b);
+            
+            // Progression ascendante
+            if (sortVal === 'prog_asc') {
+                const progA = getProgress(a);
+                const progB = getProgress(b);
+                if (progA !== progB) return progA - progB;
+                const weightA = ((a.type || 'series') === 'series' ? 1 : 2);
+                const weightB = ((b.type || 'series') === 'series' ? 1 : 2);
+                return weightA - weightB;
             }
-        });
 
-        // Rendu
-        filtered.forEach(m => grid.appendChild(createMediaCard(m, true)));
+            // Défaut : Progression descendante ('prog_desc')
+            const progA = getProgress(a);
+            const progB = getProgress(b);
+            if (progA !== progB) return progB - progA;
+            const weightA = ((a.type || 'series') === 'series' ? 1 : 2);
+            const weightB = ((b.type || 'series') === 'series' ? 1 : 2);
+            return weightA - weightB;
+        });
+    
+        const frag = document.createDocumentFragment();
+        filtered.forEach(item => frag.appendChild(createMediaCard(item, true)));
+        grid.appendChild(frag);
+        
+        if (filtered.length === 0) {
+            grid.innerHTML = '<p class="col-span-full text-center text-gray-500 text-sm py-10">Aucun résultat trouvé.</p>';
+        }
     }
+    
     function renderProfile() {
         const series = library.filter(i => i.type === 'series' && !(i.genres || []).includes('Anime') && !(i.genres || []).includes('Animation'));
         const animes = library.filter(i => (i.genres || []).includes('Anime') || (i.genres || []).includes('Animation'));
