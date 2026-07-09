@@ -771,7 +771,8 @@
         
         let yearOverlay = '';
         if (!isLib && media.premiered && media.premiered !== 'N/A') {
-            const year = media.premiered.split('-')[0];
+            // SECURITE: conversion en texte avec String() pour éviter le crash .split sur un entier
+            const year = String(media.premiered).split('-')[0];
             yearOverlay = `<div class="absolute top-1 right-1 bg-gray-900/80 text-gray-400 text-[10px] font-bold px-1.5 py-0.5 rounded z-10 border border-gray-700">${year}</div>`;
         }
 
@@ -868,7 +869,8 @@
             id: `series-${show.id}`, apiId: show.id, title: show.name, type: 'series',
             image: show.image?.medium || '', summary: show.summary?.replace(/<[^>]*>/g, '') || '',
             rating: show.rating?.average || 0, genres: show.genres || [], status_production: show.status || 'Running',
-            premiered: show.premiered ? show.premiered.split('-')[0] : 'N/A',
+            // SECURITE: On force en string au cas où l'API renvoie un entier
+            premiered: show.premiered ? String(show.premiered).split('-')[0] : 'N/A',
             runtime: show.runtime || show.averageRuntime || 0, network: show.network?.name || show.webChannel?.name || 'Inconnu'
         };
     }
@@ -1166,7 +1168,7 @@
 
         library.forEach(item => {
             // Films
-            if (item.type === 'movie' && item.premiered && item.premiered.length >= 4 && item.premiered >= todayString && item.status !== 'Watched') {
+            if (item.type === 'movie' && item.premiered && String(item.premiered).length >= 4 && item.premiered >= todayString && item.status !== 'Watched') {
                 if (calFilter === 'today' && item.premiered !== todayString) return;
                 futureEps.push({ mediaId: item.id, showTitle: item.title, showImage: item.image, epName: 'SORTIE FILM', airdate: item.premiered, type: 'movie' });
             } 
@@ -1416,7 +1418,8 @@
                     if (!attemptData || attemptData.Response === "False") {
                         console.log(`   ⚠️ ID défaillant ou manquant. Plan B : Recherche par Titre + Année...`);
                         
-                        let year = (item.premiered && item.premiered !== 'N/A') ? item.premiered.split('-')[0] : '';
+                        // SECURITE: conversion en texte avec String() pour éviter le crash .split
+                        let year = (item.premiered && item.premiered !== 'N/A') ? String(item.premiered).split('-')[0] : '';
                         const fallbackUrl = `https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&t=${encodeURIComponent(item.title)}&y=${year}&type=movie&plot=full`;
                         
                         const res2 = await fetch(fallbackUrl);
