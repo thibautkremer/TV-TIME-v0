@@ -709,79 +709,8 @@
         if (filtered.length === 0) {
             grid.innerHTML = '<p class="col-span-full text-center text-gray-500 text-sm py-10">Aucun résultat trouvé.</p>';
         }
-    }
+    }   
     
-    function renderProfile() {
-        const series = library.filter(i => i.type === 'series' && !(i.genres || []).includes('Anime') && !(i.genres || []).includes('Animation'));
-        const animes = library.filter(i => (i.genres || []).includes('Anime') || (i.genres || []).includes('Animation'));
-        const movies = library.filter(i => i.type === 'movie');
-    
-        let watchedMin = 0;
-        let backlogMin = 0;
-    
-        library.forEach(item => {
-            if (item.type === 'movie') {
-                const r = parseInt(item.runtime) || 120;
-                if (item.status === 'Watched') {
-                    watchedMin += r;
-                } else if (item.status !== 'Abandoned') {
-                    // Inclut In Progress, Canceled, etc.
-                    backlogMin += r;
-                }
-            } else if (item.type === 'series') {
-                const defR = parseInt(item.runtime) || 24;
-                (item.episodes || []).forEach(ep => {
-                    const r = parseInt(ep.runtime) || defR;
-                    if (ep.watched) {
-                        watchedMin += r;
-                    } else if (item.status !== 'Abandoned') {
-                        // Inclut In Progress, Canceled, etc.
-                        backlogMin += r;
-                    }
-                });
-            }
-        });
-    
-        document.getElementById('stat-hours').textContent = formatDurationProfile(watchedMin);
-        document.getElementById('stat-backlog-hours').textContent = formatDurationProfile(backlogMin);
-    
-        // ... (le reste de la fonction renderProfile reste identique)
-        const ratedItems = library.map(i => getCalculatedRating(i)).filter(r => r > 0);
-        const avgRating = ratedItems.length > 0 ? (ratedItems.reduce((acc, r) => acc + r, 0) / ratedItems.length).toFixed(1) : '0.0';
-        document.getElementById('stat-avg-rating').textContent = avgRating;
-        
-        // (Note : s'assurer que les autres éléments de stat-grid sont bien mis à jour ici)
-        const sFinished = series.filter(s => s.status === 'Watched').length;
-        document.getElementById('stat-series-grid').innerHTML = `<div class="text-lg font-black text-teal-400">${sFinished} / ${series.length}</div><div class="text-xs font-bold text-teal-400">${series.length > 0 ? Math.round((sFinished/series.length)*100) : 0}%</div><div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Séries finies</div>`;
-        
-        let seTotal = 0, seWatched = 0;
-        series.forEach(s => { seTotal += (s.episodes||[]).length; seWatched += (s.episodes||[]).filter(e=>e.watched).length; });
-        document.getElementById('stat-series-eps-grid').innerHTML = `<div class="text-lg font-black text-teal-400">${seWatched} / ${seTotal}</div><div class="text-xs font-bold text-teal-400">${seTotal > 0 ? Math.round((seWatched/seTotal)*100) : 0}%</div><div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Ép. Séries vus</div>`;
-        
-        const aFinished = animes.filter(a => a.status === 'Watched').length;
-        document.getElementById('stat-anime-grid').innerHTML = `<div class="text-lg font-black text-purple-400">${aFinished} / ${animes.length}</div><div class="text-xs font-bold text-purple-400">${animes.length > 0 ? Math.round((aFinished/animes.length)*100) : 0}%</div><div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Anime finis</div>`;
-    
-        let aeTotal = 0, aeWatched = 0;
-        animes.forEach(a => { aeTotal += (a.episodes||[]).length; aeWatched += (a.episodes||[]).filter(e=>e.watched).length; });
-        document.getElementById('stat-anime-eps-grid').innerHTML = `<div class="text-lg font-black text-purple-400">${aeWatched} / ${aeTotal}</div><div class="text-xs font-bold text-purple-400">${aeTotal > 0 ? Math.round((aeWatched/aeTotal)*100) : 0}%</div><div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Ép. Anime vus</div>`;
-        
-        const mFinished = movies.filter(m => m.status === 'Watched').length;
-        document.getElementById('stat-movies-finished').innerHTML = `<div class="text-lg font-black text-amber-400">${mFinished} / ${movies.length}</div><div class="text-xs font-bold text-amber-400">${movies.length > 0 ? Math.round((mFinished/movies.length)*100) : 0}%</div><div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Films vus</div>`;
-    
-        const gc = {}; library.forEach(i => (i.genres || []).forEach(g => gc[g] = (gc[g] || 0) + 1));
-        const sortedGenres = Object.entries(gc).sort((a, b) => b[1] - a[1]); const maxG = sortedGenres.length > 0 ? sortedGenres[0][1] : 1;
-        document.getElementById('stat-genre-bars').innerHTML = sortedGenres.slice(0, 5).map(([g, c]) => `<div><div class="flex justify-between text-[10px] mb-1 font-bold"><span class="text-gray-300">${g}</span><span class="text-teal-500">${c}</span></div><div class="w-full h-2 bg-gray-700 rounded-full overflow-hidden"><div class="h-full bg-teal-500" style="width:${Math.round(c / maxG * 100)}%"></div></div></div>`).join('');
-        
-        const nc = {}; library.forEach(i => { if (i.network && i.network !== 'Inconnu') nc[i.network] = (nc[i.network] || 0) + 1; });
-        const sortedNets = Object.entries(nc).sort((a, b) => b[1] - a[1]); const maxN = sortedNets.length > 0 ? sortedNets[0][1] : 1;
-        document.getElementById('stat-network-bars').innerHTML = sortedNets.slice(0, 6).map(([n, c]) => `<div><div class="flex justify-between text-[10px] mb-1 font-bold"><span class="text-gray-300">${n}</span><span class="text-blue-500">${c}</span></div><div class="w-full h-2 bg-gray-700 rounded-full overflow-hidden"><div class="h-full bg-blue-500" style="width:${Math.round(c / maxN * 100)}%"></div></div></div>`).join('');
-    
-        const rc = {}; library.forEach(i => { const r = getCalculatedRating(i); if (r > 0) { let rounded = Math.round(r * 2) / 2; let key = rounded < 5 ? "< 5" : rounded.toFixed(1).replace('.0', ''); rc[key] = (rc[key] || 0) + 1; } });
-        let ratingKeys = []; for (let i = 10; i >= 5; i -= 0.5) ratingKeys.push(i.toFixed(1).replace('.0', '')); ratingKeys.push("< 5");
-        const activeRatings = ratingKeys.filter(k => rc[k] > 0); const maxR = activeRatings.length > 0 ? Math.max(...activeRatings.map(k => rc[k])) : 1;
-        document.getElementById('stat-rating-bars').innerHTML = activeRatings.map(k => `<div><div class="flex justify-between text-[10px] mb-1 font-bold"><span class="text-gray-300">${k}</span><span class="text-yellow-500">${rc[k]}</span></div><div class="w-full h-2 bg-gray-700 rounded-full overflow-hidden"><div class="h-full bg-yellow-400" style="width:${Math.round(rc[k] / maxR * 100)}%"></div></div></div>`).join('');
-    }
-
     function getProgress(item) {
         if (!item.episodes || item.episodes.length === 0) return item.status === 'Watched' ? 100 : 0;
         const watched = item.episodes.filter(e => e.watched).length;
