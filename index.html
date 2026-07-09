@@ -404,7 +404,8 @@
         }
         
         updateHeaderCount();
-        
+        syncWidgetData();
+
         if (syncItem && typeof supabaseClient !== 'undefined') {
             try {
                 await supabaseClient.from('user_library').upsert({
@@ -1495,10 +1496,82 @@
         library = []; localStorage.removeItem('personal_tracker_db'); renderLibrary(); renderProfile();
     }
 
-    window.addEventListener('focus', () => {
+    window.addEventListener('focus', async () => {
+        await processPendingWatched();
         loadFromCloud();
         console.log("Mise à jour automatique pour consultation...");
     });
+
+    async function processPendingWatched() {
+        if (typeof window.Capacitor === 'undefined') return;
+        const WidgetPlugin = window.Capacitor.Plugins.WidgetPlugin;
+        if (!WidgetPlugin) return;
+        try {
+            const { items } = await WidgetPlugin.getPendingWatched();
+            if (!items || items === '[]') return;
+            const queue = JSON.parse(items);
+            if (!queue.length) return;
+            for (const entry of queue) {
+                const item = library.find(i => i.id === entry.mediaId);
+                if (!item) continue;
+                if (entry.isMovie) {
+                    item.status = 'Watched';
+                } else {
+                    const ep = item.episodes?.find(e => e.season === entry.season && e.number === entry.episode);
+                    if (ep) {
+                        const idx = item.episodes.indexOf(ep);
+                        for (let i = 0; i <= idx; i++) item.episodes[i].watched = true;
+                        item.status = item.episodes.every(e => e.watched || !e.airdate || e.airdate > todayString) ? 'Watched' : 'In Progress';
+                    }
+                }
+                item.last_modified = Date.now();
+                await saveLocalDB(item);
+            }
+            await WidgetPlugin.clearPendingWatched();
+            syncWidgetData();
+        } catch (e) { console.log('processPendingWatched:', e.message); }
+    }
+
+    async function syncWidgetData() {
+        if (typeof window.Capacitor === 'undefined') return;
+        const WidgetPlugin = window.Capacitor.Plugins.WidgetPlugin;
+        if (!WidgetPlugin) return;
+        const todayStr = new Date().toISOString().split('T')[0];
+        const in30 = new Date(); in30.setDate(in30.getDate() + 30);
+        const in30Str = in30.toISOString().split('T')[0];
+        const calendarItems = [];
+        library.forEach(item => {
+            if (item.type === 'movie') {
+                if (item.premiered && item.premiered >= todayStr && item.premiered <= in30Str && item.status !== 'Watched')
+                    calendarItems.push({ title: item.title, type: 'movie', date: item.premiered, episode: 'Film' });
+            } else if (item.type === 'series') {
+                (item.episodes || []).forEach(ep => {
+                    if (ep.airdate && ep.airdate >= todayStr && ep.airdate <= in30Str && !ep.watched)
+                        calendarItems.push({ title: item.title, type: 'series', date: ep.airdate,
+                            episode: `S${String(ep.season).padStart(2,'0')}E${String(ep.number).padStart(2,'0')}` });
+                });
+            }
+        });
+        calendarItems.sort((a, b) => a.date.localeCompare(b.date));
+        const inProgress = [];
+        library.forEach(item => {
+            if (item.status === 'Abandoned' || item.status === 'Watched') return;
+            const entry = { id: item.id, title: item.title, type: item.type };
+            if (item.type === 'series' && item.episodes) {
+                entry.episodes = item.episodes.filter(e => !e.watched)
+                    .sort((a, b) => a.season !== b.season ? a.season - b.season : a.number - b.number)
+                    .slice(0, 6).map(e => ({ season: e.season, number: e.number, name: e.name || '', rating: e.rating || 0 }));
+                if (entry.episodes.length === 0) return;
+            } else { entry.rating = item.rating || 0; entry.episodes = []; }
+            inProgress.push(entry);
+        });
+        try {
+            await WidgetPlugin.updateWidgetData({
+                calendarJson: JSON.stringify(calendarItems.slice(0, 20)),
+                inProgressJson: JSON.stringify(inProgress.slice(0, 10))
+            });
+        } catch (e) { console.log('syncWidgetData:', e.message); }
+    }
 </script>
 </body>
 </html>
