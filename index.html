@@ -119,6 +119,16 @@
         </div>
         
         <div class="flex gap-2 overflow-x-auto pb-1 hide-scroll">
+            <select id="librarySortFilter" onchange="renderLibrary()" class="bg-gray-800 border border-gray-700 rounded-lg text-[10px] px-2 py-1 text-gray-300 shrink-0">
+                <option value="prog_desc" selected>Progression (Max ➔ Min)</option>
+                <option value="prog_asc">Progression (Min ➔ Max)</option>
+                <option value="title_asc">Titre (A ➔ Z)</option>
+                <option value="title_desc">Titre (Z ➔ A)</option>
+                <option value="date_desc">Ajout (Plus récent)</option>
+                <option value="date_asc">Ajout (Plus ancien)</option>
+                <option value="rating_desc">Note (Meilleure)</option>
+                <option value="rating_asc">Note (Moins bonne)</option>
+            </select>
             <select id="smartGenreFilter" onchange="renderLibrary()" class="bg-gray-800 border border-gray-700 rounded-lg text-[10px] px-2 py-1 text-gray-300 shrink-0">
                 <option value="all">Tous les Genres</option>
                 <option value="Action">Action</option>
@@ -136,11 +146,12 @@
                 <option value="Disney+">Disney+</option>
                 <option value="Apple TV+">Apple TV+</option>
             </select>
-            <button onclick="document.getElementById('librarySearch').value=''; document.getElementById('smartGenreFilter').value='all'; document.getElementById('smartNetworkFilter').value='all'; renderLibrary();" class="shrink-0 text-[10px] px-2 py-1 rounded bg-gray-700 text-white">✕ Reset</button>
+            <button onclick="document.getElementById('librarySearch').value=''; document.getElementById('clearLibSearchBtn').classList.add('hidden'); document.getElementById('smartGenreFilter').value='all'; document.getElementById('smartNetworkFilter').value='all'; document.getElementById('librarySortFilter').value='prog_desc'; renderLibrary();" class="shrink-0 text-[10px] px-2 py-1 rounded bg-gray-700 text-white hover:bg-gray-600 transition">✕ Reset</button>
         </div>
 
-        <div class="mb-3">
-            <input type="text" id="librarySearch" oninput="renderLibrary()" placeholder="Rechercher dans mes suivis..." class="bg-gray-800 border border-gray-700 rounded-lg text-xs px-3 py-2 w-full text-white">
+        <div class="mb-3 relative">
+            <input type="text" id="librarySearch" oninput="document.getElementById('clearLibSearchBtn').classList.toggle('hidden', this.value.length === 0); renderLibrary()" placeholder="Rechercher dans mes suivis..." class="bg-gray-800 border border-gray-700 rounded-lg text-xs px-3 py-2 w-full text-white pr-10">
+            <button id="clearLibSearchBtn" onclick="document.getElementById('librarySearch').value=''; this.classList.add('hidden'); renderLibrary()" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white font-bold hidden text-sm">✕</button>
         </div>
         <div id="libraryGrid" class="media-grid"></div>
     </div>
@@ -184,6 +195,13 @@
             <h3 class="text-[11px] font-bold text-blue-400 uppercase tracking-wider">🌐 Plateformes</h3>
             <div id="stat-network-bars" class="space-y-3 mt-3"></div>
         </div>
+
+        <!-- Répartition Notes -->
+        <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-md space-y-2">
+            <h3 class="text-[11px] font-bold text-yellow-400 uppercase tracking-wider">⭐ Répartition par notes</h3>
+            <div id="stat-rating-bars" class="space-y-3 mt-3"></div>
+        </div>
+
         <!-- Boutons d'action -->
         <div class="grid grid-cols-2 gap-2">
             <button id="btn-mass-update" onclick="massUpdateLibrary()" class="bg-purple-800 hover:bg-purple-700 border border-purple-600 text-purple-200 text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition col-span-2 flex justify-center items-center gap-2">
@@ -605,6 +623,7 @@
         const dFilter = document.getElementById('libraryDiffusionFilter').value;
         const gFilter = document.getElementById('smartGenreFilter').value;
         const nFilter = document.getElementById('smartNetworkFilter').value;
+        const sortVal = document.getElementById('librarySortFilter').value;
         const searchInput = document.getElementById('librarySearch').value.toLowerCase().trim();
         
         grid.innerHTML = '';
@@ -640,6 +659,24 @@
         });
     
         filtered.sort((a, b) => {
+            if (sortVal === 'title_asc') return (a.title || '').localeCompare(b.title || '');
+            if (sortVal === 'title_desc') return (b.title || '').localeCompare(a.title || '');
+            if (sortVal === 'date_desc') return (b.addedAt || b.last_modified || 0) - (a.addedAt || a.last_modified || 0);
+            if (sortVal === 'date_asc') return (a.addedAt || a.last_modified || 0) - (b.addedAt || b.last_modified || 0);
+            if (sortVal === 'rating_desc') return getCalculatedRating(b) - getCalculatedRating(a);
+            if (sortVal === 'rating_asc') return getCalculatedRating(a) - getCalculatedRating(b);
+            
+            // Progression ascendante
+            if (sortVal === 'prog_asc') {
+                const progA = getProgress(a);
+                const progB = getProgress(b);
+                if (progA !== progB) return progA - progB;
+                const weightA = ((a.type || 'series') === 'series' ? 1 : 2);
+                const weightB = ((b.type || 'series') === 'series' ? 1 : 2);
+                return weightA - weightB;
+            }
+
+            // Défaut : Progression descendante ('prog_desc')
             const progA = getProgress(a);
             const progB = getProgress(b);
             if (progA !== progB) return progB - progA;
@@ -1281,6 +1318,34 @@
                 <div class="flex justify-between text-[10px] mb-1 font-bold"><span class="text-gray-300">${n}</span><span class="text-blue-500">${c}</span></div>
                 <div class="w-full h-2 bg-gray-700 rounded-full overflow-hidden"><div class="h-full bg-blue-500" style="width:${Math.round(c / maxN * 100)}%"></div></div>
             </div>`).join('');
+
+        // 9. Barres Notes
+        const rc = {};
+        library.forEach(i => {
+            const r = getCalculatedRating(i);
+            if (r > 0) {
+                let rounded = Math.round(r * 2) / 2;
+                let key = rounded < 5 ? "< 5" : rounded.toFixed(1).replace('.0', '');
+                rc[key] = (rc[key] || 0) + 1;
+            }
+        });
+
+        let ratingKeys = [];
+        for (let i = 10; i >= 5; i -= 0.5) ratingKeys.push(i.toFixed(1).replace('.0', ''));
+        ratingKeys.push("< 5");
+
+        const activeRatings = ratingKeys.filter(k => rc[k] > 0);
+        const maxR = activeRatings.length > 0 ? Math.max(...activeRatings.map(k => rc[k])) : 1;
+
+        document.getElementById('stat-rating-bars').innerHTML = activeRatings.map(k => `
+            <div>
+                <div class="flex justify-between text-[10px] mb-1 font-bold"><span class="text-gray-300">${k}</span><span class="text-yellow-500">${rc[k]}</span></div>
+                <div class="w-full h-2 bg-gray-700 rounded-full overflow-hidden"><div class="h-full bg-yellow-400" style="width:${Math.round(rc[k] / maxR * 100)}%"></div></div>
+            </div>`).join('');
+        
+        if (activeRatings.length === 0) {
+            document.getElementById('stat-rating-bars').innerHTML = '<div class="text-[10px] text-gray-500 italic text-center py-2">Aucune note attribuée</div>';
+        }
     }
 
     async function massUpdateLibrary() {
