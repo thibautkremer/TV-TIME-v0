@@ -1366,13 +1366,12 @@
         document.getElementById('btn-mass-update-series').classList.add('opacity-50', 'cursor-not-allowed');
         document.getElementById('btn-mass-update-movie').classList.add('opacity-50', 'cursor-not-allowed');
 
-        // Fonction utilitaire pour nettoyer le nom de la plateforme
         const sanitizePlatform = (p) => {
             if (!p || p === 'N/A' || p.toLowerCase().includes('trakt')) return 'Theater';
             return p;
         };
 
-        console.log(`🚀 Lancement du Mass Update (avec nettoyage plateforme) pour : ${type}...`);
+        console.log(`🚀 MASS UPDATE - Lancement pour : ${type}...`);
         let updatedCount = 0;
         let skippedCount = 0;
         let errorCount = 0;
@@ -1383,38 +1382,48 @@
         if(itemsToProcess.length === 0) {
             alert(`Aucun média de type ${type} à mettre à jour.`);
             btn.innerHTML = originalContent;
-            document.getElementById('btn-mass-update-series').disabled = false;
-            document.getElementById('btn-mass-update-movie').disabled = false;
-            document.getElementById('btn-mass-update-series').classList.remove('opacity-50', 'cursor-not-allowed');
-            document.getElementById('btn-mass-update-movie').classList.remove('opacity-50', 'cursor-not-allowed');
             return;
         }
 
         for (let i = 0; i < itemsToProcess.length; i++) {
             let item = itemsToProcess[i];
             btn.innerHTML = `<span class="truncate w-full text-center px-1">⏳ [${i+1}/${itemsToProcess.length}] ${item.title}</span>`;
+            console.log(`[${i + 1}/${itemsToProcess.length}] ⏳ Traitement : "${item.title}"`);
 
             try {
                 let changed = false;
                 let data = null;
 
+                // --- 1. SÉRIES ---
                 if (item.type === 'series' && item.apiId) {
                     const res = await fetch(`https://api.tvmaze.com/shows/${item.apiId}?embed=episodes`);
-                    if (!res.ok) throw new Error(`TVMaze Error`);
+                    if (!res.ok) throw new Error(`TVMaze API Error: ${res.status}`);
                     data = await res.json();
                     
-                    if (data.image?.medium && item.image !== data.image.medium) { item.image = data.image.medium; changed = true; }
-                    if (data.summary && item.summary !== data.summary.replace(/<[^>]*>/g, '')) { item.summary = data.summary.replace(/<[^>]*>/g, ''); changed = true; }
-                    if (data.genres && JSON.stringify(item.genres) !== JSON.stringify(data.genres)) { item.genres = data.genres; changed = true; }
-                    if (data.status && item.status_production !== data.status) { item.status_production = data.status; changed = true; }
+                    if (data.image?.medium && item.image !== data.image.medium) { console.log(`   -> Mise à jour image`); item.image = data.image.medium; changed = true; }
+                    if (data.summary && item.summary !== data.summary.replace(/<[^>]*>/g, '')) { console.log(`   -> Mise à jour résumé`); item.summary = data.summary.replace(/<[^>]*>/g, ''); changed = true; }
+                    if (data.status && item.status_production !== data.status) { console.log(`   -> Nouveau statut : ${data.status}`); item.status_production = data.status; changed = true; }
                     
-                    // Application du filtre plateforme
                     const net = sanitizePlatform(data.network?.name || data.webChannel?.name);
-                    if (net && item.network !== net) { item.network = net; changed = true; }
+                    if (net && item.network !== net) { console.log(`   -> Nouvelle plateforme : ${net}`); item.network = net; changed = true; }
                     
-                    if (data.rating?.average && item.rating !== data.rating.average) { item.rating = data.rating.average; changed = true; }
+                    if (data.rating?.average && item.rating !== data.rating.average) { console.log(`   -> Nouvelle note : ${data.rating.average}`); item.rating = data.rating.average; changed = true; }
 
-                } else if (item.type === 'movie') {
+                    // Mise à jour Épisodes
+                    if (data._embedded?.episodes) {
+                        data._embedded.episodes.forEach(apiEp => {
+                            if (!item.episodes) return;
+                            const localEp = item.episodes.find(e => e.id === apiEp.id);
+                            if (localEp) {
+                                const newR = apiEp.rating?.average || 0;
+                                const newS = apiEp.summary ? apiEp.summary.replace(/<[^>]*>/g, '') : '';
+                                if (localEp.rating !== newR || localEp.summary !== newS) { localEp.rating = newR; localEp.summary = newS; changed = true; }
+                            }
+                        });
+                    }
+                } 
+                // --- 2. FILMS ---
+                else if (item.type === 'movie') {
                     let attemptData = null;
                     if (item.apiId) {
                         const url = `https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&i=${item.apiId}&plot=full`;
@@ -1422,40 +1431,39 @@
                         if (res.ok) attemptData = await res.json();
                     }
                     if (!attemptData || attemptData.Response === "False") {
+                        console.log(`   ⚠️ ID invalide ou manquant. Recherche par titre...`);
                         let year = (item.premiered && item.premiered !== 'N/A') ? String(item.premiered).split('-')[0] : '';
                         const res2 = await fetch(`https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&t=${encodeURIComponent(item.title)}&y=${year}&type=movie&plot=full`);
                         if (res2.ok) attemptData = await res2.json();
-                        if (attemptData.Response === "True" && attemptData.imdbID) item.apiId = attemptData.imdbID;
+                        if (attemptData.Response === "True" && attemptData.imdbID) { item.apiId = attemptData.imdbID; console.log(`   -> ID corrigé : ${item.apiId}`); }
                     }
                     
                     data = attemptData;
-                    if (!data || data.Response === "False") throw new Error(`Non trouvé`);
+                    if (!data || data.Response === "False") throw new Error(`Non trouvé sur OMDb`);
 
-                    if (data.Poster && data.Poster !== "N/A" && item.image !== data.Poster) { item.image = data.Poster; changed = true; }
-                    if (data.Plot && item.summary !== data.Plot) { item.summary = data.Plot; changed = true; }
+                    if (data.Poster && data.Poster !== "N/A" && item.image !== data.Poster) { console.log(`   -> Mise à jour image`); item.image = data.Poster; changed = true; }
+                    if (data.Plot && item.summary !== data.Plot) { console.log(`   -> Mise à jour résumé`); item.summary = data.Plot; changed = true; }
                     if (data.Genre) {
                         const newGenres = data.Genre.split(', ');
-                        if (JSON.stringify(item.genres) !== JSON.stringify(newGenres)) { item.genres = newGenres; changed = true; }
+                        if (JSON.stringify(item.genres) !== JSON.stringify(newGenres)) { console.log(`   -> Nouveaux genres`); item.genres = newGenres; changed = true; }
                     }
-                    
-                    // Application du filtre plateforme pour les films
                     const prod = sanitizePlatform(data.Production);
-                    if (prod && item.network !== prod) { item.network = prod; changed = true; }
-                    
-                    if (data.imdbRating && data.imdbRating !== "N/A" && item.rating !== parseFloat(data.imdbRating)) { item.rating = parseFloat(data.imdbRating); changed = true; }
+                    if (prod && item.network !== prod) { console.log(`   -> Nouvelle plateforme : ${prod}`); item.network = prod; changed = true; }
+                    if (data.imdbRating && data.imdbRating !== "N/A" && item.rating !== parseFloat(data.imdbRating)) { console.log(`   -> Nouvelle note : ${data.imdbRating}`); item.rating = parseFloat(data.imdbRating); changed = true; }
                 }
 
+                // --- 3. SAUVEGARDE ET FEEDBACK ---
                 if (changed) {
                     item.last_modified = Date.now();
                     await supabaseClient.from('user_library').upsert({
-                        user_id: localUserId,
-                        media_id: item.id,
-                        media_data: item,
-                        last_modified: item.last_modified
+                        user_id: localUserId, media_id: item.id, media_data: item, last_modified: item.last_modified
                     }, { onConflict: 'user_id,media_id' });
+                    
                     saveLocalDB();
+                    console.log(`   ✅ "${item.title}" mis à jour et synchronisé.`);
                     updatedCount++;
                 } else {
+                    console.log(`   ➖ "${item.title}" est déjà à jour.`);
                     skippedCount++;
                 }
 
@@ -1463,7 +1471,7 @@
 
             } catch (e) {
                 errorCount++;
-                console.error(`   ❌ ERREUR sur ${item.title} : ${e.message}`);
+                console.error(`   ❌ ERREUR sur "${item.title}" : ${e.message}`);
             }
         }
 
@@ -1473,7 +1481,8 @@
         document.getElementById('btn-mass-update-series').classList.remove('opacity-50', 'cursor-not-allowed');
         document.getElementById('btn-mass-update-movie').classList.remove('opacity-50', 'cursor-not-allowed');
         
-        alert(`Bilan (${type}) :\n✅ ${updatedCount} mis à jour\n➖ ${skippedCount} déjà OK\n❌ ${errorCount} erreurs.`);
+        console.log(`🏁 FIN DU MASS UPDATE. Bilan : ${updatedCount} MAJ, ${skippedCount} OK, ${errorCount} erreurs.`);
+        alert(`Bilan (${type}) :\n✅ ${updatedCount} mis à jour\n➖ ${skippedCount} OK\n❌ ${errorCount} erreurs (voir console).`);
         location.reload();
     }
 
