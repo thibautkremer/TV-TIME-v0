@@ -45,8 +45,9 @@
                     <button onclick="setMediaType('series')" id="btn-series" class="py-2 text-sm font-bold rounded-lg bg-teal-600 text-white shadow">Séries</button>
                     <button onclick="setMediaType('movie')" id="btn-movie" class="py-2 text-sm font-bold rounded-lg text-gray-400">Films</button>
                 </div>
-                <div class="relative flex-1">
-                    <input type="text" id="searchInput" placeholder="Recherche souple..." class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm" />
+                <div class="relative flex-1 flex items-center">
+                    <input type="text" id="searchInput" placeholder="Recherche souple..." class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 pr-10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm" />
+                    <button id="clearSearchBtn" onclick="document.getElementById('searchInput').value=''; searchResults=[]; resetAndDisplaySearch(); this.classList.add('hidden')" class="absolute right-3 text-gray-400 hover:text-white font-bold hidden">✕</button>
                 </div>
             </div>
             <div class="flex gap-2 items-center">
@@ -350,6 +351,19 @@
         if (dSentinel) discoverObserver.observe(dSentinel);
     });
 
+    // --- CALCULS GLOBAUX ---
+    function getCalculatedRating(media) {
+        if (media.type === 'series' && media.episodes && media.episodes.length > 0) {
+            let total = 0, count = 0;
+            media.episodes.forEach(e => {
+                const r = (typeof e.rating === 'object' && e.rating !== null) ? e.rating.average : parseFloat(e.rating);
+                if (r && !isNaN(r) && r > 0) { total += r; count++; }
+            });
+            if (count > 0) return parseFloat((total / count).toFixed(1));
+        }
+        return (media.rating && !isNaN(media.rating) && media.rating > 0) ? parseFloat(media.rating) : 0;
+    }
+
     // --- UTILS BASE LOCALE & CLOUD ---
     function deduplicateLibrary() {
         const unique = [];
@@ -470,6 +484,11 @@
 
     document.getElementById('searchInput').addEventListener('input', e => {
         const q = e.target.value.trim();
+        const clearBtn = document.getElementById('clearSearchBtn');
+        
+        if (q.length > 0) clearBtn.classList.remove('hidden');
+        else clearBtn.classList.add('hidden');
+        
         if (q.length > 2) triggerFuzzySearch(q);
         else if (q.length === 0) { searchResults=[]; resetAndDisplaySearch(); }
     });
@@ -703,10 +722,16 @@
             ? media.image 
             : 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSzNFY2uiCR89dXMmbtsvSRDxJtnpN8NJFkcNtJIz-kCA&s=10';
         
-        const rating = media.rating > 0 ? media.rating.toFixed(1) : 'N/A';
+        const calcRating = getCalculatedRating(media);
+        const ratingDisplay = calcRating > 0 ? calcRating.toFixed(1) : 'N/A';
+        const ratingOverlay = `<div class="absolute top-1 left-1 bg-black/70 text-yellow-400 text-[10px] font-black px-1.5 py-0.5 rounded z-10 border border-gray-800">★ ${ratingDisplay}</div>`;
         
-        const ratingOverlay = `<div class="absolute top-1 left-1 bg-black/70 text-yellow-400 text-[10px] font-black px-1.5 py-0.5 rounded z-10 border border-gray-800">★ ${rating}</div>`;
-        
+        let yearOverlay = '';
+        if (!isLib && media.premiered && media.premiered !== 'N/A') {
+            const year = media.premiered.split('-')[0];
+            yearOverlay = `<div class="absolute top-1 right-1 bg-gray-900/80 text-gray-400 text-[10px] font-bold px-1.5 py-0.5 rounded z-10 border border-gray-700">${year}</div>`;
+        }
+
         const removeBtn = isLib ? `<button onclick="handleRemove('${media.id}')" class="remove-btn absolute top-1 right-1 bg-black/70 text-red-500 text-[10px] font-black px-1.5 py-0.5 rounded z-10 border border-gray-800 hover:bg-red-900">✕</button>` : '';
     
         let libOverlay = '';
@@ -715,8 +740,12 @@
                 const nextEp = media.episodes?.find(e => !e.watched && e.airdate && e.airdate <= todayString);
                 if (media.status === 'Watched') libOverlay = `<button onclick="event.stopPropagation(); resetToUnwatched('${media.id}')" class="absolute bottom-1 right-1 bg-black/70 text-amber-400 text-[9px] px-1.5 py-0.5 rounded font-black z-10">↺</button>`;
                 else if (nextEp) libOverlay = `<button onclick="event.stopPropagation(); checkNextEp('${media.id}')" class="absolute bottom-1 right-1 bg-teal-600 text-white text-[9px] px-1.5 py-0.5 rounded font-black z-10">✓ S${nextEp.season}E${nextEp.number}</button>`;
-            } else if (media.type === 'movie' && media.status === 'Watched') {
-                libOverlay = `<button onclick="event.stopPropagation(); resetToUnwatched('${media.id}')" class="absolute bottom-1 right-1 bg-black/70 text-amber-400 text-[9px] px-1.5 py-0.5 rounded font-black z-10">↺</button>`;
+            } else if (media.type === 'movie') {
+                if (media.status === 'Watched') {
+                    libOverlay = `<button onclick="event.stopPropagation(); resetToUnwatched('${media.id}')" class="absolute bottom-1 right-1 bg-black/70 text-amber-400 text-[9px] px-1.5 py-0.5 rounded font-black z-10">↺</button>`;
+                } else {
+                    libOverlay = `<button onclick="event.stopPropagation(); markMovieWatched('${media.id}')" class="absolute bottom-1 right-1 bg-emerald-600 text-white text-[9px] px-1.5 py-0.5 rounded font-black z-10">✓ Vu</button>`;
+                }
             }
         }
     
@@ -724,6 +753,7 @@
             <div class="relative w-full">
                 <img src="${imgSrc}" class="media-poster bg-gray-900" loading="lazy" />
                 ${ratingOverlay}
+                ${yearOverlay}
                 ${removeBtn}
                 ${libOverlay}
             </div>
@@ -753,6 +783,14 @@
         if(!item) return;
         if(item.type === 'series') item.episodes?.forEach(e => e.watched = false);
         item.status = 'In Progress';
+        item.last_modified = Date.now();
+        saveLocalDB(item); renderLibrary();
+    }
+
+    function markMovieWatched(id) {
+        const item = library.find(i => i.id === id);
+        if(!item) return;
+        item.status = 'Watched';
         item.last_modified = Date.now();
         saveLocalDB(item); renderLibrary();
     }
@@ -800,7 +838,7 @@
         document.getElementById('modalRuntime').textContent = media.runtime > 0 ? `${media.runtime} min` : '-- min';
         document.getElementById('modalNetwork').textContent = media.network || '';
         
-        const rate = media.rating > 0 ? media.rating : 0;
+        const rate = getCalculatedRating(media);
         document.getElementById('modalGlobalRatingText').textContent = rate > 0 ? rate.toFixed(1) : 'N/A';
         document.getElementById('modalGlobalRatingBar').style.width = `${(rate / 10) * 100}%`;
         
@@ -874,15 +912,29 @@
             closeModal(); 
         };
         
-        wBtn.textContent = '↺ Non vu'; wBtn.className = "w-full py-3 bg-gray-900 text-amber-400 border border-amber-900/50 font-bold rounded-xl text-xs";
-        wBtn.onclick = () => { 
-            if(item.episodes) item.episodes.forEach(e=>e.watched=false); 
-            item.status='In Progress'; 
-            item.last_modified = Date.now(); 
-            saveLocalDB(item); 
-            closeModal(); 
-            renderLibrary(); 
-        };
+        if (item.status === 'Watched') {
+            wBtn.textContent = '↺ Marquer Non Vu'; 
+            wBtn.className = "w-full py-3 bg-gray-900 text-amber-400 border border-amber-900/50 font-bold rounded-xl text-xs";
+            wBtn.onclick = () => { 
+                if(item.episodes) item.episodes.forEach(e=>e.watched=false); 
+                item.status='In Progress'; 
+                item.last_modified = Date.now(); 
+                saveLocalDB(item); 
+                closeModal(); 
+                renderLibrary(); 
+            };
+        } else {
+            wBtn.textContent = '✓ Marquer Vu'; 
+            wBtn.className = "w-full py-3 bg-emerald-600 text-white font-bold rounded-xl text-xs shadow transition";
+            wBtn.onclick = () => { 
+                if(item.episodes) item.episodes.forEach(e=>e.watched=true); 
+                item.status='Watched'; 
+                item.last_modified = Date.now(); 
+                saveLocalDB(item); 
+                closeModal(); 
+                renderLibrary(); 
+            };
+        }
 
         if (item.type === 'series' && item.episodes) {
             document.getElementById('modalSeriesContent').classList.remove('hidden');
@@ -1105,7 +1157,8 @@
                 const subTxt = ep.type === 'movie' ? `<span class="text-amber-500 font-bold">SORTIE FILM</span>` : ep.epName;
                 
                 const mediaObj = library.find(m => m.id === ep.mediaId);
-                const rating = mediaObj?.rating > 0 ? `★ ${mediaObj.rating.toFixed(1)}` : 'N/A';
+                const calcR = getCalculatedRating(mediaObj);
+                const rating = calcR > 0 ? `★ ${calcR.toFixed(1)}` : 'N/A';
                 const platform = mediaObj?.network || '';
 
                 container.innerHTML += `
@@ -1166,8 +1219,8 @@
         document.getElementById('stat-backlog-hours').textContent = formatDurationProfile(backlogMin);
 
         // 1. Calcul Note Globale
-        const ratedItems = library.filter(i => i.rating && i.rating > 0);
-        const avgRating = ratedItems.length > 0 ? (ratedItems.reduce((acc, i) => acc + i.rating, 0) / ratedItems.length).toFixed(1) : '0.0';
+        const ratedItems = library.map(i => getCalculatedRating(i)).filter(r => r > 0);
+        const avgRating = ratedItems.length > 0 ? (ratedItems.reduce((acc, r) => acc + r, 0) / ratedItems.length).toFixed(1) : '0.0';
         document.getElementById('stat-avg-rating').textContent = avgRating;
     
         // 2. Stats Séries (Séries entières)
