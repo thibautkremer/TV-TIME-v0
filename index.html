@@ -1364,111 +1364,108 @@
     }
 
     async function massUpdateLibrary(type) {
-    const btnId = type === 'series' ? 'btn-mass-update-series' : 'btn-mass-update-movie';
-    const btn = document.getElementById(btnId);
-    const originalContent = btn.innerHTML;
-    
-    document.getElementById('btn-mass-update-series').disabled = true;
-    document.getElementById('btn-mass-update-movie').disabled = true;
+        const btnId = type === 'series' ? 'btn-mass-update-series' : 'btn-mass-update-movie';
+        const btn = document.getElementById(btnId);
+        const originalContent = btn.innerHTML;
+        
+        document.getElementById('btn-mass-update-series').disabled = true;
+        document.getElementById('btn-mass-update-movie').disabled = true;
 
-    const sanitizePlatform = (p) => {
-        if (!p || p === 'N/A' || p.toLowerCase().includes('trakt')) return 'Theater';
-        return p;
-    };
+        const sanitizePlatform = (p) => {
+            if (!p || p === 'N/A' || p.toLowerCase().includes('trakt')) return 'Theater';
+            return p;
+        };
 
-    let updatedCount = 0; let skippedCount = 0; let errorCount = 0;
-    const OMDB_API_KEY = 'd99a3838'; 
-    const itemsToProcess = library.filter(i => i.type === type);
+        let updatedCount = 0; let skippedCount = 0; let errorCount = 0;
+        const OMDB_API_KEY = 'd99a3838'; 
+        const itemsToProcess = library.filter(i => i.type === type);
 
-    for (let i = 0; i < itemsToProcess.length; i++) {
-        let item = itemsToProcess[i];
-        btn.innerHTML = `<span class="truncate w-full text-center px-1">⏳ [${i+1}/${itemsToProcess.length}] ${item.title}</span>`;
+        for (let i = 0; i < itemsToProcess.length; i++) {
+            let item = itemsToProcess[i];
+            btn.innerHTML = `<span class="truncate w-full text-center px-1">⏳ [${i+1}/${itemsToProcess.length}] ${item.title}</span>`;
 
-        try {
-            let changed = false;
-            let data = null;
+            try {
+                let changed = false;
+                let data = null;
 
-            // --- Logique SÉRIES ---
-            if (item.type === 'series' && item.apiId) {
-                const res = await fetch(`https://api.tvmaze.com/shows/${item.apiId}?embed=episodes`);
-                if (!res.ok) throw new Error(`TVMaze Error`);
-                data = await res.json();
-                
-                // Champs série
-                if (data.runtime || data.averageRuntime) {
-                    const r = data.runtime || data.averageRuntime;
-                    if (item.runtime !== r) { item.runtime = r; changed = true; }
-                }
-                if (data.image?.medium && item.image !== data.image.medium) { item.image = data.image.medium; changed = true; }
-                if (data.summary && item.summary !== data.summary.replace(/<[^>]*>/g, '')) { item.summary = data.summary.replace(/<[^>]*>/g, ''); changed = true; }
-                if (data.status && item.status_production !== data.status) { item.status_production = data.status; changed = true; }
-                
-                const net = sanitizePlatform(data.network?.name || data.webChannel?.name);
-                if (net && item.network !== net) { item.network = net; changed = true; }
-                
-                if (data.rating?.average && item.rating !== data.rating.average) { item.rating = data.rating.average; changed = true; }
+                // --- Logique SÉRIES ---
+                if (item.type === 'series' && item.apiId) {
+                    const res = await fetch(`https://api.tvmaze.com/shows/${item.apiId}?embed=episodes`);
+                    if (!res.ok) throw new Error(`TVMaze Error`);
+                    data = await res.json();
+                    
+                    if (data.runtime || data.averageRuntime) {
+                        const r = data.runtime || data.averageRuntime;
+                        if (item.runtime !== r) { item.runtime = r; changed = true; }
+                    }
+                    if (data.image?.medium && item.image !== data.image.medium) { item.image = data.image.medium; changed = true; }
+                    if (data.summary && item.summary !== data.summary.replace(/<[^>]*>/g, '')) { item.summary = data.summary.replace(/<[^>]*>/g, ''); changed = true; }
+                    if (data.status && item.status_production !== data.status) { item.status_production = data.status; changed = true; }
+                    
+                    const net = sanitizePlatform(data.network?.name || data.webChannel?.name);
+                    if (net && item.network !== net) { item.network = net; changed = true; }
+                    
+                    if (data.rating?.average && item.rating !== data.rating.average) { item.rating = data.rating.average; changed = true; }
 
-                // Mise à jour épisodes
-                if (data._embedded?.episodes) {
-                    data._embedded.episodes.forEach(apiEp => {
-                        if (!item.episodes) return;
-                        const localEp = item.episodes.find(e => e.id === apiEp.id);
-                        if (localEp) {
-                            const newR = apiEp.rating?.average || 0;
-                            const newS = apiEp.summary ? apiEp.summary.replace(/<[^>]*>/g, '') : '';
-                            const newRun = apiEp.runtime || 0; // Ajout durée
-                            if (localEp.rating !== newR || localEp.summary !== newS || localEp.runtime !== newRun) { 
-                                localEp.rating = newR; localEp.summary = newS; localEp.runtime = newRun; changed = true; 
+                    if (data._embedded?.episodes) {
+                        data._embedded.episodes.forEach(apiEp => {
+                            if (!item.episodes) return;
+                            const localEp = item.episodes.find(e => e.id === apiEp.id);
+                            if (localEp) {
+                                const newR = apiEp.rating?.average || 0;
+                                const newS = apiEp.summary ? apiEp.summary.replace(/<[^>]*>/g, '') : '';
+                                const newRun = apiEp.runtime || 0;
+                                if (localEp.rating !== newR || localEp.summary !== newS || localEp.runtime !== newRun) { 
+                                    localEp.rating = newR; localEp.summary = newS; localEp.runtime = newRun; changed = true; 
+                                }
                             }
-                        }
-                    });
-                }
-            } 
-            // --- Logique FILMS ---
-            else if (item.type === 'movie') {
-                let attemptData = null;
-                if (item.apiId) {
-                    const res = await fetch(`https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&i=${item.apiId}&plot=full`);
-                    if (res.ok) attemptData = await res.json();
-                }
-                if (!attemptData || attemptData.Response === "False") {
-                    let year = (item.premiered && item.premiered !== 'N/A') ? String(item.premiered).split('-')[0] : '';
-                    const res2 = await fetch(`https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&t=${encodeURIComponent(item.title)}&y=${year}&type=movie&plot=full`);
-                    if (res2.ok) attemptData = await res2.json();
-                    if (attemptData.Response === "True" && attemptData.imdbID) item.apiId = attemptData.imdbID;
-                }
-                data = attemptData;
-                if (!data || data.Response === "False") throw new Error(`Non trouvé`);
+                        });
+                    }
+                } 
+                // --- Logique FILMS ---
+                else if (item.type === 'movie') {
+                    let attemptData = null;
+                    if (item.apiId) {
+                        const res = await fetch(`https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&i=${item.apiId}&plot=full`);
+                        if (res.ok) attemptData = await res.json();
+                    }
+                    if (!attemptData || attemptData.Response === "False") {
+                        let year = (item.premiered && item.premiered !== 'N/A') ? String(item.premiered).split('-')[0] : '';
+                        const res2 = await fetch(`https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&t=${encodeURIComponent(item.title)}&y=${year}&type=movie&plot=full`);
+                        if (res2.ok) attemptData = await res2.json();
+                        if (attemptData.Response === "True" && attemptData.imdbID) item.apiId = attemptData.imdbID;
+                    }
+                    data = attemptData;
+                    if (!data || data.Response === "False") throw new Error(`Non trouvé`);
 
-                // Durée du film
-                if (data.Runtime && data.Runtime !== "N/A") {
-                    const run = parseInt(data.Runtime);
-                    if (run && item.runtime !== run) { item.runtime = run; changed = true; }
+                    if (data.Runtime && data.Runtime !== "N/A") {
+                        const run = parseInt(data.Runtime);
+                        if (run && item.runtime !== run) { item.runtime = run; changed = true; }
+                    }
+                    if (data.Poster && data.Poster !== "N/A" && item.image !== data.Poster) { item.image = data.Poster; changed = true; }
+                    if (data.Plot && item.summary !== data.Plot) { item.summary = data.Plot; changed = true; }
+                    if (data.Genre) {
+                        const newGenres = data.Genre.split(', ');
+                        if (JSON.stringify(item.genres) !== JSON.stringify(newGenres)) { item.genres = newGenres; changed = true; }
+                    }
+                    const prod = sanitizePlatform(data.Production);
+                    if (prod && item.network !== prod) { item.network = prod; changed = true; }
+                    if (data.imdbRating && data.imdbRating !== "N/A" && item.rating !== parseFloat(data.imdbRating)) { item.rating = parseFloat(data.imdbRating); changed = true; }
                 }
 
-                if (data.Poster && data.Poster !== "N/A" && item.image !== data.Poster) { item.image = data.Poster; changed = true; }
-                if (data.Plot && item.summary !== data.Plot) { item.summary = data.Plot; changed = true; }
-                if (data.Genre) {
-                    const newGenres = data.Genre.split(', ');
-                    if (JSON.stringify(item.genres) !== JSON.stringify(newGenres)) { item.genres = newGenres; changed = true; }
+                if (changed) {
+                    item.last_modified = Date.now();
+                    await supabaseClient.from('user_library').upsert({ 
+                        user_id: localUserId, media_id: item.id, media_data: item, last_modified: item.last_modified
+                    }, { onConflict: 'user_id,media_id' });
+                    saveLocalDB();
+                    updatedCount++;
+                } else {
+                    skippedCount++;
                 }
-                
-                // Plateforme film
-                const prod = sanitizePlatform(data.Production);
-                if (prod && item.network !== prod) { item.network = prod; changed = true; }
-                
-                if (data.imdbRating && data.imdbRating !== "N/A" && item.rating !== parseFloat(data.imdbRating)) { item.rating = parseFloat(data.imdbRating); changed = true; }
-            }
-
-            if (changed) {
-                item.last_modified = Date.now();
-                await supabaseClient.from('user_library').upsert({
-                    user_id: localUserId, media_id: item.id, media_data: item, last_modified: item.last_modified
-                }, { onConflict: 'user_id,media_id' });
-                saveLocalDB();
-                updatedCount++;
-            } else {
-                skippedCount++;
+            } catch (e) {
+                console.error("Erreur lors de la MAJ de", item.title, e);
+                errorCount++;
             }
             await new Promise(r => setTimeout(r, 800));
         }
