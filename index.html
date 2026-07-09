@@ -7,7 +7,7 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M30 40 L70 40 L65 90 L35 90 Z' fill='%230D9488'/><path d='M20 40 Q50 10 80 40' fill='%23FBBF24'/><circle cx='40' cy='30' r='10' fill='%23FBBF24'/><circle cx='60' cy='25' r='12' fill='%23FBBF24'/></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <style> 
+    <style>
         body { background-color: #111827; -webkit-tap-highlight-color: transparent; }
         .hide-scroll::-webkit-scrollbar { display: none; }
         .hide-scroll { -ms-overflow-style: none; scrollbar-width: none; }
@@ -1401,12 +1401,39 @@
                     const res = await fetch(`https://api.tvmaze.com/shows/${item.apiId}?embed=episodes`);
                     if (!res.ok) throw new Error(`TVMaze HTTP Error: ${res.status}`);
                     data = await res.json();
-                } else if (item.type === 'movie' && item.apiId) {
-                    const url = `https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&i=${item.apiId}&plot=full`;
-                    const res = await fetch(url);
-                    if (!res.ok) throw new Error(`OMDb HTTP Error: ${res.status} (Probablement API Key bloquée)`);
-                    data = await res.json();
+                } else if (item.type === 'movie') {
+                    let attemptData = null;
                     
+                    // Essai 1 : Par ID (s'il est renseigné)
+                    if (item.apiId) {
+                        const url = `https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&i=${item.apiId}&plot=full`;
+                        const res = await fetch(url);
+                        if (!res.ok) throw new Error(`OMDb HTTP Error: ${res.status}`);
+                        attemptData = await res.json();
+                    }
+                    
+                    // Essai 2 (Plan B) : Par Titre + Année (si Essai 1 échoue ou pas d'ID)
+                    if (!attemptData || attemptData.Response === "False") {
+                        console.log(`   ⚠️ ID défaillant ou manquant. Plan B : Recherche par Titre + Année...`);
+                        
+                        let year = (item.premiered && item.premiered !== 'N/A') ? item.premiered.split('-')[0] : '';
+                        const fallbackUrl = `https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&t=${encodeURIComponent(item.title)}&y=${year}&type=movie&plot=full`;
+                        
+                        const res2 = await fetch(fallbackUrl);
+                        if (!res2.ok) throw new Error(`OMDb HTTP Error: ${res2.status}`);
+                        attemptData = await res2.json();
+                        
+                        // Si on trouve le film, on corrige l'ID de manière permanente
+                        if (attemptData.Response === "True" && attemptData.imdbID) {
+                            if (item.apiId !== attemptData.imdbID) {
+                                item.apiId = attemptData.imdbID; 
+                                changed = true;
+                                console.log(`   ✅ ID corrigé avec succès : ${item.apiId}`);
+                            }
+                        }
+                    }
+                    
+                    data = attemptData;
                     if (data.Response === "False") throw new Error(`OMDb API: ${data.Error}`);
                 }
 
@@ -1545,4 +1572,3 @@
 </script>
 </body>
 </html>
-
