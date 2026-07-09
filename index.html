@@ -212,9 +212,12 @@
             </button>
             
             <label class="bg-teal-600 hover:bg-teal-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition flex justify-center items-center gap-2 cursor-pointer shadow">
-                <span>📂 Import Data</span><input type="file" multiple onchange="importLibrary(event)" class="hidden" accept=".json,.csv" />
+                <span>📂 Import</span><input type="file" multiple onchange="importLibrary(event)" class="hidden" accept=".json,.csv" />
             </label>
-            <button onclick="clearAll()" class="bg-gray-800 hover:bg-red-950 border border-red-900/40 text-red-400 text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow flex justify-center items-center gap-2">
+            <button onclick="exportLibrary()" class="bg-blue-600 hover:bg-blue-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow flex justify-center items-center gap-2">
+                <span>💾 Export</span>
+            </button>
+            <button onclick="clearAll()" class="col-span-2 bg-gray-800 hover:bg-red-950 border border-red-900/40 text-red-400 text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow flex justify-center items-center gap-2">
                 <span>🗑 Vider Cache</span>
             </button>
         </div>
@@ -1613,6 +1616,22 @@
         renderProfile(); 
         renderLibrary(); 
         alert("Import et synchronisation Cloud terminés !");
+    }
+    
+    function exportLibrary() {
+        if (library.length === 0) {
+            alert("Rien à exporter, la bibliothèque est vide.");
+            return;
+        }
+
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(library, null, 2));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", "tv_time_backup.json");
+        document.body.appendChild(downloadAnchorNode);
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+        console.log(`[Export] ✅ ${library.length} items exportés avec succès.`);
     }
 
     function clearAll() {
