@@ -1447,6 +1447,8 @@
         const btn = document.getElementById(btnId);
         const originalContent = btn.innerHTML;
         
+        console.log(`[MassUpdate] 🚀 Lancement de la MAJ API pour : ${type}`);
+        
         document.getElementById('btn-mass-update-series').disabled = true;
         document.getElementById('btn-mass-update-movie').disabled = true;
 
@@ -1461,7 +1463,10 @@
 
         for (let i = 0; i < itemsToProcess.length; i++) {
             let item = itemsToProcess[i];
+            let updates = []; // Pour garder une trace des changements
             btn.innerHTML = `<span class="truncate w-full text-center px-1">⏳ [${i+1}/${itemsToProcess.length}] ${item.title}</span>`;
+            
+            console.log(`[MassUpdate] ⚙️ Traitement (${i+1}/${itemsToProcess.length}) : ${item.title}`);
 
             try {
                 let changed = false;
@@ -1470,21 +1475,21 @@
                 // --- Logique SÉRIES ---
                 if (item.type === 'series' && item.apiId) {
                     const res = await fetch(`https://api.tvmaze.com/shows/${item.apiId}?embed=episodes`);
-                    if (!res.ok) throw new Error(`TVMaze Error`);
+                    if (!res.ok) throw new Error(`TVMaze API Error`);
                     data = await res.json();
                     
                     if (data.runtime || data.averageRuntime) {
                         const r = data.runtime || data.averageRuntime;
-                        if (item.runtime !== r) { item.runtime = r; changed = true; }
+                        if (item.runtime !== r) { item.runtime = r; changed = true; updates.push("Durée"); }
                     }
-                    if (data.image?.medium && item.image !== data.image.medium) { item.image = data.image.medium; changed = true; }
-                    if (data.summary && item.summary !== data.summary.replace(/<[^>]*>/g, '')) { item.summary = data.summary.replace(/<[^>]*>/g, ''); changed = true; }
-                    if (data.status && item.status_production !== data.status) { item.status_production = data.status; changed = true; }
+                    if (data.image?.medium && item.image !== data.image.medium) { item.image = data.image.medium; changed = true; updates.push("Affiche"); }
+                    if (data.summary && item.summary !== data.summary.replace(/<[^>]*>/g, '')) { item.summary = data.summary.replace(/<[^>]*>/g, ''); changed = true; updates.push("Résumé"); }
+                    if (data.status && item.status_production !== data.status) { item.status_production = data.status; changed = true; updates.push("Status"); }
                     
                     const net = sanitizePlatform(data.network?.name || data.webChannel?.name);
-                    if (net && item.network !== net) { item.network = net; changed = true; }
+                    if (net && item.network !== net) { item.network = net; changed = true; updates.push("Plateforme"); }
                     
-                    if (data.rating?.average && item.rating !== data.rating.average) { item.rating = data.rating.average; changed = true; }
+                    if (data.rating?.average && item.rating !== data.rating.average) { item.rating = data.rating.average; changed = true; updates.push("Note"); }
 
                     if (data._embedded?.episodes) {
                         data._embedded.episodes.forEach(apiEp => {
@@ -1499,6 +1504,7 @@
                                 }
                             }
                         });
+                        if (changed && !updates.includes("Épisodes")) updates.push("Détails Épisodes");
                     }
                 } 
                 // --- Logique FILMS ---
@@ -1519,17 +1525,17 @@
 
                     if (data.Runtime && data.Runtime !== "N/A") {
                         const run = parseInt(data.Runtime);
-                        if (run && item.runtime !== run) { item.runtime = run; changed = true; }
+                        if (run && item.runtime !== run) { item.runtime = run; changed = true; updates.push("Durée"); }
                     }
-                    if (data.Poster && data.Poster !== "N/A" && item.image !== data.Poster) { item.image = data.Poster; changed = true; }
-                    if (data.Plot && item.summary !== data.Plot) { item.summary = data.Plot; changed = true; }
+                    if (data.Poster && data.Poster !== "N/A" && item.image !== data.Poster) { item.image = data.Poster; changed = true; updates.push("Affiche"); }
+                    if (data.Plot && item.summary !== data.Plot) { item.summary = data.Plot; changed = true; updates.push("Résumé"); }
                     if (data.Genre) {
                         const newGenres = data.Genre.split(', ');
-                        if (JSON.stringify(item.genres) !== JSON.stringify(newGenres)) { item.genres = newGenres; changed = true; }
+                        if (JSON.stringify(item.genres) !== JSON.stringify(newGenres)) { item.genres = newGenres; changed = true; updates.push("Genres"); }
                     }
                     const prod = sanitizePlatform(data.Production);
-                    if (prod && item.network !== prod) { item.network = prod; changed = true; }
-                    if (data.imdbRating && data.imdbRating !== "N/A" && item.rating !== parseFloat(data.imdbRating)) { item.rating = parseFloat(data.imdbRating); changed = true; }
+                    if (prod && item.network !== prod) { item.network = prod; changed = true; updates.push("Plateforme"); }
+                    if (data.imdbRating && data.imdbRating !== "N/A" && item.rating !== parseFloat(data.imdbRating)) { item.rating = parseFloat(data.imdbRating); changed = true; updates.push("Note"); }
                 }
 
                 if (changed) {
@@ -1539,11 +1545,12 @@
                     }, { onConflict: 'user_id,media_id' });
                     saveLocalDB();
                     updatedCount++;
+                    console.log(`[MassUpdate] ✅ [${item.title}] mis à jour : ${updates.join(', ')}`);
                 } else {
                     skippedCount++;
                 }
             } catch (e) {
-                console.error("Erreur lors de la MAJ de", item.title, e);
+                console.error(`[MassUpdate] ❌ Erreur sur ${item.title}:`, e);
                 errorCount++;
             }
             await new Promise(r => setTimeout(r, 800));
@@ -1552,6 +1559,8 @@
         btn.innerHTML = originalContent;
         document.getElementById('btn-mass-update-series').disabled = false;
         document.getElementById('btn-mass-update-movie').disabled = false;
+        
+        console.log(`[MassUpdate] 🏁 Terminé. Stats: ${updatedCount} mis à jour, ${skippedCount} OK, ${errorCount} erreurs.`);
         alert(`Bilan (${type}) :\n✅ ${updatedCount} mis à jour\n➖ ${skippedCount} OK\n❌ ${errorCount} erreurs.`);
         location.reload();
     }
