@@ -1361,20 +1361,23 @@
         const btn = document.getElementById(btnId);
         const originalContent = btn.innerHTML;
         
-        // Désactiver les deux boutons pendant la mise à jour
         document.getElementById('btn-mass-update-series').disabled = true;
         document.getElementById('btn-mass-update-movie').disabled = true;
         document.getElementById('btn-mass-update-series').classList.add('opacity-50', 'cursor-not-allowed');
         document.getElementById('btn-mass-update-movie').classList.add('opacity-50', 'cursor-not-allowed');
 
-        console.log(`🚀 Lancement du Mass Update complet pour : ${type}...`);
+        // Fonction utilitaire pour nettoyer le nom de la plateforme
+        const sanitizePlatform = (p) => {
+            if (!p || p === 'N/A' || p.toLowerCase().includes('trakt')) return 'Theater';
+            return p;
+        };
+
+        console.log(`🚀 Lancement du Mass Update (avec nettoyage plateforme) pour : ${type}...`);
         let updatedCount = 0;
         let skippedCount = 0;
         let errorCount = 0;
         
-        // ⚠️ Si l'erreur 401 persiste, il faudra générer une nouvelle clé gratuite sur omdbapi.com
         const OMDB_API_KEY = '1e01c814'; 
-        
         const itemsToProcess = library.filter(i => i.type === type);
 
         if(itemsToProcess.length === 0) {
@@ -1389,118 +1392,73 @@
 
         for (let i = 0; i < itemsToProcess.length; i++) {
             let item = itemsToProcess[i];
-            
-            // Mise à jour visuelle du bouton cliqué
             btn.innerHTML = `<span class="truncate w-full text-center px-1">⏳ [${i+1}/${itemsToProcess.length}] ${item.title}</span>`;
-            console.log(`[${i + 1}/${itemsToProcess.length}] ⏳ Traitement de : "${item.title}"...`);
 
             try {
                 let changed = false;
                 let data = null;
 
-                // 1. Appel API
                 if (item.type === 'series' && item.apiId) {
                     const res = await fetch(`https://api.tvmaze.com/shows/${item.apiId}?embed=episodes`);
-                    if (!res.ok) throw new Error(`TVMaze HTTP Error: ${res.status}`);
+                    if (!res.ok) throw new Error(`TVMaze Error`);
                     data = await res.json();
+                    
+                    if (data.image?.medium && item.image !== data.image.medium) { item.image = data.image.medium; changed = true; }
+                    if (data.summary && item.summary !== data.summary.replace(/<[^>]*>/g, '')) { item.summary = data.summary.replace(/<[^>]*>/g, ''); changed = true; }
+                    if (data.genres && JSON.stringify(item.genres) !== JSON.stringify(data.genres)) { item.genres = data.genres; changed = true; }
+                    if (data.status && item.status_production !== data.status) { item.status_production = data.status; changed = true; }
+                    
+                    // Application du filtre plateforme
+                    const net = sanitizePlatform(data.network?.name || data.webChannel?.name);
+                    if (net && item.network !== net) { item.network = net; changed = true; }
+                    
+                    if (data.rating?.average && item.rating !== data.rating.average) { item.rating = data.rating.average; changed = true; }
+
                 } else if (item.type === 'movie') {
                     let attemptData = null;
-                    
-                    // Essai 1 : Par ID (s'il est renseigné)
                     if (item.apiId) {
                         const url = `https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&i=${item.apiId}&plot=full`;
                         const res = await fetch(url);
-                        if (!res.ok) throw new Error(`OMDb HTTP Error: ${res.status}`);
-                        attemptData = await res.json();
+                        if (res.ok) attemptData = await res.json();
                     }
-                    
-                    // Essai 2 (Plan B) : Par Titre + Année (si Essai 1 échoue ou pas d'ID)
                     if (!attemptData || attemptData.Response === "False") {
-                        console.log(`   ⚠️ ID défaillant ou manquant. Plan B : Recherche par Titre + Année...`);
-                        
-                        // SECURITE: conversion en texte avec String() pour éviter le crash .split
                         let year = (item.premiered && item.premiered !== 'N/A') ? String(item.premiered).split('-')[0] : '';
-                        const fallbackUrl = `https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&t=${encodeURIComponent(item.title)}&y=${year}&type=movie&plot=full`;
-                        
-                        const res2 = await fetch(fallbackUrl);
-                        if (!res2.ok) throw new Error(`OMDb HTTP Error: ${res2.status}`);
-                        attemptData = await res2.json();
-                        
-                        // Si on trouve le film, on corrige l'ID de manière permanente
-                        if (attemptData.Response === "True" && attemptData.imdbID) {
-                            if (item.apiId !== attemptData.imdbID) {
-                                item.apiId = attemptData.imdbID; 
-                                changed = true;
-                                console.log(`   ✅ ID corrigé avec succès : ${item.apiId}`);
-                            }
-                        }
+                        const res2 = await fetch(`https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&t=${encodeURIComponent(item.title)}&y=${year}&type=movie&plot=full`);
+                        if (res2.ok) attemptData = await res2.json();
+                        if (attemptData.Response === "True" && attemptData.imdbID) item.apiId = attemptData.imdbID;
                     }
                     
                     data = attemptData;
-                    if (data.Response === "False") throw new Error(`OMDb API: ${data.Error}`);
-                }
+                    if (!data || data.Response === "False") throw new Error(`Non trouvé`);
 
-                if (!data) {
-                    console.log(`   ⏭️ Ignoré : Aucun ID d'API valide.`);
-                    skippedCount++;
-                    continue;
-                }
-
-                // 2. Mise à jour du Statut (Séries uniquement)
-                if (item.type === 'series' && data.status && item.status_production !== data.status) {
-                    item.status_production = data.status;
-                    changed = true;
-                    console.log(`   🔄 Statut : ${data.status}`);
-                }
-
-                // 3. Mise à jour de la Plateforme (Network)
-                if (item.type === 'series') {
-                    const newNetwork = data.network?.name || data.webChannel?.name;
-                    if (newNetwork && (item.network === 'Trakt Import' || item.network !== newNetwork)) {
-                        item.network = newNetwork;
-                        changed = true;
-                        console.log(`   🌐 Plateforme : ${item.network}`);
+                    if (data.Poster && data.Poster !== "N/A" && item.image !== data.Poster) { item.image = data.Poster; changed = true; }
+                    if (data.Plot && item.summary !== data.Plot) { item.summary = data.Plot; changed = true; }
+                    if (data.Genre) {
+                        const newGenres = data.Genre.split(', ');
+                        if (JSON.stringify(item.genres) !== JSON.stringify(newGenres)) { item.genres = newGenres; changed = true; }
                     }
+                    
+                    // Application du filtre plateforme pour les films
+                    const prod = sanitizePlatform(data.Production);
+                    if (prod && item.network !== prod) { item.network = prod; changed = true; }
+                    
+                    if (data.imdbRating && data.imdbRating !== "N/A" && item.rating !== parseFloat(data.imdbRating)) { item.rating = parseFloat(data.imdbRating); changed = true; }
                 }
 
-                // 4. Mise à jour des notes
-                let newRating = null;
-                if (item.type === 'series') {
-                    newRating = data.rating?.average;
-                } else if (item.type === 'movie' && data.imdbRating && data.imdbRating !== "N/A") {
-                    newRating = parseFloat(data.imdbRating);
-                }
-
-                const cleanedRating = (typeof newRating === 'object' && newRating !== null) ? newRating.average : newRating;
-                if (cleanedRating && item.rating !== cleanedRating) {
-                    item.rating = cleanedRating;
-                    changed = true;
-                    console.log(`   ⭐ Note : ${cleanedRating}`);
-                }
-
-                // 5. Sauvegarde INDIVIDUELLE
                 if (changed) {
                     item.last_modified = Date.now();
-                    
-                    // Envoi immédiat à Supabase
                     await supabaseClient.from('user_library').upsert({
                         user_id: localUserId,
                         media_id: item.id,
                         media_data: item,
                         last_modified: item.last_modified
                     }, { onConflict: 'user_id,media_id' });
-                    
-                    // Sauvegarde locale par sécurité
                     saveLocalDB();
-                    
                     updatedCount++;
-                    console.log(`   ✅ Sauvegardé sur le Cloud.`);
                 } else {
                     skippedCount++;
-                    console.log(`   ➖ Déjà à jour.`);
                 }
 
-                // Pause de 800ms pour éviter le ban pour "trop de requêtes"
                 await new Promise(r => setTimeout(r, 800));
 
             } catch (e) {
@@ -1509,16 +1467,13 @@
             }
         }
 
-        console.log(`🏁 MASS UPDATE ${type.toUpperCase()} TERMINÉ 🏁`);
-        
-        // Restauration des boutons
         btn.innerHTML = originalContent;
         document.getElementById('btn-mass-update-series').disabled = false;
         document.getElementById('btn-mass-update-movie').disabled = false;
         document.getElementById('btn-mass-update-series').classList.remove('opacity-50', 'cursor-not-allowed');
         document.getElementById('btn-mass-update-movie').classList.remove('opacity-50', 'cursor-not-allowed');
         
-        alert(`Bilan de la mise à jour (${type}) :\n\n✅ ${updatedCount} mis à jour\n➖ ${skippedCount} déjà parfaits\n❌ ${errorCount} erreurs (voir console)`);
+        alert(`Bilan (${type}) :\n✅ ${updatedCount} mis à jour\n➖ ${skippedCount} déjà OK\n❌ ${errorCount} erreurs.`);
         location.reload();
     }
 
