@@ -204,13 +204,19 @@
 
         <!-- Boutons d'action -->
         <div class="grid grid-cols-2 gap-2">
-            <button id="btn-mass-update" onclick="massUpdateLibrary()" class="bg-purple-800 hover:bg-purple-700 border border-purple-600 text-purple-200 text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition col-span-2 flex justify-center items-center gap-2">
-                <span>🔄 Mettre à jour (Infos & Épisodes API)</span>
+            <button id="btn-mass-update-series" onclick="massUpdateLibrary('series')" class="bg-purple-800 hover:bg-purple-700 border border-purple-600 text-purple-100 text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition flex justify-center items-center px-2 overflow-hidden">
+                <span class="truncate">🔄 MAJ API (Séries)</span>
             </button>
-            <label class="bg-teal-600 hover:bg-teal-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition text-center cursor-pointer shadow">
-                📂 Import Data<input type="file" multiple onchange="importLibrary(event)" class="hidden" accept=".json,.csv" />
+            <button id="btn-mass-update-movie" onclick="massUpdateLibrary('movie')" class="bg-amber-800 hover:bg-amber-700 border border-amber-600 text-amber-100 text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition flex justify-center items-center px-2 overflow-hidden">
+                <span class="truncate">🔄 MAJ API (Films)</span>
+            </button>
+            
+            <label class="bg-teal-600 hover:bg-teal-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition flex justify-center items-center gap-2 cursor-pointer shadow">
+                <span>📂 Import Data</span><input type="file" multiple onchange="importLibrary(event)" class="hidden" accept=".json,.csv" />
             </label>
-            <button onclick="clearAll()" class="bg-gray-800 hover:bg-red-950 border border-red-900/40 text-red-400 text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow">🗑 Vider Cache</button>
+            <button onclick="clearAll()" class="bg-gray-800 hover:bg-red-950 border border-red-900/40 text-red-400 text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow flex justify-center items-center gap-2">
+                <span>🗑 Vider Cache</span>
+            </button>
         </div>
     </div>
 </main>
@@ -404,8 +410,7 @@
         }
         
         updateHeaderCount();
-        syncWidgetData();
-
+        
         if (syncItem && typeof supabaseClient !== 'undefined') {
             try {
                 await supabaseClient.from('user_library').upsert({
@@ -1349,18 +1354,43 @@
         }
     }
 
-    async function massUpdateLibrary() {
-        console.log("🚀 Lancement du Mass Update complet...");
+    async function massUpdateLibrary(type) {
+        const btnId = type === 'series' ? 'btn-mass-update-series' : 'btn-mass-update-movie';
+        const btn = document.getElementById(btnId);
+        const originalContent = btn.innerHTML;
+        
+        // Désactiver les deux boutons pendant la mise à jour
+        document.getElementById('btn-mass-update-series').disabled = true;
+        document.getElementById('btn-mass-update-movie').disabled = true;
+        document.getElementById('btn-mass-update-series').classList.add('opacity-50', 'cursor-not-allowed');
+        document.getElementById('btn-mass-update-movie').classList.add('opacity-50', 'cursor-not-allowed');
+
+        console.log(`🚀 Lancement du Mass Update complet pour : ${type}...`);
         let updatedCount = 0;
         let skippedCount = 0;
         let errorCount = 0;
         
         // ⚠️ Si l'erreur 401 persiste, il faudra générer une nouvelle clé gratuite sur omdbapi.com
         const OMDB_API_KEY = '1e01c814'; 
+        
+        const itemsToProcess = library.filter(i => i.type === type);
 
-        for (let i = 0; i < library.length; i++) {
-            let item = library[i];
-            console.log(`[${i + 1}/${library.length}] ⏳ Traitement de : "${item.title}"...`);
+        if(itemsToProcess.length === 0) {
+            alert(`Aucun média de type ${type} à mettre à jour.`);
+            btn.innerHTML = originalContent;
+            document.getElementById('btn-mass-update-series').disabled = false;
+            document.getElementById('btn-mass-update-movie').disabled = false;
+            document.getElementById('btn-mass-update-series').classList.remove('opacity-50', 'cursor-not-allowed');
+            document.getElementById('btn-mass-update-movie').classList.remove('opacity-50', 'cursor-not-allowed');
+            return;
+        }
+
+        for (let i = 0; i < itemsToProcess.length; i++) {
+            let item = itemsToProcess[i];
+            
+            // Mise à jour visuelle du bouton cliqué
+            btn.innerHTML = `<span class="truncate w-full text-center px-1">⏳ [${i+1}/${itemsToProcess.length}] ${item.title}</span>`;
+            console.log(`[${i + 1}/${itemsToProcess.length}] ⏳ Traitement de : "${item.title}"...`);
 
             try {
                 let changed = false;
@@ -1377,7 +1407,6 @@
                     if (!res.ok) throw new Error(`OMDb HTTP Error: ${res.status} (Probablement API Key bloquée)`);
                     data = await res.json();
                     
-                    // OMDb renvoie parfois un statut 200 mais avec une erreur JSON à l'intérieur
                     if (data.Response === "False") throw new Error(`OMDb API: ${data.Error}`);
                 }
 
@@ -1419,15 +1448,20 @@
                     console.log(`   ⭐ Note : ${cleanedRating}`);
                 }
 
-                // 5. Sauvegarde
+                // 5. Sauvegarde INDIVIDUELLE
                 if (changed) {
                     item.last_modified = Date.now();
+                    
+                    // Envoi immédiat à Supabase
                     await supabaseClient.from('user_library').upsert({
                         user_id: localUserId,
                         media_id: item.id,
                         media_data: item,
                         last_modified: item.last_modified
                     }, { onConflict: 'user_id,media_id' });
+                    
+                    // Sauvegarde locale par sécurité
+                    saveLocalDB();
                     
                     updatedCount++;
                     console.log(`   ✅ Sauvegardé sur le Cloud.`);
@@ -1441,12 +1475,20 @@
 
             } catch (e) {
                 errorCount++;
-                console.error(`   ❌ ERREUR : ${e.message}`);
+                console.error(`   ❌ ERREUR sur ${item.title} : ${e.message}`);
             }
         }
 
-        console.log("🏁 MASS UPDATE TERMINÉ 🏁");
-        alert(`Bilan de la mise à jour :\n\n✅ ${updatedCount} mis à jour\n➖ ${skippedCount} déjà parfaits\n❌ ${errorCount} erreurs (voir console)`);
+        console.log(`🏁 MASS UPDATE ${type.toUpperCase()} TERMINÉ 🏁`);
+        
+        // Restauration des boutons
+        btn.innerHTML = originalContent;
+        document.getElementById('btn-mass-update-series').disabled = false;
+        document.getElementById('btn-mass-update-movie').disabled = false;
+        document.getElementById('btn-mass-update-series').classList.remove('opacity-50', 'cursor-not-allowed');
+        document.getElementById('btn-mass-update-movie').classList.remove('opacity-50', 'cursor-not-allowed');
+        
+        alert(`Bilan de la mise à jour (${type}) :\n\n✅ ${updatedCount} mis à jour\n➖ ${skippedCount} déjà parfaits\n❌ ${errorCount} erreurs (voir console)`);
         location.reload();
     }
 
@@ -1496,82 +1538,10 @@
         library = []; localStorage.removeItem('personal_tracker_db'); renderLibrary(); renderProfile();
     }
 
-    window.addEventListener('focus', async () => {
-        await processPendingWatched();
+    window.addEventListener('focus', () => {
         loadFromCloud();
         console.log("Mise à jour automatique pour consultation...");
     });
-
-    async function processPendingWatched() {
-        if (typeof window.Capacitor === 'undefined') return;
-        const WidgetPlugin = window.Capacitor.Plugins.WidgetPlugin;
-        if (!WidgetPlugin) return;
-        try {
-            const { items } = await WidgetPlugin.getPendingWatched();
-            if (!items || items === '[]') return;
-            const queue = JSON.parse(items);
-            if (!queue.length) return;
-            for (const entry of queue) {
-                const item = library.find(i => i.id === entry.mediaId);
-                if (!item) continue;
-                if (entry.isMovie) {
-                    item.status = 'Watched';
-                } else {
-                    const ep = item.episodes?.find(e => e.season === entry.season && e.number === entry.episode);
-                    if (ep) {
-                        const idx = item.episodes.indexOf(ep);
-                        for (let i = 0; i <= idx; i++) item.episodes[i].watched = true;
-                        item.status = item.episodes.every(e => e.watched || !e.airdate || e.airdate > todayString) ? 'Watched' : 'In Progress';
-                    }
-                }
-                item.last_modified = Date.now();
-                await saveLocalDB(item);
-            }
-            await WidgetPlugin.clearPendingWatched();
-            syncWidgetData();
-        } catch (e) { console.log('processPendingWatched:', e.message); }
-    }
-
-    async function syncWidgetData() {
-        if (typeof window.Capacitor === 'undefined') return;
-        const WidgetPlugin = window.Capacitor.Plugins.WidgetPlugin;
-        if (!WidgetPlugin) return;
-        const todayStr = new Date().toISOString().split('T')[0];
-        const in30 = new Date(); in30.setDate(in30.getDate() + 30);
-        const in30Str = in30.toISOString().split('T')[0];
-        const calendarItems = [];
-        library.forEach(item => {
-            if (item.type === 'movie') {
-                if (item.premiered && item.premiered >= todayStr && item.premiered <= in30Str && item.status !== 'Watched')
-                    calendarItems.push({ title: item.title, type: 'movie', date: item.premiered, episode: 'Film' });
-            } else if (item.type === 'series') {
-                (item.episodes || []).forEach(ep => {
-                    if (ep.airdate && ep.airdate >= todayStr && ep.airdate <= in30Str && !ep.watched)
-                        calendarItems.push({ title: item.title, type: 'series', date: ep.airdate,
-                            episode: `S${String(ep.season).padStart(2,'0')}E${String(ep.number).padStart(2,'0')}` });
-                });
-            }
-        });
-        calendarItems.sort((a, b) => a.date.localeCompare(b.date));
-        const inProgress = [];
-        library.forEach(item => {
-            if (item.status === 'Abandoned' || item.status === 'Watched') return;
-            const entry = { id: item.id, title: item.title, type: item.type };
-            if (item.type === 'series' && item.episodes) {
-                entry.episodes = item.episodes.filter(e => !e.watched)
-                    .sort((a, b) => a.season !== b.season ? a.season - b.season : a.number - b.number)
-                    .slice(0, 6).map(e => ({ season: e.season, number: e.number, name: e.name || '', rating: e.rating || 0 }));
-                if (entry.episodes.length === 0) return;
-            } else { entry.rating = item.rating || 0; entry.episodes = []; }
-            inProgress.push(entry);
-        });
-        try {
-            await WidgetPlugin.updateWidgetData({
-                calendarJson: JSON.stringify(calendarItems.slice(0, 20)),
-                inProgressJson: JSON.stringify(inProgress.slice(0, 10))
-            });
-        } catch (e) { console.log('syncWidgetData:', e.message); }
-    }
 </script>
 </body>
 </html>
