@@ -265,6 +265,14 @@
                 </div>
             </div>
 
+            <!-- BOUTON MOVIX INTEGRE ICI -->
+            <a id="btnMovixRedirect" href="#" target="_blank" class="flex items-center justify-center gap-2 w-full py-2.5 mt-2 mb-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs shadow transition">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M5 3l14 9-14 9V3z" />
+                </svg>
+                Voir sur Movix
+            </a>
+
             <div id="modalActionButtonsGrid" class="grid grid-cols-2 gap-2">
                 <button id="modalActionFollowBtn" class="w-full py-3 bg-teal-600 text-white font-bold rounded-xl text-xs shadow transition">À regarder</button>
                 <button id="modalActionAllWatchedBtn" class="w-full py-3 bg-emerald-600 text-white font-bold rounded-xl text-xs shadow transition">Déjà vu</button>
@@ -912,6 +920,11 @@
         document.getElementById('modalSeriesContent').classList.add('hidden');
         document.getElementById('modalEpisodesBlock').classList.add('hidden');
         document.getElementById('modalSuggestionsBlock').classList.add('hidden');
+
+        // --- AJOUT POUR LE BOUTON MOVIX ---
+        // Nettoyage du titre (ex: retirer les dates entre parenthèses) et formatage de l'URL pour la recherche
+        const cleanTitle = media.title.split('(')[0].trim();
+        document.getElementById('btnMovixRedirect').href = `https://movix.cash/search?q=${encodeURIComponent(cleanTitle)}`;
     }
 
     async function openPreviewModal(media) {
