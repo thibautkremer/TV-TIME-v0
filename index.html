@@ -1463,7 +1463,7 @@
 
         for (let i = 0; i < itemsToProcess.length; i++) {
             let item = itemsToProcess[i];
-            let updates = []; // Pour garder une trace des changements
+            let updates = []; 
             btn.innerHTML = `<span class="truncate w-full text-center px-1">⏳ [${i+1}/${itemsToProcess.length}] ${item.title}</span>`;
             
             console.log(`[MassUpdate] ⚙️ Traitement (${i+1}/${itemsToProcess.length}) : ${item.title}`);
@@ -1478,10 +1478,8 @@
                     if (!res.ok) throw new Error(`TVMaze API Error`);
                     data = await res.json();
                     
-                    if (data.runtime || data.averageRuntime) {
-                        const r = data.runtime || data.averageRuntime;
-                        if (item.runtime !== r) { item.runtime = r; changed = true; updates.push("Durée"); }
-                    }
+                    // Mise à jour des infos générales
+                    if (data.runtime || data.averageRuntime) { const r = data.runtime || data.averageRuntime; if (item.runtime !== r) { item.runtime = r; changed = true; updates.push("Durée"); } }
                     if (data.image?.medium && item.image !== data.image.medium) { item.image = data.image.medium; changed = true; updates.push("Affiche"); }
                     if (data.summary && item.summary !== data.summary.replace(/<[^>]*>/g, '')) { item.summary = data.summary.replace(/<[^>]*>/g, ''); changed = true; updates.push("Résumé"); }
                     if (data.status && item.status_production !== data.status) { item.status_production = data.status; changed = true; updates.push("Status"); }
@@ -1489,14 +1487,17 @@
                     const net = sanitizePlatform(data.network?.name || data.webChannel?.name);
                     if (net && item.network !== net) { item.network = net; changed = true; updates.push("Plateforme"); }
                     
-                    if (data.rating?.average && item.rating !== data.rating.average) { item.rating = data.rating.average; changed = true; updates.push("Note"); }
+                    // --- GESTION DES NOTES (Épisodes + Fallback série) ---
+                    let foundAnyEpisodeRating = false;
+                    const seriesRating = data.rating?.average || 0;
 
-                    if (data._embedded?.episodes) {
+                    if (data._embedded?.episodes && item.episodes) {
                         data._embedded.episodes.forEach(apiEp => {
-                            if (!item.episodes) return;
                             const localEp = item.episodes.find(e => e.id === apiEp.id);
                             if (localEp) {
                                 const newR = apiEp.rating?.average || 0;
+                                if (newR > 0) foundAnyEpisodeRating = true;
+                                
                                 const newS = apiEp.summary ? apiEp.summary.replace(/<[^>]*>/g, '') : '';
                                 const newRun = apiEp.runtime || 0;
                                 if (localEp.rating !== newR || localEp.summary !== newS || localEp.runtime !== newRun) { 
@@ -1504,8 +1505,21 @@
                                 }
                             }
                         });
-                        if (changed && !updates.includes("Épisodes")) updates.push("Détails Épisodes");
                     }
+
+                    // FALLBACK : Si aucune note trouvée sur les épisodes, on applique la note de la série
+                    if (!foundAnyEpisodeRating && seriesRating > 0) {
+                        console.log(`[MassUpdate] ⚠️ Pas de note épisode, fallback sur note série (${seriesRating}) pour ${item.title}`);
+                        item.episodes.forEach(e => {
+                            if (e.rating !== seriesRating) { e.rating = seriesRating; changed = true; }
+                        });
+                        if (item.rating !== seriesRating) { item.rating = seriesRating; changed = true; }
+                        updates.push("Note (Fallback Série)");
+                    } else if (data.rating?.average && item.rating !== data.rating.average) {
+                        item.rating = data.rating.average; changed = true; updates.push("Note");
+                    }
+                    
+                    if (changed && !updates.includes("Détails Épisodes") && updates.length > 0) updates.push("Détails Épisodes");
                 } 
                 // --- Logique FILMS ---
                 else if (item.type === 'movie') {
@@ -1523,16 +1537,10 @@
                     data = attemptData;
                     if (!data || data.Response === "False") throw new Error(`Non trouvé`);
 
-                    if (data.Runtime && data.Runtime !== "N/A") {
-                        const run = parseInt(data.Runtime);
-                        if (run && item.runtime !== run) { item.runtime = run; changed = true; updates.push("Durée"); }
-                    }
+                    if (data.Runtime && data.Runtime !== "N/A") { const run = parseInt(data.Runtime); if (run && item.runtime !== run) { item.runtime = run; changed = true; updates.push("Durée"); } }
                     if (data.Poster && data.Poster !== "N/A" && item.image !== data.Poster) { item.image = data.Poster; changed = true; updates.push("Affiche"); }
                     if (data.Plot && item.summary !== data.Plot) { item.summary = data.Plot; changed = true; updates.push("Résumé"); }
-                    if (data.Genre) {
-                        const newGenres = data.Genre.split(', ');
-                        if (JSON.stringify(item.genres) !== JSON.stringify(newGenres)) { item.genres = newGenres; changed = true; updates.push("Genres"); }
-                    }
+                    if (data.Genre) { const newGenres = data.Genre.split(', '); if (JSON.stringify(item.genres) !== JSON.stringify(newGenres)) { item.genres = newGenres; changed = true; updates.push("Genres"); } }
                     const prod = sanitizePlatform(data.Production);
                     if (prod && item.network !== prod) { item.network = prod; changed = true; updates.push("Plateforme"); }
                     if (data.imdbRating && data.imdbRating !== "N/A" && item.rating !== parseFloat(data.imdbRating)) { item.rating = parseFloat(data.imdbRating); changed = true; updates.push("Note"); }
@@ -1548,6 +1556,7 @@
                     console.log(`[MassUpdate] ✅ [${item.title}] mis à jour : ${updates.join(', ')}`);
                 } else {
                     skippedCount++;
+                    console.log(`[MassUpdate] ➖ Aucun changement nécessaire pour : ${item.title}`);
                 }
             } catch (e) {
                 console.error(`[MassUpdate] ❌ Erreur sur ${item.title}:`, e);
