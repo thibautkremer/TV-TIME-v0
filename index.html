@@ -629,6 +629,59 @@
     }
 
     // --- SUIVIS (LIBRARY) ---
+    function renderLibrary() {
+        const grid = document.getElementById('libraryGrid');
+        grid.innerHTML = '';
+
+        // Récupération des filtres
+        const typeFilter = document.getElementById('libraryTypeFilter').value;
+        const statusFilter = document.getElementById('libraryStatusFilter').value;
+        const diffFilter = document.getElementById('libraryDiffusionFilter').value;
+        const sortFilter = document.getElementById('librarySortFilter').value;
+        const genreFilter = document.getElementById('smartGenreFilter').value;
+        const netFilter = document.getElementById('smartNetworkFilter').value;
+        const search = document.getElementById('librarySearch').value.toLowerCase();
+
+        // Filtrage
+        let filtered = library.filter(m => {
+            if (typeFilter !== 'all' && m.type !== typeFilter) return false;
+            
+            // Filtres de statut
+            if (statusFilter === 'not_finished' && (m.status === 'Watched' || m.status === 'Abandoned')) return false;
+            if (statusFilter === 'watched' && m.status !== 'Watched') return false;
+            if (statusFilter === 'abandoned' && m.status !== 'Abandoned') return false;
+
+            // Filtres de diffusion
+            if (diffFilter !== 'all' && (m.status_production || '').toLowerCase() !== diffFilter) return false;
+
+            // Filtres de genre/network
+            if (genreFilter !== 'all' && !(m.genres || []).includes(genreFilter)) return false;
+            if (netFilter !== 'all' && m.network !== netFilter) return false;
+
+            // Recherche textuelle
+            if (search && !m.title.toLowerCase().includes(search)) return false;
+
+            return true;
+        });
+
+        // Tri
+        filtered.sort((a, b) => {
+            switch(sortFilter) {
+                case 'prog_asc': return getProgress(a) - getProgress(b);
+                case 'prog_desc': return getProgress(b) - getProgress(a);
+                case 'title_asc': return a.title.localeCompare(b.title);
+                case 'title_desc': return b.title.localeCompare(a.title);
+                case 'date_desc': return (b.addedAt || 0) - (a.addedAt || 0);
+                case 'date_asc': return (a.addedAt || 0) - (b.addedAt || 0);
+                case 'rating_desc': return getCalculatedRating(b) - getCalculatedRating(a);
+                case 'rating_asc': return getCalculatedRating(a) - getCalculatedRating(b);
+                default: return 0;
+            }
+        });
+
+        // Rendu
+        filtered.forEach(m => grid.appendChild(createMediaCard(m, true)));
+    }
     function renderProfile() {
         const series = library.filter(i => i.type === 'series' && !(i.genres || []).includes('Anime') && !(i.genres || []).includes('Animation'));
         const animes = library.filter(i => (i.genres || []).includes('Anime') || (i.genres || []).includes('Animation'));
