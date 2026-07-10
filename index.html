@@ -557,7 +557,7 @@
             const tvmazeRes = await fetch(`${TVMAZE_API}/search/shows?q=${encodeURIComponent(query)}`).then(r => r.json()).catch(()=>[]);
             if (Array.isArray(tvmazeRes)) results = results.concat(tvmazeRes.map(i => normalizeShow(i.show)));
             
-            // 3. API OMDB (Films + Séries pour plus de couverture)
+            // 3. API OMDB (Films + Séries pour plus de couverture souple)
             const [omdbMovies, omdbSeries] = await Promise.all([
                 fetch(`${OMDB_API}&s=${encodeURIComponent(query)}&type=movie`).then(r => r.json()).catch(()=>({Search:[]})),
                 fetch(`${OMDB_API}&s=${encodeURIComponent(query)}&type=series`).then(r => r.json()).catch(()=>({Search:[]}))
@@ -576,8 +576,11 @@
                 })));
             }
             
-            // Déduplication & tri par popularité/note
-            searchResults = results.filter((v,i,a)=>a.findIndex(t=>(t.id===v.id))===i);
+            // DÉDUPLICATION PAR ID ET PAR TITRE (Empêche les doublons TVMaze vs OMDb)
+            searchResults = results.filter((v,i,a) => a.findIndex(t => 
+                (t.id === v.id) || (t.title && v.title && t.title.toLowerCase() === v.title.toLowerCase() && t.type === v.type)
+            ) === i);
+            
             searchResults.sort((a,b) => (b.rating || 0) - (a.rating || 0));
 
             resetAndDisplaySearch();
@@ -586,13 +589,28 @@
 
     function resetAndDisplaySearch() { searchPage = 1; renderSearchGrid(true); }
 
+    function refreshGrids() {
+        if (!document.getElementById('tab-search').classList.contains('hidden')) {
+            const container = document.getElementById('searchResults');
+            container.innerHTML = '';
+            const filtered = searchResults.filter(r => r.type === currentMediaType);
+            filtered.slice(0, searchPage * PAGE_SIZE).forEach(m => container.appendChild(createMediaCard(m, false)));
+        }
+        if (!document.getElementById('tab-discover').classList.contains('hidden')) {
+            const container = document.getElementById('discoverGrid');
+            container.innerHTML = '';
+            discoverResults.slice(0, discoverPage * PAGE_SIZE).forEach(m => container.appendChild(createMediaCard(m, false)));
+        }
+    }
+
     function renderSearchGrid(clear = false) {
         const container = document.getElementById('searchResults');
         if (clear) container.innerHTML = '';
         
         let filtered = searchResults.filter(r => r.type === currentMediaType);
-        const start = (searchPage - 1) * PAGE_SIZE;
-        const slice = filtered.slice(start, start + PAGE_SIZE);
+        const start = clear ? 0 : (searchPage - 1) * PAGE_SIZE;
+        const limit = clear ? searchPage * PAGE_SIZE : start + PAGE_SIZE;
+        const slice = filtered.slice(start, limit);
         slice.forEach(m => container.appendChild(createMediaCard(m, false)));
     }
 
@@ -630,7 +648,6 @@
             let pool = showsCache.filter(s => !libIds.has(`series-${s.id}`));
             
             if(currentDiscoverMode === 'mix') {
-                // Algorithme amélioré : basé sur les genres les plus présents dans la bibliothèque
                 const gc = {};
                 library.forEach(i => (i.genres || []).forEach(g => gc[g] = (gc[g] || 0) + 1));
                 const topGenres = Object.entries(gc).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
@@ -664,8 +681,9 @@
     function renderDiscoverGrid(clear = false) {
         const container = document.getElementById('discoverGrid');
         if(clear) container.innerHTML = '';
-        const start = (discoverPage - 1) * PAGE_SIZE;
-        discoverResults.slice(start, start + PAGE_SIZE).forEach(m => container.appendChild(createMediaCard(m, false)));
+        const start = clear ? 0 : (discoverPage - 1) * PAGE_SIZE;
+        const limit = clear ? discoverPage * PAGE_SIZE : start + PAGE_SIZE;
+        discoverResults.slice(start, limit).forEach(m => container.appendChild(createMediaCard(m, false)));
     }
 
     // --- FILTRE GLOBAL & RESET ---
@@ -683,7 +701,7 @@
         document.getElementById('librarySearch').value = '';
         document.getElementById('clearLibSearchBtn').classList.add('hidden');
         document.getElementById('libraryTypeFilter').value = 'all';
-        document.getElementById('libraryStatusFilter').value = 'not_finished'; // Sauf visionnage
+        document.getElementById('libraryStatusFilter').value = 'not_finished'; 
         document.getElementById('libraryDiffusionFilter').value = 'all';
         document.getElementById('smartGenreFilter').value = 'all';
         document.getElementById('smartNetworkFilter').value = 'all';
@@ -696,7 +714,6 @@
         const grid = document.getElementById('libraryGrid');
         const filterIndicator = document.getElementById('globalFilterActive');
         
-        // Gestion indicateur visuel filtre global
         if(window.activeGlobalFilter) {
             filterIndicator.classList.remove('hidden');
             let txt = '';
@@ -724,10 +741,8 @@
             const iType = item.type || 'series';
             const iStatus = item.status || 'In Progress';
 
-            // Recherche souple (VO et VF)
             if (searchInput !== "" && !title.includes(searchInput) && !titleFr.includes(searchInput)) return false;
             
-            // Filtre Global prioritaire (depuis le Profil)
             if (window.activeGlobalFilter) {
                 const {type, value} = window.activeGlobalFilter;
                 if (type === 'rating') {
@@ -742,7 +757,6 @@
                 if (type === 'network') { if (item.network !== value) return false; }
                 if (type === 'genre') { if (!(item.genres || []).includes(value)) return false; }
             } else {
-                // Filtres normaux si pas de filtre global
                 if (tFilter !== 'all' && iType !== tFilter) return false;
                 if (sFilter === 'not_finished' && iStatus !== 'In Progress') return false;
                 if (sFilter === 'watched' && iStatus !== 'Watched') return false;
@@ -802,33 +816,38 @@
     }
 
     // --- CARTES MEDIAS ---
-    function buildCardActionsHTML(mediaId) {
-        const inLib = library.some(i => i.id === mediaId);
-        if (inLib) return `<button onclick="event.stopPropagation(); handleRemove('${mediaId}')" class="w-full text-center text-[10px] bg-gray-900 hover:bg-gray-800 text-gray-500 hover:text-red-400 border border-gray-700 py-1.5 rounded transition shadow-sm">✕ Retirer</button>`;
+    
+    // NOUVEAU: Détecte si un média est dans la lib par ID ou par TITRE (évite les doublons API)
+    function isMediaInLibrary(media) {
+        return library.find(i => i.id === media.id || (i.title && media.title && i.title.toLowerCase() === media.title.toLowerCase() && i.type === media.type));
+    }
+
+    function buildCardActionsHTML(media) {
+        const libItem = isMediaInLibrary(media);
+        if (libItem) return `<button onclick="event.stopPropagation(); handleRemove('${libItem.id}')" class="w-full text-center text-[10px] bg-gray-900 hover:bg-gray-800 text-gray-500 hover:text-red-400 border border-gray-700 py-1.5 rounded transition shadow-sm">✕ Retirer</button>`;
         return `
         <div class="flex gap-1.5 w-full">
-            <button onclick="event.stopPropagation(); handleQuickAdd(this.parentElement.parentElement, '${mediaId}', false)" class="flex-1 text-center text-[10px] bg-teal-600 hover:bg-teal-500 text-white font-bold py-1.5 rounded transition shadow-sm">+ Voir</button>
-            <button onclick="event.stopPropagation(); handleQuickAdd(this.parentElement.parentElement, '${mediaId}', true)" class="flex-1 text-center text-[10px] bg-emerald-700 hover:bg-emerald-600 text-white font-bold py-1.5 rounded transition shadow-sm">✓ Vu</button>
+            <button onclick="event.stopPropagation(); handleQuickAdd(this.parentElement.parentElement, '${media.id}', false)" class="flex-1 text-center text-[10px] bg-teal-600 hover:bg-teal-500 text-white font-bold py-1.5 rounded transition shadow-sm">+ Voir</button>
+            <button onclick="event.stopPropagation(); handleQuickAdd(this.parentElement.parentElement, '${media.id}', true)" class="flex-1 text-center text-[10px] bg-emerald-700 hover:bg-emerald-600 text-white font-bold py-1.5 rounded transition shadow-sm">✓ Vu</button>
         </div>`;
     }
 
     async function handleRemove(mediaId) {
         if (supabaseClient) {
-            try {
-                await supabaseClient.from('user_library').delete().eq('user_id', localUserId).eq('media_id', mediaId);
-            } catch (e) {}
+            try { await supabaseClient.from('user_library').delete().eq('user_id', localUserId).eq('media_id', mediaId); } catch (e) {}
         }
         library = library.filter(i => i.id !== mediaId);
         saveLocalDB(); 
+        
+        refreshGrids();
         if (!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
         renderProfile();
-        document.querySelectorAll(`[id="actions-${mediaId}"]`).forEach(el => el.innerHTML = buildCardActionsHTML(mediaId));
     }
 
     async function handleQuickAdd(container, mediaId, watched) {
         container.innerHTML = `<span class="text-[9px] text-teal-400 py-1.5 font-bold animate-pulse w-full text-center block">Ajout...</span>`;
         await quickAdd(mediaId, watched);
-        document.querySelectorAll(`[id="actions-${mediaId}"]`).forEach(el => el.innerHTML = buildCardActionsHTML(mediaId));
+        refreshGrids();
     }
 
     function createMediaCard(media, isLib = false) {
@@ -838,10 +857,10 @@
         const div = document.createElement('div');
         div.className = 'bg-gray-800 rounded-xl border border-gray-700 overflow-hidden cursor-pointer shadow-sm relative flex flex-col hover:border-gray-500 transition-colors';
         
+        const libItem = isMediaInLibrary(media);
         div.onclick = (e) => {
-            if (e.target.closest('.remove-btn')) return;
-            const inLib = library.find(i => i.id === media.id);
-            if (isLib || inLib) openLibraryModal(media.id);
+            if (e.target.closest('button')) return;
+            if (isLib || libItem) openLibraryModal(libItem ? libItem.id : media.id);
             else openPreviewModal(media);
         };
     
@@ -858,7 +877,7 @@
             yearOverlay = `<div class="absolute top-1 right-1 bg-gray-900/80 text-gray-400 text-[10px] font-bold px-1.5 py-0.5 rounded z-10 border border-gray-700">${year}</div>`;
         }
 
-        const removeBtn = isLib ? `<button onclick="handleRemove('${media.id}')" class="remove-btn absolute top-1 right-1 bg-black/70 text-red-500 text-[10px] font-black px-1.5 py-0.5 rounded z-10 border border-gray-800 hover:bg-red-900">✕</button>` : '';
+        const removeBtn = isLib ? `<button onclick="handleRemove('${media.id}')" class="absolute top-1 right-1 bg-black/70 text-red-500 text-[10px] font-black px-1.5 py-0.5 rounded z-10 border border-gray-800 hover:bg-red-900">✕</button>` : '';
     
         let libOverlay = '';
         if (isLib) {
@@ -875,7 +894,6 @@
             }
         }
         
-        // Affichage du titre français si dispo
         const displayTitle = media.title_fr || media.title || 'Inconnu';
     
         div.innerHTML = `
@@ -888,7 +906,7 @@
             </div>
             <div class="p-2 flex-1 flex flex-col ${isLib ? bgColorClass : 'bg-gray-800'}">
                 <h3 class="font-bold text-white text-[11px] truncate leading-tight" title="${displayTitle}">${displayTitle}</h3>
-                ${!isLib ? `<div class="mt-auto pt-1" id="actions-${media.id}">${buildCardActionsHTML(media.id)}</div>` : ''}
+                ${!isLib ? `<div class="mt-auto pt-1" id="actions-${media.id}">${buildCardActionsHTML(media)}</div>` : ''}
             </div>
         `;
         return div;
@@ -925,14 +943,46 @@
     }
 
     async function quickAdd(mediaId, watched) {
-        if (library.some(i => i.id === mediaId)) return;
         let media = searchResults.find(r => r.id === mediaId) || discoverResults.find(r => r.id === mediaId);
         if(!media) return;
+
+        // RESOLUTION OMDb vers TVMaze à la volée avant ajout
+        if (media.type === 'series' && String(media.apiId).startsWith('tt')) {
+            try {
+                const lookup = await fetch(`${TVMAZE_API}/lookup/shows?imdb=${media.apiId}`);
+                if (lookup.ok) {
+                    const show = await lookup.json();
+                    media.apiId = show.id;
+                    media.id = `series-${show.id}`;
+                    media.summary = show.summary?.replace(/<[^>]*>/g, '') || media.summary;
+                    media.image = show.image?.medium || media.image;
+                    media.rating = show.rating?.average || media.rating;
+                    media.status_production = show.status || media.status_production;
+                    media.network = show.network?.name || show.webChannel?.name || media.network;
+                }
+            } catch(e) {}
+        }
+        
+        // Résolution OMDB Film complet si nécessaire
+        if (media.type === 'movie' && String(media.apiId).startsWith('tt') && !media.summary) {
+            try {
+                const omdbFull = await fetch(`${OMDB_API}&i=${media.apiId}&plot=short`).then(r=>r.json());
+                if(omdbFull.Response === "True") {
+                    media.summary = omdbFull.Plot;
+                    media.rating = parseFloat(omdbFull.imdbRating) || 0;
+                    media.runtime = parseInt(omdbFull.Runtime) || 0;
+                    media.network = omdbFull.Production || 'Inconnu';
+                    media.genres = omdbFull.Genre ? omdbFull.Genre.split(', ') : [];
+                }
+            } catch(e) {}
+        }
+
+        // On vérifie une dernière fois si ce n'est pas déjà dans la base après résolution ID
+        if (isMediaInLibrary(media)) return;
+
         let episodes = [];
         if (media.type === 'series') {
             try {
-                // On pourrait aussi récupérer AKAs ici, mais on laisse le mass update s'en charger 
-                // pour ne pas ralentir l'ajout rapide
                 const res = await fetch(`${TVMAZE_API}/shows/${media.apiId}/episodes`);
                 const apiEps = await res.json();
                 episodes = apiEps.map(apiEp => {
@@ -970,7 +1020,7 @@
         
         const posterEl = document.getElementById('modalPoster');
         posterEl.src = (media.image && media.image !== 'N/A' && media.image !== 'image_par_defaut.jpg') ? media.image : 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSzNFY2uiCR89dXMmbtsvSRDxJtnpN8NJFkcNtJIz-kCA&s=10';
-        if(posterEl.classList.contains('fixed')) togglePosterSize(posterEl); // reset if it was left large
+        if(posterEl.classList.contains('fixed')) togglePosterSize(posterEl);
 
         document.getElementById('modalSummary').textContent = media.summary || 'Aucun résumé.';
         document.getElementById('modalPremiereDate').textContent = media.premiered || 'N/A';
@@ -993,7 +1043,7 @@
         document.getElementById('modalEpisodesBlock').classList.add('hidden');
         document.getElementById('modalSuggestionsBlock').classList.add('hidden');
         
-        document.getElementById('modalScrollable').scrollTop = 0; // Point 17: remonter tout en haut
+        document.getElementById('modalScrollable').scrollTop = 0;
 
         const cleanTitle = (media.title_fr || media.title).split('(')[0].trim();
         const movixBtn = document.getElementById('btnMovixRedirect');
@@ -1002,6 +1052,39 @@
 
     async function openPreviewModal(media) {
         modalMode = 'preview'; activeModalMediaIndex = null;
+        
+        // --- RECUPERATION DONNEES MANQUANTES ---
+        if (media.type === 'series' && String(media.apiId).startsWith('tt')) {
+            try {
+                const lookup = await fetch(`${TVMAZE_API}/lookup/shows?imdb=${media.apiId}`);
+                if (lookup.ok) {
+                    const show = await lookup.json();
+                    media.apiId = show.id;
+                    media.id = `series-${show.id}`;
+                    media.summary = show.summary?.replace(/<[^>]*>/g, '') || media.summary;
+                    media.image = show.image?.medium || media.image;
+                    media.rating = show.rating?.average || media.rating;
+                    media.status_production = show.status || media.status_production;
+                    media.network = show.network?.name || show.webChannel?.name || media.network;
+                    media.premiered = show.premiered ? String(show.premiered).split('-')[0] : media.premiered;
+                    media.runtime = show.runtime || show.averageRuntime || media.runtime;
+                }
+            } catch(e) {}
+        }
+        
+        if (media.type === 'movie' && String(media.apiId).startsWith('tt') && !media.summary) {
+            try {
+                const omdbFull = await fetch(`${OMDB_API}&i=${media.apiId}&plot=short`).then(r=>r.json());
+                if(omdbFull.Response === "True") {
+                    media.summary = omdbFull.Plot;
+                    media.rating = parseFloat(omdbFull.imdbRating) || 0;
+                    media.runtime = parseInt(omdbFull.Runtime) || 0;
+                    media.network = omdbFull.Production || 'Inconnu';
+                    media.genres = omdbFull.Genre ? omdbFull.Genre.split(', ') : [];
+                }
+            } catch(e) {}
+        }
+        
         populateModalBase(media);
         
         const fBtn = document.getElementById('modalActionFollowBtn');
@@ -1181,13 +1264,12 @@
         if(!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
     }
 
-    // --- SUGGESTIONS (Point 3, 16) ---
+    // --- SUGGESTIONS ---
     document.getElementById('modalViewSuggestionsBtn').onclick = () => {
         const block = document.getElementById('modalSuggestionsBlock');
         if(block.classList.contains('hidden')) {
             renderSuggestions(currentModalMediaId);
             block.classList.remove('hidden');
-            // Léger délai pour que l'UI se construise avant de scroller
             setTimeout(() => block.scrollIntoView({behavior: 'smooth', block: 'start'}), 100);
         } else {
             block.classList.add('hidden');
@@ -1208,20 +1290,18 @@
                 let score = 0;
                 const sTitle = s.name.toLowerCase();
                 
-                // Mots exacts ou grande similitude
                 if (baseTitle && (sTitle.includes(baseTitle) || baseTitle.includes(sTitle))) score += 15;
                 if (baseTitleFr && (sTitle.includes(baseTitleFr) || baseTitleFr.includes(sTitle))) score += 15;
                 
-                // Correspondance de mots clés
                 const bWords = baseTitle.split(/\s+/).filter(w=>w.length>3);
                 bWords.forEach(w => { if(sTitle.includes(w)) score += 5; });
 
                 let sharedGenres = 0;
                 s.genres?.forEach(g => { if(bGenres.includes(g)) sharedGenres++; });
-                score += (sharedGenres * 4); // Forte pondération genre
+                score += (sharedGenres * 4); 
 
-                if (s.network?.name === baseMedia?.network && baseMedia?.network) score += 3; // Même plateforme
-                score += (s.rating?.average||0); // Prime qualité
+                if (s.network?.name === baseMedia?.network && baseMedia?.network) score += 3;
+                score += (s.rating?.average||0); 
                 
                 return { show: s, score };
             }).filter(i => i.score > 3).sort((a,b) => b.score - a.score).map(i => normalizeShow(i.show));
@@ -1248,7 +1328,7 @@
                     </div>
                 </div>
                 <div class="flex flex-col gap-1 w-24">
-                    ${buildCardActionsHTML(n.id)}
+                    ${buildCardActionsHTML(n)}
                 </div>
             `;
             list.appendChild(div);
