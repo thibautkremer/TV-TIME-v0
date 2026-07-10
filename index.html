@@ -21,9 +21,9 @@
         @media (min-width: 1200px) { .media-grid { grid-template-columns: repeat(8, 1fr); } }
     </style>
 </head>
-<body class="bg-gray-900 text-gray-100 font-sans pb-20">
+<body class="bg-gray-900 text-gray-100 font-sans pb-20 overflow-x-hidden">
 
-<header class="bg-gray-800 border-b border-gray-700 sticky top-0 z-50 shadow-md">
+<header class="bg-gray-800 border-b border-gray-700 sticky top-0 z-40 shadow-md">
     <div class="max-w-screen-2xl mx-auto px-4 py-2.5 flex justify-between items-center">
         <h1 class="text-lg font-black tracking-wider text-teal-400 flex items-center gap-2">
             🍿 TV TIME <span class="text-white text-xs px-2 py-0.5 bg-teal-600 rounded">REBORN</span>
@@ -38,7 +38,7 @@
 <main class="max-w-screen-2xl mx-auto px-3 sm:px-4 pt-4 w-full">
 
     <!-- TAB: SEARCH -->
-    <div id="tab-search" class="space-y-4">
+    <div id="tab-search" class="space-y-4 hidden">
         <div class="flex flex-col gap-2">
             <div class="flex gap-2">
                 <div class="grid grid-cols-2 gap-1.5 bg-gray-800 p-1 rounded-xl border border-gray-700 flex-shrink-0 w-48">
@@ -46,7 +46,7 @@
                     <button onclick="setMediaType('movie')" id="btn-movie" class="py-2 text-sm font-bold rounded-lg text-gray-400">Films</button>
                 </div>
                 <div class="relative flex-1 flex items-center">
-                    <input type="text" id="searchInput" placeholder="Recherche souple..." class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 pr-10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm" />
+                    <input type="text" id="searchInput" placeholder="Recherche souple (titre FR ou VO)..." class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 pr-10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm" />
                     <button id="clearSearchBtn" onclick="document.getElementById('searchInput').value=''; searchResults=[]; resetAndDisplaySearch(); this.classList.add('hidden')" class="absolute right-3 text-gray-400 hover:text-white font-bold hidden">✕</button>
                 </div>
             </div>
@@ -66,10 +66,10 @@
     <!-- TAB: DISCOVER -->
     <div id="tab-discover" class="space-y-4 hidden">
         <div class="bg-gray-800 p-3 sm:p-4 rounded-xl border border-gray-700 flex flex-col gap-3">
-            <div class="flex justify-between items-center">                
+            <div class="flex justify-center items-center mb-1">                
                 <div class="flex bg-gray-900 rounded-lg p-0.5 border border-gray-700">
-                    <button onclick="setDiscoverType('series')" id="btn-disc-type-series" class="px-3 py-1 text-[10px] font-bold rounded shadow bg-teal-600 text-white transition">Séries</button>
-                    <button onclick="setDiscoverType('movie')" id="btn-disc-type-movie" class="px-3 py-1 text-[10px] font-bold rounded text-gray-400 hover:text-white transition">Films</button>
+                    <button onclick="setDiscoverType('series')" id="btn-disc-type-series" class="px-5 py-1.5 text-xs font-bold rounded shadow bg-teal-600 text-white transition">Séries</button>
+                    <button onclick="setDiscoverType('movie')" id="btn-disc-type-movie" class="px-5 py-1.5 text-xs font-bold rounded text-gray-400 hover:text-white transition">Films</button>
                 </div>
             </div>
             <div class="grid grid-cols-3 gap-2">
@@ -97,7 +97,13 @@
     </div>
 
     <!-- TAB: LIBRARY -->
-    <div id="tab-library" class="space-y-3 hidden">
+    <div id="tab-library" class="space-y-3">
+        <!-- Bandeau Filtre Global Actif -->
+        <div id="globalFilterActive" class="hidden bg-indigo-900/50 border border-indigo-700 text-indigo-200 px-3 py-2 rounded-lg text-xs flex justify-between items-center mb-1">
+            <span id="globalFilterText" class="font-bold"></span>
+            <button onclick="clearGlobalFilter()" class="font-bold bg-indigo-700 hover:bg-indigo-600 px-2 py-1 rounded text-white transition">✕ Effacer</button>
+        </div>
+
         <div class="flex gap-2 items-center overflow-x-auto hide-scroll pb-2 border-b border-gray-800">
             <select id="libraryTypeFilter" onchange="renderLibrary()" class="bg-gray-800 border border-gray-700 rounded-lg text-[10px] px-2 py-1.5 text-gray-300 shrink-0">
                 <option value="all">Tous types</option>
@@ -120,8 +126,8 @@
         
         <div class="flex gap-2 overflow-x-auto pb-1 hide-scroll">
             <select id="librarySortFilter" onchange="renderLibrary()" class="bg-gray-800 border border-gray-700 rounded-lg text-[10px] px-2 py-1 text-gray-300 shrink-0">
-                <option value="prog_desc" selected>Progression (Max ➔ Min)</option>
-                <option value="prog_asc">Progression (Min ➔ Max)</option>
+                <option value="prog_desc" selected>Avancée (Max ➔ Min)</option>
+                <option value="prog_asc">Avancée (Min ➔ Max)</option>
                 <option value="title_asc">Titre (A ➔ Z)</option>
                 <option value="title_desc">Titre (Z ➔ A)</option>
                 <option value="date_desc">Ajout (Plus récent)</option>
@@ -146,12 +152,14 @@
                 <option value="Disney+">Disney+</option>
                 <option value="Apple TV+">Apple TV+</option>
             </select>
-            <button onclick="document.getElementById('librarySearch').value=''; document.getElementById('clearLibSearchBtn').classList.add('hidden'); document.getElementById('smartGenreFilter').value='all'; document.getElementById('smartNetworkFilter').value='all'; document.getElementById('librarySortFilter').value='prog_desc'; renderLibrary();" class="shrink-0 text-[10px] px-2 py-1 rounded bg-gray-700 text-white hover:bg-gray-600 transition">✕ Reset</button>
         </div>
 
-        <div class="mb-3 relative">
-            <input type="text" id="librarySearch" oninput="document.getElementById('clearLibSearchBtn').classList.toggle('hidden', this.value.length === 0); renderLibrary()" placeholder="Rechercher dans mes suivis..." class="bg-gray-800 border border-gray-700 rounded-lg text-xs px-3 py-2 w-full text-white pr-10">
-            <button id="clearLibSearchBtn" onclick="document.getElementById('librarySearch').value=''; this.classList.add('hidden'); renderLibrary()" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white font-bold hidden text-sm">✕</button>
+        <div class="mb-3 flex gap-2 items-center">
+            <div class="relative flex-1">
+                <input type="text" id="librarySearch" oninput="document.getElementById('clearLibSearchBtn').classList.toggle('hidden', this.value.length === 0); renderLibrary()" placeholder="Rechercher (Titre FR ou VO)..." class="bg-gray-800 border border-gray-700 rounded-lg text-xs px-3 py-2 w-full text-white pr-10">
+                <button id="clearLibSearchBtn" onclick="document.getElementById('librarySearch').value=''; this.classList.add('hidden'); renderLibrary()" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white font-bold hidden text-sm">✕</button>
+            </div>
+            <button onclick="resetLibFilters()" class="shrink-0 text-[11px] font-bold px-3 py-2 rounded-lg bg-gray-700 text-white hover:bg-gray-600 transition shadow">✕ Reset</button>
         </div>
         <div id="libraryGrid" class="media-grid"></div>
     </div>
@@ -173,9 +181,7 @@
                 <div id="stat-avg-rating" class="text-lg font-black text-yellow-400 tracking-wide">0.0</div>
                 <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Note globale</div>
             </div>
-            <div id="stat-movies-finished" class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center">
-                 <!-- Injecté par JS -->
-            </div>
+            <div id="stat-movies-finished" class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center"></div>
 
             <!-- LIGNE 2 -->
             <div id="stat-series-grid" class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center"></div>
@@ -186,47 +192,49 @@
 
         <!-- Répartition Genres -->
         <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-md space-y-2">
-            <h3 class="text-[11px] font-bold text-teal-400 uppercase tracking-wider">🏷️ Répartition par genres</h3>
-            <div id="stat-genre-bars" class="space-y-3 mt-3"></div>
+            <h3 class="text-[11px] font-bold text-teal-400 uppercase tracking-wider mb-3">🏷️ Répartition par genres (Clic pour filtrer)</h3>
+            <div id="stat-genre-bars" class="space-y-3"></div>
         </div>
         
         <!-- Plateformes (Barres horizontales) -->
         <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-md space-y-2">
-            <h3 class="text-[11px] font-bold text-blue-400 uppercase tracking-wider">🌐 Plateformes</h3>
-            <div id="stat-network-bars" class="space-y-3 mt-3"></div>
+            <h3 class="text-[11px] font-bold text-blue-400 uppercase tracking-wider mb-3">🌐 Plateformes (Clic pour filtrer)</h3>
+            <div id="stat-network-bars" class="space-y-3"></div>
         </div>
 
         <!-- Répartition Notes -->
         <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-md space-y-2">
-            <h3 class="text-[11px] font-bold text-yellow-400 uppercase tracking-wider">⭐ Répartition par notes</h3>
-            <div id="stat-rating-bars" class="space-y-3 mt-3"></div>
+            <h3 class="text-[11px] font-bold text-yellow-400 uppercase tracking-wider mb-3">⭐ Répartition par notes (Clic pour filtrer)</h3>
+            <div id="stat-rating-bars" class="space-y-3"></div>
         </div>
 
-        <!-- Boutons d'action -->
-        <div class="grid grid-cols-2 gap-2">
-            <button id="btn-mass-update-series" onclick="massUpdateLibrary('series')" class="bg-purple-800 hover:bg-purple-700 border border-purple-600 text-purple-100 text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition flex justify-center items-center px-2 overflow-hidden">
-                <span class="truncate">🔄 MAJ API (Séries)</span>
-            </button>
-            <button id="btn-mass-update-movie" onclick="massUpdateLibrary('movie')" class="bg-amber-800 hover:bg-amber-700 border border-amber-600 text-amber-100 text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition flex justify-center items-center px-2 overflow-hidden">
-                <span class="truncate">🔄 MAJ API (Films)</span>
-            </button>
-            
-            <label class="bg-teal-600 hover:bg-teal-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition flex justify-center items-center gap-2 cursor-pointer shadow">
-                <span>📂 Import</span><input type="file" multiple onchange="importLibrary(event)" class="hidden" accept=".json,.csv" />
-            </label>
-            <button onclick="exportLibrary()" class="bg-blue-600 hover:bg-blue-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow flex justify-center items-center gap-2">
-                <span>💾 Export</span>
-            </button>
-            
-            <!-- NOUVEAU BOUTON -->
-            <button onclick="toggleMovixManager()" class="col-span-2 bg-indigo-700 hover:bg-indigo-600 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow">⚙️ Remplir Movix</button>
-            
-            <button onclick="clearAll()" class="col-span-2 bg-gray-800 hover:bg-red-950 border border-red-900/40 text-red-400 text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow flex justify-center items-center gap-2">
-                <span>🗑 Vider Cache</span>
-            </button>
+        <!-- Boutons d'action cachés sous Admin -->
+        <div class="bg-gray-800 p-3 rounded-xl border border-gray-700 shadow-md">
+            <button onclick="document.getElementById('adminPanel').classList.toggle('hidden')" class="w-full text-center text-[11px] uppercase tracking-wider font-bold text-gray-400 hover:text-white py-1">⚙️ Administration ▾</button>
+            <div id="adminPanel" class="hidden grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-gray-700">
+                <button id="btn-mass-update-series" onclick="massUpdateLibrary('series')" class="bg-purple-800 hover:bg-purple-700 border border-purple-600 text-purple-100 text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition flex justify-center items-center px-2 overflow-hidden">
+                    <span class="truncate">🔄 MAJ API (Séries)</span>
+                </button>
+                <button id="btn-mass-update-movie" onclick="massUpdateLibrary('movie')" class="bg-amber-800 hover:bg-amber-700 border border-amber-600 text-amber-100 text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition flex justify-center items-center px-2 overflow-hidden">
+                    <span class="truncate">🔄 MAJ API (Films)</span>
+                </button>
+                
+                <label class="bg-teal-600 hover:bg-teal-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition flex justify-center items-center gap-2 cursor-pointer shadow">
+                    <span>📂 Import JSON</span><input type="file" multiple onchange="importLibrary(event)" class="hidden" accept=".json,.csv" />
+                </label>
+                <button onclick="exportLibrary()" class="bg-blue-600 hover:bg-blue-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow flex justify-center items-center gap-2">
+                    <span>💾 Export JSON</span>
+                </button>
+                
+                <button onclick="toggleMovixManager()" class="col-span-2 bg-indigo-700 hover:bg-indigo-600 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow">⚙️ Remplir Liens Movix</button>
+                
+                <button onclick="clearAll()" class="col-span-2 bg-gray-800 hover:bg-red-950 border border-red-900/40 text-red-400 text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow flex justify-center items-center gap-2">
+                    <span>🗑 Vider Cache Local</span>
+                </button>
+            </div>
         </div>
 
-        <!-- Section Tableau Movix (Cachée par défaut) -->
+        <!-- Section Tableau Movix -->
         <div id="movixManagerSection" class="hidden bg-gray-800 p-4 rounded-xl border border-gray-700">
             <h3 class="text-xs font-bold text-white mb-3">🔗 Liaison Directe Movix (Médias en cours)</h3>
             <div class="max-h-60 overflow-y-auto mb-3 pr-2">
@@ -235,21 +243,21 @@
                     <tbody id="movixManagerBody"></tbody>
                 </table>
             </div>
-            <button onclick="saveAllMovixUrls()" class="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 rounded-lg text-xs">Save Code</button>
+            <button onclick="saveAllMovixUrls()" class="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 rounded-lg text-xs">Sauvegarder Liens</button>
         </div>
     </div>
 </main>
 
 <!-- MODAL DES MEDIAS -->
-<div id="mediaModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 hidden">
-    <div class="bg-gray-800 border border-gray-700 w-full max-w-lg lg:max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+<div id="mediaModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 hidden touch-none">
+    <div class="bg-gray-800 border border-gray-700 w-full max-w-lg lg:max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden relative">
         
         <div class="p-3 sm:p-4 flex gap-3 border-b border-gray-700 bg-gray-800 shrink-0 relative z-20">
-            <img id="modalPoster" src="" class="w-20 h-28 object-cover rounded border border-gray-700 shrink-0" />
+            <img id="modalPoster" src="" onclick="togglePosterSize(this)" class="w-20 h-28 object-cover rounded border border-gray-700 shrink-0 cursor-pointer transition-all duration-300 z-50" />
             <div class="min-w-0 flex-1 flex flex-col justify-center">
                 <div class="flex justify-between items-start">
-                    <h2 id="modalTitle" class="font-black text-white text-lg leading-tight line-clamp-2">Détails</h2>
-                    <button onclick="closeModal()" class="text-gray-400 hover:text-white bg-gray-700 w-7 h-7 rounded-full font-bold text-sm shrink-0">✕</button>
+                    <h2 id="modalTitle" class="font-black text-white text-lg leading-tight line-clamp-2 pr-2">Détails</h2>
+                    <button onclick="closeModal()" class="text-gray-400 hover:text-white bg-gray-700 w-7 h-7 rounded-full font-bold text-sm shrink-0 shadow-lg">✕</button>
                 </div>
                 
                 <div class="flex flex-wrap items-center gap-1.5 mt-2 w-full">
@@ -266,14 +274,13 @@
                         </div>
                     </div>
                 </div>
-                <button id="btnForceCancel" onclick="toggleForceCancel()" class="mt-2 text-[10px] w-max bg-gray-900 border border-red-900/50 text-red-400 px-2 py-1 rounded hidden">Force : Marquer Annulée</button>
             </div>
         </div>
         
-        <div class="p-3 sm:p-4 overflow-y-auto flex-1 hide-scroll space-y-5 relative">
+        <div id="modalScrollable" class="p-3 sm:p-4 overflow-y-auto flex-1 hide-scroll space-y-5 relative overscroll-contain">
             <div id="modalProgressContainer" class="hidden space-y-1 bg-gray-900/50 p-3 rounded-xl border border-gray-700/50">
                 <div class="flex justify-between text-xs font-bold text-gray-300">
-                    <span>Avancement global</span>
+                    <span>Avancée globale</span>
                     <span id="modalProgressText" class="text-teal-400">0%</span>
                 </div>
                 <div class="w-full bg-gray-700 h-2 rounded-full overflow-hidden">
@@ -283,9 +290,7 @@
 
             <!-- BOUTON MOVIX INTEGRE ICI -->
             <a id="btnMovixRedirect" href="#" target="_blank" class="flex items-center justify-center gap-2 w-full py-2.5 mt-2 mb-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs shadow transition">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M5 3l14 9-14 9V3z" />
-                </svg>
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 9-14 9V3z" /></svg>
                 Voir sur Movix
             </a>
 
@@ -328,12 +333,12 @@
     </div>
 </div>
 
-<nav class="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 h-16 flex items-center justify-around z-40">
-    <button onclick="switchTab('search')" id="nav-search" class="flex flex-col items-center text-xs text-teal-400 font-bold flex-1"><span class="text-lg">🔍</span><span class="text-[10px]">Chercher</span></button>
-    <button onclick="switchTab('discover')" id="nav-discover" class="flex flex-col items-center text-xs text-gray-400 flex-1"><span class="text-lg">✨</span><span class="text-[10px]">Découvrir</span></button>
-    <button onclick="switchTab('calendar')" id="nav-calendar" class="flex flex-col items-center text-xs text-gray-400 flex-1"><span class="text-lg">📅</span><span class="text-[10px]">Calendrier</span></button>
-    <button onclick="switchTab('library')" id="nav-library" class="flex flex-col items-center text-xs text-gray-400 flex-1"><span class="text-lg">📚</span><span class="text-[10px]">Suivis</span></button>
-    <button onclick="switchTab('profile')" id="nav-profile" class="flex flex-col items-center text-xs text-gray-400 flex-1"><span class="text-lg">📊</span><span class="text-[10px]">Profil</span></button>
+<nav class="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 h-16 flex items-center justify-around z-40 pb-safe">
+    <button onclick="switchTab('search')" id="nav-search" class="flex flex-col items-center text-xs text-gray-400 flex-1 transition-colors"><span class="text-lg">🔍</span><span class="text-[10px]">Chercher</span></button>
+    <button onclick="switchTab('discover')" id="nav-discover" class="flex flex-col items-center text-xs text-gray-400 flex-1 transition-colors"><span class="text-lg">✨</span><span class="text-[10px]">Découvrir</span></button>
+    <button onclick="switchTab('calendar')" id="nav-calendar" class="flex flex-col items-center text-xs text-gray-400 flex-1 transition-colors"><span class="text-lg">📅</span><span class="text-[10px]">Sorties</span></button>
+    <button onclick="switchTab('library')" id="nav-library" class="flex flex-col items-center text-xs text-teal-400 font-bold flex-1 transition-colors"><span class="text-lg">📚</span><span class="text-[10px]">Suivis</span></button>
+    <button onclick="switchTab('profile')" id="nav-profile" class="flex flex-col items-center text-xs text-gray-400 flex-1 transition-colors"><span class="text-lg">📊</span><span class="text-[10px]">Profil</span></button>
 </nav>
 
 <script>
@@ -367,6 +372,10 @@
 
     let modalSuggestionsPool = [];
     let modalSuggestionsPage = 1;
+    let currentModalMediaId = null; 
+
+    // Filtre global depuis le profil
+    window.activeGlobalFilter = null;
 
     const seasonColors = ['bg-teal-500', 'bg-cyan-500', 'bg-emerald-500', 'bg-teal-400', 'bg-cyan-400', 'bg-emerald-400', 'bg-teal-600', 'bg-cyan-600'];
 
@@ -394,23 +403,46 @@
         updateHeaderCount();
         preloadShowsCache();
         
-        loadFromCloud(); // Initialisation de la synchronisation au démarrage
+        loadFromCloud(); 
         
         const sSentinel = document.getElementById('searchSentinel');
         if (sSentinel) searchObserver.observe(sSentinel);
         const dSentinel = document.getElementById('discoverSentinel');
         if (dSentinel) discoverObserver.observe(dSentinel);
+
+        // Ouvre Suivi par défaut
+        switchTab('library');
     });
 
-    // Fonction pour basculer l'affichage de la description
-    function toggleEpisodeDescription(element) {
-        const desc = element.querySelector('.episode-desc');
-        if (desc) {
-            desc.classList.toggle('hidden');
+    // --- GESTURES SMARTPHONE ---
+    let touchstartX = 0;
+    let touchendX = 0;
+    const modalEl = document.getElementById('mediaModal');
+    modalEl.addEventListener('touchstart', e => { 
+        touchstartX = e.changedTouches[0].screenX; 
+    }, {passive: true});
+    modalEl.addEventListener('touchend', e => {
+        touchendX = e.changedTouches[0].screenX;
+        // Si swipe vers la droite > 100px
+        if (touchendX - touchstartX > 100) {
+            if(!modalEl.classList.contains('hidden')) closeModal();
+        }
+    }, {passive: true});
+
+    // Zoom Affiche
+    function togglePosterSize(img) {
+        if(img.classList.contains('fixed')) {
+            img.className = 'w-20 h-28 object-cover rounded border border-gray-700 shrink-0 cursor-pointer transition-all duration-300 z-50';
+        } else {
+            img.className = 'fixed inset-0 z-[100] w-full h-full object-contain bg-black/95 p-4 cursor-pointer transition-all duration-300';
         }
     }
+
+    function toggleEpisodeDescription(element) {
+        const desc = element.querySelector('.episode-desc');
+        if (desc) desc.classList.toggle('hidden');
+    }
     
-    // --- CALCULS GLOBAUX ---
     function getCalculatedRating(media) {
         if (media.type === 'series' && media.episodes && media.episodes.length > 0) {
             let total = 0, count = 0;
@@ -443,75 +475,33 @@
         } catch (e) {
             console.warn("Cache local complet, seule la synchro Cloud est active.");
         }
-        
         updateHeaderCount();
-        
         if (syncItem && typeof supabaseClient !== 'undefined') {
             try {
                 await supabaseClient.from('user_library').upsert({
-                    user_id: localUserId,
-                    media_id: syncItem.id,
-                    media_data: syncItem,
-                    last_modified: syncItem.last_modified || Date.now()
+                    user_id: localUserId, media_id: syncItem.id, media_data: syncItem, last_modified: syncItem.last_modified || Date.now()
                 }, { onConflict: 'user_id,media_id' });
-            } catch (e) {
-                console.error("Erreur critique de synchro Cloud :", e);
-            }
+            } catch (e) {}
         }
     }
     
-    async function syncToCloud() {
-        const statusEl = document.getElementById('cloudStatus');
-        statusEl.textContent = '⏳ Sync...';
-        
-        try {
-            const updates = library.map(item => ({
-                user_id: localUserId,
-                media_id: item.id,
-                media_data: item,
-                last_modified: item.last_modified || Date.now()
-            }));
-
-            const { error } = await supabaseClient
-                .from('user_library')
-                .upsert(updates, { onConflict: 'user_id,media_id' });
-            
-            if (error) throw error;
-            statusEl.textContent = '🟢 Cloud';
-            statusEl.className = 'cursor-pointer text-[10px] px-2 py-0.5 bg-gray-900 text-emerald-400 rounded-full font-bold transition-colors shadow border border-emerald-900/50';
-        } catch(e) {
-            console.error("Erreur de synchronisation", e);
-            statusEl.textContent = '🔴 Erreur Sync';
-        }
-    }
-
     async function loadFromCloud() {
         const statusEl = document.getElementById('cloudStatus');
         statusEl.textContent = '⏳ Check...';
-        
         try {
-            const { data, error } = await supabaseClient
-                .from('user_library')
-                .select('media_data')
-                .eq('user_id', localUserId);
-
+            const { data, error } = await supabaseClient.from('user_library').select('media_data').eq('user_id', localUserId);
             if (data && data.length > 0) {
                 library = data.map(row => row.media_data);
                 saveLocalDB(false); 
                 statusEl.textContent = '🟢 Cloud';
                 statusEl.className = 'cursor-pointer text-[10px] px-2 py-0.5 bg-gray-900 text-emerald-400 rounded-full font-bold transition-colors shadow border border-emerald-900/50';
-                
                 if(!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
                 if(!document.getElementById('tab-profile').classList.contains('hidden')) renderProfile();
             }
-        } catch(e) {
-            console.error("Erreur de chargement Cloud", e);
-        }
+        } catch(e) { statusEl.textContent = '🔴 Erreur Sync'; }
     }
 
-    async function forceSync() {
-        await loadFromCloud();
-    }
+    async function forceSync() { await loadFromCloud(); }
 
     function updateHeaderCount() {
         const el = document.getElementById('libCount');
@@ -523,9 +513,11 @@
         ['search','discover','calendar','library','profile'].forEach(t => {
             document.getElementById(`tab-${t}`).classList.add('hidden');
             document.getElementById(`nav-${t}`).classList.replace('text-teal-400', 'text-gray-400');
+            document.getElementById(`nav-${t}`).classList.remove('font-bold');
         });
         document.getElementById(`tab-${name}`).classList.remove('hidden');
         document.getElementById(`nav-${name}`).classList.replace('text-gray-400', 'text-teal-400');
+        document.getElementById(`nav-${name}`).classList.add('font-bold');
         
         if (name === 'library') renderLibrary();
         if (name === 'discover') renderDiscoverTab();
@@ -544,7 +536,6 @@
     document.getElementById('searchInput').addEventListener('input', e => {
         const q = e.target.value.trim();
         const clearBtn = document.getElementById('clearSearchBtn');
-        
         if (q.length > 0) clearBtn.classList.remove('hidden');
         else clearBtn.classList.add('hidden');
         
@@ -554,24 +545,41 @@
 
     async function triggerFuzzySearch(query) {
         try {
-            const [tvmazeRes, omdbRes] = await Promise.all([
-                fetch(`${TVMAZE_API}/search/shows?q=${encodeURIComponent(query)}`).then(r => r.json()).catch(()=>[]),
-                fetch(`${OMDB_API}&s=${encodeURIComponent(query)}&type=movie`).then(r => r.json()).catch(()=>[])
-            ]);
-            
+            const q = query.toLowerCase();
             let results = [];
+
+            // 1. Recherche dans le cache local (plus permissif pour le matching partiel)
+            if (showsCache.length === 0) await ensureShowsPool();
+            const localMatches = showsCache.filter(s => s.name.toLowerCase().includes(q));
+            results = results.concat(localMatches.map(normalizeShow));
+
+            // 2. API TVMaze 
+            const tvmazeRes = await fetch(`${TVMAZE_API}/search/shows?q=${encodeURIComponent(query)}`).then(r => r.json()).catch(()=>[]);
             if (Array.isArray(tvmazeRes)) results = results.concat(tvmazeRes.map(i => normalizeShow(i.show)));
             
-            if (omdbRes.Search) {
-                const movies = omdbRes.Search.map(m => ({
+            // 3. API OMDB (Films + Séries pour plus de couverture)
+            const [omdbMovies, omdbSeries] = await Promise.all([
+                fetch(`${OMDB_API}&s=${encodeURIComponent(query)}&type=movie`).then(r => r.json()).catch(()=>({Search:[]})),
+                fetch(`${OMDB_API}&s=${encodeURIComponent(query)}&type=series`).then(r => r.json()).catch(()=>({Search:[]}))
+            ]);
+            
+            if (omdbMovies.Search) {
+                results = results.concat(omdbMovies.Search.map(m => ({
                     id: `movie-${m.imdbID}`, apiId: m.imdbID, title: m.Title, type: 'movie', 
-                    image: m.Poster !== 'N/A' ? m.Poster : '', rating: 0, genres: [], 
-                    premiered: m.Year, runtime: 120, summary: ''
-                }));
-                results = results.concat(movies);
+                    image: m.Poster !== 'N/A' ? m.Poster : '', rating: 0, genres: [], premiered: m.Year, runtime: 120, summary: ''
+                })));
+            }
+            if (omdbSeries.Search) {
+                results = results.concat(omdbSeries.Search.map(m => ({
+                    id: `series-${m.imdbID}`, apiId: m.imdbID, title: m.Title, type: 'series', 
+                    image: m.Poster !== 'N/A' ? m.Poster : '', rating: 0, genres: [], premiered: m.Year, runtime: 45, summary: ''
+                })));
             }
             
+            // Déduplication & tri par popularité/note
             searchResults = results.filter((v,i,a)=>a.findIndex(t=>(t.id===v.id))===i);
+            searchResults.sort((a,b) => (b.rating || 0) - (a.rating || 0));
+
             resetAndDisplaySearch();
         } catch(e) {}
     }
@@ -598,8 +606,8 @@
 
     function setDiscoverType(type) {
         discoverMediaType = type;
-        document.getElementById('btn-disc-type-series').className = type === 'series' ? 'px-3 py-1 text-[10px] font-bold rounded shadow bg-teal-600 text-white transition' : 'px-3 py-1 text-[10px] font-bold rounded text-gray-400 hover:text-white transition';
-        document.getElementById('btn-disc-type-movie').className = type === 'movie' ? 'px-3 py-1 text-[10px] font-bold rounded shadow bg-teal-600 text-white transition' : 'px-3 py-1 text-[10px] font-bold rounded text-gray-400 hover:text-white transition';
+        document.getElementById('btn-disc-type-series').className = type === 'series' ? 'px-5 py-1.5 text-xs font-bold rounded shadow bg-teal-600 text-white transition' : 'px-5 py-1.5 text-xs font-bold rounded text-gray-400 hover:text-white transition';
+        document.getElementById('btn-disc-type-movie').className = type === 'movie' ? 'px-5 py-1.5 text-xs font-bold rounded shadow bg-teal-600 text-white transition' : 'px-5 py-1.5 text-xs font-bold rounded text-gray-400 hover:text-white transition';
         discoverPage = 1; renderDiscoverTab(true);
     }
 
@@ -622,7 +630,12 @@
             let pool = showsCache.filter(s => !libIds.has(`series-${s.id}`));
             
             if(currentDiscoverMode === 'mix') {
-                const favs = ['Anime', 'Action', 'Fantasy'];
+                // Algorithme amélioré : basé sur les genres les plus présents dans la bibliothèque
+                const gc = {};
+                library.forEach(i => (i.genres || []).forEach(g => gc[g] = (gc[g] || 0) + 1));
+                const topGenres = Object.entries(gc).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
+                const favs = topGenres.length > 0 ? topGenres : ['Anime', 'Action', 'Drama'];
+                
                 let p = pool.filter(s => s.genres?.some(g => favs.includes(g)));
                 discoverResults = [...p, ...pool].sort(() => 0.5 - Math.random()).map(normalizeShow);
             } 
@@ -655,10 +668,46 @@
         discoverResults.slice(start, start + PAGE_SIZE).forEach(m => container.appendChild(createMediaCard(m, false)));
     }
 
+    // --- FILTRE GLOBAL & RESET ---
+    function applyGlobalFilter(type, value) {
+        window.activeGlobalFilter = { type, value };
+        switchTab('library');
+    }
+
+    function clearGlobalFilter() {
+        window.activeGlobalFilter = null;
+        renderLibrary();
+    }
+
+    function resetLibFilters() {
+        document.getElementById('librarySearch').value = '';
+        document.getElementById('clearLibSearchBtn').classList.add('hidden');
+        document.getElementById('libraryTypeFilter').value = 'all';
+        document.getElementById('libraryStatusFilter').value = 'not_finished'; // Sauf visionnage
+        document.getElementById('libraryDiffusionFilter').value = 'all';
+        document.getElementById('smartGenreFilter').value = 'all';
+        document.getElementById('smartNetworkFilter').value = 'all';
+        document.getElementById('librarySortFilter').value = 'prog_desc';
+        clearGlobalFilter();
+    }
+
     // --- SUIVIS (LIBRARY) ---
     function renderLibrary() {
         const grid = document.getElementById('libraryGrid');
+        const filterIndicator = document.getElementById('globalFilterActive');
         
+        // Gestion indicateur visuel filtre global
+        if(window.activeGlobalFilter) {
+            filterIndicator.classList.remove('hidden');
+            let txt = '';
+            if(activeGlobalFilter.type === 'rating') txt = `Note : ${activeGlobalFilter.value}`;
+            if(activeGlobalFilter.type === 'network') txt = `Plateforme : ${activeGlobalFilter.value}`;
+            if(activeGlobalFilter.type === 'genre') txt = `Genre : ${activeGlobalFilter.value}`;
+            document.getElementById('globalFilterText').textContent = txt;
+        } else {
+            filterIndicator.classList.add('hidden');
+        }
+
         const sFilter = document.getElementById('libraryStatusFilter').value;
         const tFilter = document.getElementById('libraryTypeFilter').value;
         const dFilter = document.getElementById('libraryDiffusionFilter').value;
@@ -671,31 +720,44 @@
         
         let filtered = library.filter(item => {
             const title = (item.title || '').toLowerCase();
+            const titleFr = (item.title_fr || '').toLowerCase();
             const iType = item.type || 'series';
             const iStatus = item.status || 'In Progress';
 
-            if (searchInput !== "") {
-                return title.includes(searchInput);
+            // Recherche souple (VO et VF)
+            if (searchInput !== "" && !title.includes(searchInput) && !titleFr.includes(searchInput)) return false;
+            
+            // Filtre Global prioritaire (depuis le Profil)
+            if (window.activeGlobalFilter) {
+                const {type, value} = window.activeGlobalFilter;
+                if (type === 'rating') {
+                    const r = getCalculatedRating(item);
+                    if (value === '< 5') { if (r >= 5 || r === 0) return false; }
+                    else {
+                        const target = parseFloat(value);
+                        const rounded = Math.round(r * 2) / 2;
+                        if (rounded !== target) return false;
+                    }
+                }
+                if (type === 'network') { if (item.network !== value) return false; }
+                if (type === 'genre') { if (!(item.genres || []).includes(value)) return false; }
+            } else {
+                // Filtres normaux si pas de filtre global
+                if (tFilter !== 'all' && iType !== tFilter) return false;
+                if (sFilter === 'not_finished' && iStatus !== 'In Progress') return false;
+                if (sFilter === 'watched' && iStatus !== 'Watched') return false;
+                if (sFilter === 'abandoned' && iStatus !== 'Abandoned') return false;
+                if (gFilter !== 'all' && !(item.genres || []).includes(gFilter)) return false;
+                if (nFilter !== 'all' && !(item.network || '').includes(nFilter)) return false;
+                
+                if (iType === 'series' && dFilter !== 'all') {
+                    const sp = (item.status_production || '').toLowerCase();
+                    const isCanceled = sp.includes('cancel');
+                    if (dFilter === 'canceled' && !isCanceled) return false;
+                    if (dFilter === 'running' && (isCanceled || !sp.includes('running'))) return false;
+                    if (dFilter === 'ended' && (isCanceled || (!sp.includes('ended') && !sp.includes('cancel')))) return false;
+                }
             }
-    
-            if (tFilter !== 'all' && iType !== tFilter) return false;
-            
-            if (sFilter === 'not_finished' && iStatus !== 'In Progress') return false;
-            if (sFilter === 'watched' && iStatus !== 'Watched') return false;
-            if (sFilter === 'abandoned' && iStatus !== 'Abandoned') return false;
-            
-            if (gFilter !== 'all' && !(item.genres || []).includes(gFilter)) return false;
-            
-            if (nFilter !== 'all' && !(item.network || '').includes(nFilter)) return false;
-            
-            if (iType === 'series' && dFilter !== 'all') {
-                const sp = (item.status_production || '').toLowerCase();
-                const isCanceled = item.user_forced_cancel || sp.includes('cancel');
-                if (dFilter === 'canceled' && !isCanceled) return false;
-                if (dFilter === 'running' && (isCanceled || !sp.includes('running'))) return false;
-                if (dFilter === 'ended' && (isCanceled || !sp.includes('ended'))) return false;
-            }
-            
             return true;
         });
     
@@ -707,7 +769,6 @@
             if (sortVal === 'rating_desc') return getCalculatedRating(b) - getCalculatedRating(a);
             if (sortVal === 'rating_asc') return getCalculatedRating(a) - getCalculatedRating(b);
             
-            // Progression ascendante
             if (sortVal === 'prog_asc') {
                 const progA = getProgress(a);
                 const progB = getProgress(b);
@@ -717,7 +778,6 @@
                 return weightA - weightB;
             }
 
-            // Défaut : Progression descendante ('prog_desc')
             const progA = getProgress(a);
             const progB = getProgress(b);
             if (progA !== progB) return progB - progA;
@@ -755,24 +815,13 @@
     async function handleRemove(mediaId) {
         if (supabaseClient) {
             try {
-                await supabaseClient
-                    .from('user_library')
-                    .delete()
-                    .eq('user_id', localUserId)
-                    .eq('media_id', mediaId);
-            } catch (e) {
-                console.error("Erreur suppression Cloud:", e);
-            }
+                await supabaseClient.from('user_library').delete().eq('user_id', localUserId).eq('media_id', mediaId);
+            } catch (e) {}
         }
-    
         library = library.filter(i => i.id !== mediaId);
         saveLocalDB(); 
-        
-        if (!document.getElementById('tab-library').classList.contains('hidden')) {
-            renderLibrary();
-        }
+        if (!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
         renderProfile();
-        
         document.querySelectorAll(`[id="actions-${mediaId}"]`).forEach(el => el.innerHTML = buildCardActionsHTML(mediaId));
     }
 
@@ -797,8 +846,7 @@
         };
     
         const imgSrc = (media.image && media.image !== 'N/A' && media.image !== 'image_par_defaut.jpg') 
-            ? media.image 
-            : 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSzNFY2uiCR89dXMmbtsvSRDxJtnpN8NJFkcNtJIz-kCA&s=10';
+            ? media.image : 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSzNFY2uiCR89dXMmbtsvSRDxJtnpN8NJFkcNtJIz-kCA&s=10';
         
         const calcRating = getCalculatedRating(media);
         const ratingDisplay = calcRating > 0 ? calcRating.toFixed(1) : 'N/A';
@@ -806,7 +854,6 @@
         
         let yearOverlay = '';
         if (!isLib && media.premiered && media.premiered !== 'N/A') {
-            // SECURITE: conversion en texte avec String() pour éviter le crash .split sur un entier
             const year = String(media.premiered).split('-')[0];
             yearOverlay = `<div class="absolute top-1 right-1 bg-gray-900/80 text-gray-400 text-[10px] font-bold px-1.5 py-0.5 rounded z-10 border border-gray-700">${year}</div>`;
         }
@@ -827,6 +874,9 @@
                 }
             }
         }
+        
+        // Affichage du titre français si dispo
+        const displayTitle = media.title_fr || media.title || 'Inconnu';
     
         div.innerHTML = `
             <div class="relative w-full">
@@ -837,7 +887,7 @@
                 ${libOverlay}
             </div>
             <div class="p-2 flex-1 flex flex-col ${isLib ? bgColorClass : 'bg-gray-800'}">
-                <h3 class="font-bold text-white text-[11px] truncate leading-tight">${media.title || 'Inconnu'}</h3>
+                <h3 class="font-bold text-white text-[11px] truncate leading-tight" title="${displayTitle}">${displayTitle}</h3>
                 ${!isLib ? `<div class="mt-auto pt-1" id="actions-${media.id}">${buildCardActionsHTML(media.id)}</div>` : ''}
             </div>
         `;
@@ -881,6 +931,8 @@
         let episodes = [];
         if (media.type === 'series') {
             try {
+                // On pourrait aussi récupérer AKAs ici, mais on laisse le mass update s'en charger 
+                // pour ne pas ralentir l'ajout rapide
                 const res = await fetch(`${TVMAZE_API}/shows/${media.apiId}/episodes`);
                 const apiEps = await res.json();
                 episodes = apiEps.map(apiEp => {
@@ -900,67 +952,58 @@
 
     // --- MODALES ---
     function normalizeShow(show) {
+        let st = show.status || 'Running';
+        if (show.summary && /cancel/i.test(show.summary)) st = 'Canceled';
+        
         return {
-            id: `series-${show.id}`, apiId: show.id, title: show.name, type: 'series',
+            id: `series-${show.id}`, apiId: show.id, title: show.name, title_fr: show.title_fr || null, type: 'series',
             image: show.image?.medium || '', summary: show.summary?.replace(/<[^>]*>/g, '') || '',
-            rating: show.rating?.average || 0, genres: show.genres || [], status_production: show.status || 'Running',
-            // SECURITE: On force en string au cas où l'API renvoie un entier
+            rating: show.rating?.average || 0, genres: show.genres || [], status_production: st,
             premiered: show.premiered ? String(show.premiered).split('-')[0] : 'N/A',
             runtime: show.runtime || show.averageRuntime || 0, network: show.network?.name || show.webChannel?.name || 'Inconnu'
         };
     }
 
     function populateModalBase(media) {
-        // --- 1. Mise à jour des informations de base ---
-        document.getElementById('modalTitle').textContent = media.title;
-        document.getElementById('modalPoster').src = (media.image && media.image !== 'N/A' && media.image !== 'image_par_defaut.jpg') ? media.image : 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSzNFY2uiCR89dXMmbtsvSRDxJtnpN8NJFkcNtJIz-kCA&s=10';
+        currentModalMediaId = media.id;
+        document.getElementById('modalTitle').textContent = media.title_fr || media.title;
+        
+        const posterEl = document.getElementById('modalPoster');
+        posterEl.src = (media.image && media.image !== 'N/A' && media.image !== 'image_par_defaut.jpg') ? media.image : 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSzNFY2uiCR89dXMmbtsvSRDxJtnpN8NJFkcNtJIz-kCA&s=10';
+        if(posterEl.classList.contains('fixed')) togglePosterSize(posterEl); // reset if it was left large
+
         document.getElementById('modalSummary').textContent = media.summary || 'Aucun résumé.';
         document.getElementById('modalPremiereDate').textContent = media.premiered || 'N/A';
         document.getElementById('modalRuntime').textContent = media.runtime > 0 ? `${media.runtime} min` : '-- min';
         document.getElementById('modalNetwork').textContent = media.network || '';
         
-        // --- 2. Mise à jour de la note ---
         const rate = getCalculatedRating(media);
         document.getElementById('modalGlobalRatingText').textContent = rate > 0 ? rate.toFixed(1) : 'N/A';
         document.getElementById('modalGlobalRatingBar').style.width = `${(rate / 10) * 100}%`;
         
-        // --- 3. Mise à jour des badges ---
         const badge = document.getElementById('modalProductionBadge');
-        if(media.user_forced_cancel) { 
-            badge.textContent = 'Annulée (Forcé)'; 
-            badge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-900 text-red-300'; 
-        } else {
-            const s = (media.status_production || '').toLowerCase();
-            if (s.includes('running')) { badge.textContent = 'En cours'; badge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-900 text-emerald-400'; }
-            else if (s.includes('ended')) { badge.textContent = 'Terminée'; badge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-700 text-gray-300'; }
-            else if (s.includes('cancel')) { badge.textContent = 'Annulée'; badge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-900 text-red-400'; }
-            else { badge.textContent = media.status_production || ''; badge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-700 text-gray-300'; }
-        }
+        const s = (media.status_production || '').toLowerCase();
+        if (s.includes('running')) { badge.textContent = 'En cours'; badge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-900 text-emerald-400'; }
+        else if (s.includes('ended')) { badge.textContent = 'Terminée'; badge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-700 text-gray-300'; }
+        else if (s.includes('cancel')) { badge.textContent = 'Annulée'; badge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-900 text-red-400'; }
+        else { badge.textContent = media.status_production || ''; badge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-700 text-gray-300'; }
         
-        // --- 4. Réinitialisation des sections cachées ---
         document.getElementById('modalProgressContainer').classList.add('hidden');
         document.getElementById('modalSeriesContent').classList.add('hidden');
         document.getElementById('modalEpisodesBlock').classList.add('hidden');
         document.getElementById('modalSuggestionsBlock').classList.add('hidden');
+        
+        document.getElementById('modalScrollable').scrollTop = 0; // Point 17: remonter tout en haut
 
-        // --- 5. LOGIQUE BOUTON INTELLIGENT MOVIX ---
-        // On nettoie le titre et on vérifie si un lien direct est enregistré
-        const cleanTitle = media.title.split('(')[0].trim();
+        const cleanTitle = (media.title_fr || media.title).split('(')[0].trim();
         const movixBtn = document.getElementById('btnMovixRedirect');
-        
-        // Si media.movixUrl existe dans l'objet, on l'utilise, sinon recherche par titre
         movixBtn.href = media.movixUrl ? media.movixUrl : `https://movix.cash/search?q=${encodeURIComponent(cleanTitle)}`;
-        
-        // Pré-remplissage du champ input si on est en mode édition (libraryModal)
-        const inputUrl = document.getElementById('modalMovixUrlInput');
-        if(inputUrl) inputUrl.value = media.movixUrl || '';
     }
 
     async function openPreviewModal(media) {
         modalMode = 'preview'; activeModalMediaIndex = null;
         populateModalBase(media);
         
-        document.getElementById('btnForceCancel').classList.add('hidden');
         const fBtn = document.getElementById('modalActionFollowBtn');
         const wBtn = document.getElementById('modalActionAllWatchedBtn');
         
@@ -982,7 +1025,6 @@
                 renderGlobalGraph(previewEpisodes);
             } catch(e) {}
         }
-        document.getElementById('modalViewSuggestionsBtn').onclick = () => renderSuggestions(media.id);
         document.getElementById('mediaModal').classList.remove('hidden');
     }
 
@@ -994,43 +1036,27 @@
         
         populateModalBase(item);
         
-        const cBtn = document.getElementById('btnForceCancel');
-        if (item.type === 'series') {
-            cBtn.classList.remove('hidden');
-            cBtn.textContent = item.user_forced_cancel ? "Restaurer API Status" : "Force : Marquer Annulée";
-        } else cBtn.classList.add('hidden');
-
         const fBtn = document.getElementById('modalActionFollowBtn');
         const wBtn = document.getElementById('modalActionAllWatchedBtn');
         
         fBtn.textContent = '✕ Retirer'; fBtn.className = "w-full py-3 bg-gray-900 text-red-400 border border-red-900/50 font-bold rounded-xl text-xs";
-        
-        fBtn.onclick = async () => { 
-            await handleRemove(item.id); 
-            closeModal(); 
-        };
+        fBtn.onclick = async () => { await handleRemove(item.id); closeModal(); };
         
         if (item.status === 'Watched') {
             wBtn.textContent = '↺ Marquer Non Vu'; 
             wBtn.className = "w-full py-3 bg-gray-900 text-amber-400 border border-amber-900/50 font-bold rounded-xl text-xs";
             wBtn.onclick = () => { 
                 if(item.episodes) item.episodes.forEach(e=>e.watched=false); 
-                item.status='In Progress'; 
-                item.last_modified = Date.now(); 
-                saveLocalDB(item); 
-                closeModal(); 
-                renderLibrary(); 
+                item.status='In Progress'; item.last_modified = Date.now(); 
+                saveLocalDB(item); closeModal(); renderLibrary(); 
             };
         } else {
             wBtn.textContent = '✓ Marquer Vu'; 
             wBtn.className = "w-full py-3 bg-emerald-600 text-white font-bold rounded-xl text-xs shadow transition";
             wBtn.onclick = () => { 
                 if(item.episodes) item.episodes.forEach(e=>e.watched=true); 
-                item.status='Watched'; 
-                item.last_modified = Date.now(); 
-                saveLocalDB(item); 
-                closeModal(); 
-                renderLibrary(); 
+                item.status='Watched'; item.last_modified = Date.now(); 
+                saveLocalDB(item); closeModal(); renderLibrary(); 
             };
         }
 
@@ -1044,20 +1070,14 @@
             renderGlobalGraph(item.episodes);
         }
 
-        document.getElementById('modalViewSuggestionsBtn').onclick = () => renderSuggestions(item.id);
         document.getElementById('mediaModal').classList.remove('hidden');
     }
 
     function closeModal() {
         suggestionsObserver.disconnect();
         document.getElementById('mediaModal').classList.add('hidden');
-    }
-
-    function toggleForceCancel() {
-        if(activeModalMediaIndex === null) return;
-        library[activeModalMediaIndex].user_forced_cancel = !library[activeModalMediaIndex].user_forced_cancel;
-        library[activeModalMediaIndex].last_modified = Date.now();
-        saveLocalDB(library[activeModalMediaIndex]); openLibraryModal(library[activeModalMediaIndex].id); 
+        const posterEl = document.getElementById('modalPoster');
+        if(posterEl.classList.contains('fixed')) togglePosterSize(posterEl);
     }
 
     // --- GRAPHIQUES ---
@@ -1079,9 +1099,8 @@
             const val = (typeof ep.rating === 'object' && ep.rating !== null) ? (ep.rating.average || 0) : (ep.rating || 0);
             const r = val > 0 ? val : 7.0; 
             const h = Math.max(10, (r / 10) * 100);
-            
             const colorClass = seasonColors[(ep.season - 1) % seasonColors.length] || 'bg-cyan-600';
-            container.innerHTML += `<div class="flex-1 min-w-[12px] ${colorClass} hover:opacity-translate-y-1 transition rounded-t cursor-pointer flex flex-col justify-end items-center relative z-10" style="height: ${h}%" title="E${ep.number}: ${r}"><span class="text-[8px] text-white font-bold mb-0.5 opacity-80">${r > 0 ? r : ''}</span></div>`;
+            container.innerHTML += `<div class="flex-1 min-w-[12px] ${colorClass} transition rounded-t cursor-pointer flex flex-col justify-end items-center relative z-10" style="height: ${h}%" title="E${ep.number}: ${r}"><span class="text-[8px] text-white font-bold mb-0.5 opacity-80">${r > 0 ? r : ''}</span></div>`;
         });
     }
 
@@ -1127,7 +1146,6 @@
             const btnClass = isFuture ? 'bg-gray-800/50 text-gray-600' : (ep.watched ? 'bg-emerald-900 text-emerald-400' : 'bg-gray-700 hover:bg-gray-600');
             const btnAction = isLib ? `<button onclick="event.stopPropagation(); ${!isFuture ? `toggleEpCascade(${ep.id}, '${ep.season}')` : ''}" class="px-2 py-1 rounded text-[10px] shrink-0 font-bold transition ${btnClass}" ${isFuture?'disabled':''}>${ep.watched ? '✓ Vu' : 'Vu'}</button>` : '';
 
-            // Note : on récupère ici la description de l'épisode (si elle existe via le mass update)
             const summary = ep.summary || "Pas de description disponible pour cet épisode.";
 
             return `
@@ -1163,25 +1181,50 @@
         if(!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
     }
 
-    // --- SUGGESTIONS ---
+    // --- SUGGESTIONS (Point 3, 16) ---
+    document.getElementById('modalViewSuggestionsBtn').onclick = () => {
+        const block = document.getElementById('modalSuggestionsBlock');
+        if(block.classList.contains('hidden')) {
+            renderSuggestions(currentModalMediaId);
+            block.classList.remove('hidden');
+            // Léger délai pour que l'UI se construise avant de scroller
+            setTimeout(() => block.scrollIntoView({behavior: 'smooth', block: 'start'}), 100);
+        } else {
+            block.classList.add('hidden');
+        }
+    };
+
     async function renderSuggestions(currentId) {
         const block = document.getElementById('modalSuggestionsBlock');
-        block.classList.remove('hidden');
         block.innerHTML = `<div id="modalSuggestionsList" class="space-y-2"></div><div id="modalSuggestionsSentinel" class="h-4"></div>`;
         try {
             await ensureShowsPool();
             const baseMedia = library.find(i=>i.id===currentId) || searchResults.find(i=>i.id===currentId) || discoverResults.find(i=>i.id===currentId);
             const bGenres = baseMedia?.genres || [];
-            const baseTitle = baseMedia?.title.split(/[:\-]/)[0].trim().toLowerCase() || "";
+            const baseTitle = baseMedia?.title.toLowerCase() || "";
+            const baseTitleFr = (baseMedia?.title_fr || "").toLowerCase();
             
             modalSuggestionsPool = showsCache.filter(s => `series-${s.id}` !== currentId).map(s => {
                 let score = 0;
-                if (baseTitle && (s.name.toLowerCase().includes(baseTitle) || baseTitle.includes(s.name.toLowerCase()))) score += 10;
-                s.genres?.forEach(g => { if(bGenres.includes(g)) score += 2; });
-                if(s.network?.name === baseMedia?.network) score += 1;
-                score += (s.rating?.average||0)/10;
+                const sTitle = s.name.toLowerCase();
+                
+                // Mots exacts ou grande similitude
+                if (baseTitle && (sTitle.includes(baseTitle) || baseTitle.includes(sTitle))) score += 15;
+                if (baseTitleFr && (sTitle.includes(baseTitleFr) || baseTitleFr.includes(sTitle))) score += 15;
+                
+                // Correspondance de mots clés
+                const bWords = baseTitle.split(/\s+/).filter(w=>w.length>3);
+                bWords.forEach(w => { if(sTitle.includes(w)) score += 5; });
+
+                let sharedGenres = 0;
+                s.genres?.forEach(g => { if(bGenres.includes(g)) sharedGenres++; });
+                score += (sharedGenres * 4); // Forte pondération genre
+
+                if (s.network?.name === baseMedia?.network && baseMedia?.network) score += 3; // Même plateforme
+                score += (s.rating?.average||0); // Prime qualité
+                
                 return { show: s, score };
-            }).filter(i => i.score > 1).sort((a,b) => b.score - a.score).map(i => normalizeShow(i.show));
+            }).filter(i => i.score > 3).sort((a,b) => b.score - a.score).map(i => normalizeShow(i.show));
             
             modalSuggestionsPage = 1;
             appendSuggestions();
@@ -1195,10 +1238,11 @@
         slice.forEach(n => {
             const div = document.createElement('div');
             div.className = 'bg-gray-900 border border-gray-700 p-2 rounded-xl flex gap-3 items-center';
+            const displayTitle = n.title_fr || n.title;
             div.innerHTML = `
                 <img onclick="closeModal(); openPreviewModal(${JSON.stringify(n).replace(/"/g, '&quot;')})" src="${n.image || 'https://placehold.co/40x60'}" class="w-12 h-16 object-cover rounded border border-gray-800 cursor-pointer" />
                 <div class="flex-1 min-w-0" onclick="closeModal(); openPreviewModal(${JSON.stringify(n).replace(/"/g, '&quot;')})">
-                    <h4 class="text-xs font-bold text-white truncate cursor-pointer">${n.title}</h4>
+                    <h4 class="text-xs font-bold text-white truncate cursor-pointer">${displayTitle}</h4>
                     <div class="flex items-center gap-1.5 mt-1">
                         <span class="text-[9px] text-gray-400 border border-gray-700 px-1 rounded">${n.premiered}</span>
                     </div>
@@ -1227,26 +1271,23 @@
         let futureEps = [];
 
         library.forEach(item => {
-            // Films
             if (item.type === 'movie' && item.premiered && String(item.premiered).length >= 4 && item.premiered >= todayString && item.status !== 'Watched') {
                 if (calFilter === 'today' && item.premiered !== todayString) return;
-                futureEps.push({ mediaId: item.id, showTitle: item.title, showImage: item.image, epName: 'SORTIE FILM', airdate: item.premiered, type: 'movie' });
+                futureEps.push({ mediaId: item.id, showTitle: item.title_fr || item.title, showImage: item.image, epName: 'SORTIE FILM', airdate: item.premiered, type: 'movie' });
             } 
-            // Séries
             else if (item.type === 'series') {
                 (item.episodes||[]).forEach(ep => {
                     if (!ep.airdate || ep.watched || item.status === 'Abandoned' || ep.airdate < todayString) return;
                     if (calFilter === 'today' && ep.airdate !== todayString) return;
                     if (calFilter === 'week' && ((new Date(ep.airdate) - today) / 86400000 > 7)) return;
                     if (calFilter === 'month' && (new Date(ep.airdate).getMonth() !== today.getMonth())) return;
-                    futureEps.push({ mediaId: item.id, showTitle: item.title, showImage: item.image, epName: `S${ep.season}E${ep.number} – ${ep.name}`, airdate: ep.airdate, type: 'series' });
+                    futureEps.push({ mediaId: item.id, showTitle: item.title_fr || item.title, showImage: item.image, epName: `S${ep.season}E${ep.number} – ${ep.name}`, airdate: ep.airdate, type: 'series' });
                 });
             }
         });
 
         if (!futureEps.length) { 
-            container.innerHTML = `<p class="text-xs text-gray-500 text-center py-12">Aucune sortie planifiée.</p>`; 
-            return; 
+            container.innerHTML = `<p class="text-xs text-gray-500 text-center py-12">Aucune sortie planifiée.</p>`; return; 
         }
         
         futureEps.sort((a,b) => a.airdate.localeCompare(b.airdate));
@@ -1260,7 +1301,6 @@
             
             eps.forEach(ep => {
                 const subTxt = ep.type === 'movie' ? `<span class="text-amber-500 font-bold">SORTIE FILM</span>` : ep.epName;
-                
                 const mediaObj = library.find(m => m.id === ep.mediaId);
                 const calcR = getCalculatedRating(mediaObj);
                 const rating = calcR > 0 ? `★ ${calcR.toFixed(1)}` : 'N/A';
@@ -1301,17 +1341,14 @@
         const animes = library.filter(i => (i.genres || []).includes('Anime') || (i.genres || []).includes('Animation'));
         const movies = library.filter(i => i.type === 'movie');
     
-        // 0. Calcul du Temps Regardé et du Backlog
-        let watchedMin = 0;
-        let backlogMin = 0;
-
+        let watchedMin = 0; let backlogMin = 0;
         library.forEach(item => {
             if (item.type === 'movie') {
-                const r = parseInt(item.runtime) || 120; // 120 min par défaut si non renseigné
+                const r = parseInt(item.runtime) || 120;
                 if (item.status === 'Watched') watchedMin += r;
-                else if (item.status !== 'Abandoned') backlogMin += r; // On n'ajoute pas les abandons au backlog
+                else if (item.status !== 'Abandoned') backlogMin += r;
             } else if (item.type === 'series') {
-                const defR = parseInt(item.runtime) || 24; // 24 min par défaut (standard Anime/Sitcom)
+                const defR = parseInt(item.runtime) || 24; 
                 (item.episodes || []).forEach(ep => {
                     const r = parseInt(ep.runtime) || defR;
                     if (ep.watched) watchedMin += r;
@@ -1323,19 +1360,16 @@
         document.getElementById('stat-hours').textContent = formatDurationProfile(watchedMin);
         document.getElementById('stat-backlog-hours').textContent = formatDurationProfile(backlogMin);
 
-        // 1. Calcul Note Globale
         const ratedItems = library.map(i => getCalculatedRating(i)).filter(r => r > 0);
         const avgRating = ratedItems.length > 0 ? (ratedItems.reduce((acc, r) => acc + r, 0) / ratedItems.length).toFixed(1) : '0.0';
         document.getElementById('stat-avg-rating').textContent = avgRating;
     
-        // 2. Stats Séries (Séries entières)
         const sFinished = series.filter(s => s.status === 'Watched').length;
         document.getElementById('stat-series-grid').innerHTML = `
             <div class="text-lg font-black text-teal-400">${sFinished} / ${series.length}</div>
             <div class="text-xs font-bold text-teal-400">${series.length > 0 ? Math.round((sFinished/series.length)*100) : 0}%</div>
             <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Séries finies</div>`;
     
-        // 3. Stats Episodes Séries
         let seTotal = 0, seWatched = 0;
         series.forEach(s => { seTotal += (s.episodes||[]).length; seWatched += (s.episodes||[]).filter(e=>e.watched).length; });
         document.getElementById('stat-series-eps-grid').innerHTML = `
@@ -1343,14 +1377,12 @@
             <div class="text-xs font-bold text-teal-400">${seTotal > 0 ? Math.round((seWatched/seTotal)*100) : 0}%</div>
             <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Ép. Séries vus</div>`;
             
-        // 4. Stats Animes (Animes entiers)
         const aFinished = animes.filter(a => a.status === 'Watched').length;
         document.getElementById('stat-anime-grid').innerHTML = `
             <div class="text-lg font-black text-purple-400">${aFinished} / ${animes.length}</div>
             <div class="text-xs font-bold text-purple-400">${animes.length > 0 ? Math.round((aFinished/animes.length)*100) : 0}%</div>
             <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Anime finis</div>`;
     
-        // 5. Stats Episodes Animes
         let aeTotal = 0, aeWatched = 0;
         animes.forEach(a => { aeTotal += (a.episodes||[]).length; aeWatched += (a.episodes||[]).filter(e=>e.watched).length; });
         document.getElementById('stat-anime-eps-grid').innerHTML = `
@@ -1358,36 +1390,31 @@
             <div class="text-xs font-bold text-purple-400">${aeTotal > 0 ? Math.round((aeWatched/aeTotal)*100) : 0}%</div>
             <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Ép. Anime vus</div>`;
     
-        // 6. Films
         const mFinished = movies.filter(m => m.status === 'Watched').length;
         document.getElementById('stat-movies-finished').innerHTML = `
             <div class="text-lg font-black text-amber-400">${mFinished} / ${movies.length}</div>
             <div class="text-xs font-bold text-amber-400">${movies.length > 0 ? Math.round((mFinished/movies.length)*100) : 0}%</div>
             <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Films vus</div>`;
     
-        // 7. Barres Genres
-        const gc = {};
-        library.forEach(i => (i.genres || []).forEach(g => gc[g] = (gc[g] || 0) + 1));
+        // Barres interactives (Filtre Global)
+        const gc = {}; library.forEach(i => (i.genres || []).forEach(g => gc[g] = (gc[g] || 0) + 1));
         const sortedGenres = Object.entries(gc).sort((a, b) => b[1] - a[1]);
         const maxG = sortedGenres.length > 0 ? sortedGenres[0][1] : 1;
         document.getElementById('stat-genre-bars').innerHTML = sortedGenres.slice(0, 5).map(([g, c]) => `
-            <div>
-                <div class="flex justify-between text-[10px] mb-1 font-bold"><span class="text-gray-300">${g}</span><span class="text-teal-500">${c}</span></div>
+            <div onclick="applyGlobalFilter('genre', '${g}')" class="cursor-pointer hover:opacity-80 transition group">
+                <div class="flex justify-between text-[10px] mb-1 font-bold"><span class="text-gray-300 group-hover:text-white">${g}</span><span class="text-teal-500">${c}</span></div>
                 <div class="w-full h-2 bg-gray-700 rounded-full overflow-hidden"><div class="h-full bg-teal-500" style="width:${Math.round(c / maxG * 100)}%"></div></div>
             </div>`).join('');
     
-        // 8. Barres Plateformes
-        const nc = {};
-        library.forEach(i => { if (i.network && i.network !== 'Inconnu') nc[i.network] = (nc[i.network] || 0) + 1; });
+        const nc = {}; library.forEach(i => { if (i.network && i.network !== 'Inconnu') nc[i.network] = (nc[i.network] || 0) + 1; });
         const sortedNets = Object.entries(nc).sort((a, b) => b[1] - a[1]);
         const maxN = sortedNets.length > 0 ? sortedNets[0][1] : 1;
         document.getElementById('stat-network-bars').innerHTML = sortedNets.slice(0, 6).map(([n, c]) => `
-            <div>
-                <div class="flex justify-between text-[10px] mb-1 font-bold"><span class="text-gray-300">${n}</span><span class="text-blue-500">${c}</span></div>
+            <div onclick="applyGlobalFilter('network', '${n}')" class="cursor-pointer hover:opacity-80 transition group">
+                <div class="flex justify-between text-[10px] mb-1 font-bold"><span class="text-gray-300 group-hover:text-white">${n}</span><span class="text-blue-500">${c}</span></div>
                 <div class="w-full h-2 bg-gray-700 rounded-full overflow-hidden"><div class="h-full bg-blue-500" style="width:${Math.round(c / maxN * 100)}%"></div></div>
             </div>`).join('');
 
-        // 9. Barres Notes
         const rc = {};
         library.forEach(i => {
             const r = getCalculatedRating(i);
@@ -1397,17 +1424,12 @@
                 rc[key] = (rc[key] || 0) + 1;
             }
         });
-
-        let ratingKeys = [];
-        for (let i = 10; i >= 5; i -= 0.5) ratingKeys.push(i.toFixed(1).replace('.0', ''));
-        ratingKeys.push("< 5");
-
+        let ratingKeys = []; for (let i = 10; i >= 5; i -= 0.5) ratingKeys.push(i.toFixed(1).replace('.0', '')); ratingKeys.push("< 5");
         const activeRatings = ratingKeys.filter(k => rc[k] > 0);
         const maxR = activeRatings.length > 0 ? Math.max(...activeRatings.map(k => rc[k])) : 1;
-
         document.getElementById('stat-rating-bars').innerHTML = activeRatings.map(k => `
-            <div>
-                <div class="flex justify-between text-[10px] mb-1 font-bold"><span class="text-gray-300">${k}</span><span class="text-yellow-500">${rc[k]}</span></div>
+            <div onclick="applyGlobalFilter('rating', '${k}')" class="cursor-pointer hover:opacity-80 transition group">
+                <div class="flex justify-between text-[10px] mb-1 font-bold"><span class="text-gray-300 group-hover:text-white">${k}</span><span class="text-yellow-500">${rc[k]}</span></div>
                 <div class="w-full h-2 bg-gray-700 rounded-full overflow-hidden"><div class="h-full bg-yellow-400" style="width:${Math.round(rc[k] / maxR * 100)}%"></div></div>
             </div>`).join('');
         
@@ -1420,8 +1442,6 @@
         const btnId = type === 'series' ? 'btn-mass-update-series' : 'btn-mass-update-movie';
         const btn = document.getElementById(btnId);
         const originalContent = btn.innerHTML;
-        
-        console.log(`[MassUpdate] 🚀 Lancement de la MAJ API pour : ${type}`);
         
         document.getElementById('btn-mass-update-series').disabled = true;
         document.getElementById('btn-mass-update-movie').disabled = true;
@@ -1439,29 +1459,41 @@
             let item = itemsToProcess[i];
             let updates = []; 
             btn.innerHTML = `<span class="truncate w-full text-center px-1">⏳ [${i+1}/${itemsToProcess.length}] ${item.title}</span>`;
-            
-            console.log(`[MassUpdate] ⚙️ Traitement (${i+1}/${itemsToProcess.length}) : ${item.title}`);
 
             try {
                 let changed = false;
                 let data = null;
 
-                // --- Logique SÉRIES ---
                 if (item.type === 'series' && item.apiId) {
+                    // Update AKA pour titre FR
+                    try {
+                        const akaRes = await fetch(`https://api.tvmaze.com/shows/${item.apiId}/akas`);
+                        if(akaRes.ok) {
+                            const akas = await akaRes.json();
+                            const frAka = akas.find(a => a.country?.code === 'FR');
+                            if(frAka && item.title_fr !== frAka.name) {
+                                item.title_fr = frAka.name;
+                                changed = true; updates.push("Titre FR");
+                            }
+                        }
+                    } catch(e){}
+
                     const res = await fetch(`https://api.tvmaze.com/shows/${item.apiId}?embed=episodes`);
                     if (!res.ok) throw new Error(`TVMaze API Error`);
                     data = await res.json();
                     
-                    // Mise à jour des infos générales
                     if (data.runtime || data.averageRuntime) { const r = data.runtime || data.averageRuntime; if (item.runtime !== r) { item.runtime = r; changed = true; updates.push("Durée"); } }
                     if (data.image?.medium && item.image !== data.image.medium) { item.image = data.image.medium; changed = true; updates.push("Affiche"); }
                     if (data.summary && item.summary !== data.summary.replace(/<[^>]*>/g, '')) { item.summary = data.summary.replace(/<[^>]*>/g, ''); changed = true; updates.push("Résumé"); }
-                    if (data.status && item.status_production !== data.status) { item.status_production = data.status; changed = true; updates.push("Status"); }
+                    
+                    // Statut & Annulation
+                    let newStatus = data.status;
+                    if (data.summary && /cancel/i.test(data.summary)) newStatus = 'Canceled';
+                    if (newStatus && item.status_production !== newStatus) { item.status_production = newStatus; changed = true; updates.push("Status"); }
                     
                     const net = sanitizePlatform(data.network?.name || data.webChannel?.name);
                     if (net && item.network !== net) { item.network = net; changed = true; updates.push("Plateforme"); }
                     
-                    // --- GESTION DES NOTES (Épisodes + Fallback série) ---
                     let foundAnyEpisodeRating = false;
                     const seriesRating = data.rating?.average || 0;
 
@@ -1471,7 +1503,6 @@
                             if (localEp) {
                                 const newR = apiEp.rating?.average || 0;
                                 if (newR > 0) foundAnyEpisodeRating = true;
-                                
                                 const newS = apiEp.summary ? apiEp.summary.replace(/<[^>]*>/g, '') : '';
                                 const newRun = apiEp.runtime || 0;
                                 if (localEp.rating !== newR || localEp.summary !== newS || localEp.runtime !== newRun) { 
@@ -1481,21 +1512,14 @@
                         });
                     }
 
-                    // FALLBACK : Si aucune note trouvée sur les épisodes, on applique la note de la série
                     if (!foundAnyEpisodeRating && seriesRating > 0) {
-                        console.log(`[MassUpdate] ⚠️ Pas de note épisode, fallback sur note série (${seriesRating}) pour ${item.title}`);
-                        item.episodes.forEach(e => {
-                            if (e.rating !== seriesRating) { e.rating = seriesRating; changed = true; }
-                        });
+                        item.episodes.forEach(e => { if (e.rating !== seriesRating) { e.rating = seriesRating; changed = true; }});
                         if (item.rating !== seriesRating) { item.rating = seriesRating; changed = true; }
-                        updates.push("Note (Fallback Série)");
                     } else if (data.rating?.average && item.rating !== data.rating.average) {
                         item.rating = data.rating.average; changed = true; updates.push("Note");
                     }
-                    
                     if (changed && !updates.includes("Détails Épisodes") && updates.length > 0) updates.push("Détails Épisodes");
                 } 
-                // --- Logique FILMS ---
                 else if (item.type === 'movie') {
                     let attemptData = null;
                     if (item.apiId) {
@@ -1527,23 +1551,16 @@
                     }, { onConflict: 'user_id,media_id' });
                     saveLocalDB();
                     updatedCount++;
-                    console.log(`[MassUpdate] ✅ [${item.title}] mis à jour : ${updates.join(', ')}`);
                 } else {
                     skippedCount++;
-                    console.log(`[MassUpdate] ➖ Aucun changement nécessaire pour : ${item.title}`);
                 }
-            } catch (e) {
-                console.error(`[MassUpdate] ❌ Erreur sur ${item.title}:`, e);
-                errorCount++;
-            }
+            } catch (e) { errorCount++; }
             await new Promise(r => setTimeout(r, 800));
         }
 
         btn.innerHTML = originalContent;
         document.getElementById('btn-mass-update-series').disabled = false;
         document.getElementById('btn-mass-update-movie').disabled = false;
-        
-        console.log(`[MassUpdate] 🏁 Terminé. Stats: ${updatedCount} mis à jour, ${skippedCount} OK, ${errorCount} erreurs.`);
         alert(`Bilan (${type}) :\n✅ ${updatedCount} mis à jour\n➖ ${skippedCount} OK\n❌ ${errorCount} erreurs.`);
         location.reload();
     }
@@ -1551,50 +1568,32 @@
     async function importLibrary(event) {
         const files = event.target.files;
         if (!files.length) return;
-    
         alert("Import en cours... Ne fermez pas la page.");
-    
         for (let file of files) {
             if (file.name.endsWith('.json')) {
                 const text = await file.text();
                 try {
                     const data = JSON.parse(text);
-                    
                     for (let raw of data) {
                         const idx = library.findIndex(x => x.id === raw.id || x.title === raw.title);
-                        if(idx !== -1) {
-                            library[idx] = {...library[idx], ...raw, last_modified: Date.now()};
-                        } else {
-                            library.push({...raw, last_modified: Date.now()});
-                        }
+                        if(idx !== -1) library[idx] = {...library[idx], ...raw, last_modified: Date.now()};
+                        else library.push({...raw, last_modified: Date.now()});
                         
                         if (supabaseClient) {
                             await supabaseClient.from('user_library').upsert({ 
-                                user_id: localUserId, 
-                                media_id: raw.id, 
-                                media_data: raw, 
-                                last_modified: Date.now() 
+                                user_id: localUserId, media_id: raw.id, media_data: raw, last_modified: Date.now() 
                             }, { onConflict: 'user_id, media_id' });
                         }
                     }
-                } catch(err) { 
-                    console.error(err);
-                    alert('Erreur JSON sur ' + file.name); 
-                }
+                } catch(err) { alert('Erreur JSON sur ' + file.name); }
             }
         }
-        
-        renderProfile(); 
-        renderLibrary(); 
+        renderProfile(); renderLibrary(); 
         alert("Import et synchronisation Cloud terminés !");
     }
     
     function exportLibrary() {
-        if (library.length === 0) {
-            alert("Rien à exporter, la bibliothèque est vide.");
-            return;
-        }
-
+        if (library.length === 0) { alert("Rien à exporter."); return; }
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(library, null, 2));
         const downloadAnchorNode = document.createElement('a');
         downloadAnchorNode.setAttribute("href", dataStr);
@@ -1602,18 +1601,14 @@
         document.body.appendChild(downloadAnchorNode);
         downloadAnchorNode.click();
         downloadAnchorNode.remove();
-        console.log(`[Export] ✅ ${library.length} items exportés avec succès.`);
     }
 
     function clearAll() {
-        if (!confirm('Vider le cache local ? La sauvegarde Cloud restera intacte. (Pour effacer le Cloud, videz la table Supabase manuellement).')) return;
+        if (!confirm('Vider le cache local ? La sauvegarde Cloud restera intacte.')) return;
         library = []; localStorage.removeItem('personal_tracker_db'); renderLibrary(); renderProfile();
     }
 
-    window.addEventListener('focus', () => {
-        loadFromCloud();
-        console.log("Mise à jour automatique pour consultation...");
-    });
+    window.addEventListener('focus', () => loadFromCloud());
 
     function toggleMovixManager() {
         const section = document.getElementById('movixManagerSection');
@@ -1624,16 +1619,13 @@
     function renderMovixManager() {
         const body = document.getElementById('movixManagerBody');
         body.innerHTML = '';
-        // On affiche uniquement les médias en cours ou non terminés
         const targets = library.filter(m => m.status !== 'Watched');
-        
         targets.forEach(m => {
+            const displayTitle = m.title_fr || m.title;
             const row = document.createElement('tr');
             row.innerHTML = `
-                <td class="py-2 truncate max-w-[120px] text-gray-300 font-bold">${m.title}</td>
-                <td class="py-2">
-                    <input type="text" data-id="${m.id}" value="${m.movixUrl || ''}" placeholder="https://movix.cash/..." class="bg-gray-900 border border-gray-600 rounded px-2 py-1 w-full text-[10px] text-white">
-                </td>
+                <td class="py-2 truncate max-w-[120px] text-gray-300 font-bold" title="${displayTitle}">${displayTitle}</td>
+                <td class="py-2"><input type="text" data-id="${m.id}" value="${m.movixUrl || ''}" placeholder="https://movix.cash/..." class="bg-gray-900 border border-gray-600 rounded px-2 py-1 w-full text-[10px] text-white"></td>
             `;
             body.appendChild(row);
         });
@@ -1642,29 +1634,19 @@
     async function saveAllMovixUrls() {
         const inputs = document.querySelectorAll('#movixManagerBody input');
         const updates = [];
-
         inputs.forEach(input => {
             const id = input.getAttribute('data-id');
             const url = input.value.trim();
             const media = library.find(m => m.id === id);
-            if(media) {
-                media.movixUrl = url;
-                media.last_modified = Date.now();
-                updates.push(media);
-            }
+            if(media) { media.movixUrl = url; media.last_modified = Date.now(); updates.push(media); }
         });
-
-        // Sauvegarde locale
         saveLocalDB(); 
-        
-        // Synchronisation Cloud par lots
         if(updates.length > 0) {
             await supabaseClient.from('user_library').upsert(
                 updates.map(m => ({ user_id: localUserId, media_id: m.id, media_data: m, last_modified: m.last_modified })), 
                 { onConflict: 'user_id,media_id' }
             );
         }
-        
         alert("URLs sauvegardées et synchronisées !");
         toggleMovixManager();
     }
