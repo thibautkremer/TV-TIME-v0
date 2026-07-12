@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TV TIME REBORN</title>
-    <link class="flex items-center gap-1 cursor-pointer text-xs bg-gray-800 px-2 py-1 rounded border border-teal-500 text-teal-400" icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M30 40 L70 40 L65 90 L35 90 Z' fill='%230D9488'/><path d='M20 40 Q50 10 80 40' fill='%23FBBF24'/><circle cx='40' cy='30' r='10' fill='%23FBBF24'/><circle cx='60' cy='25' r='12' fill='%23FBBF24'/></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M30 40 L70 40 L65 90 L35 90 Z' fill='%230D9488'/><path d='M20 40 Q50 10 80 40' fill='%23FBBF24'/><circle cx='40' cy='30' r='10' fill='%23FBBF24'/><circle cx='60' cy='25' r='12' fill='%23FBBF24'/></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -15,6 +15,10 @@
         .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
         .media-poster { width: 100%; aspect-ratio: 155.88 / 217.56; object-fit: cover; }
         .media-grid { display: grid; gap: 0.5rem; grid-template-columns: repeat(3, 1fr); }
+        /* Transition douce pour le lazy loading */
+        img.lazy-loaded { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
         @media (min-width: 480px)  { .media-grid { grid-template-columns: repeat(4, 1fr); } }
         @media (min-width: 640px)  { .media-grid { grid-template-columns: repeat(5, 1fr); } }
         @media (min-width: 900px)  { .media-grid { grid-template-columns: repeat(6, 1fr); } }
@@ -264,7 +268,7 @@
     <div class="bg-gray-800 border border-gray-700 w-full max-w-lg lg:max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden relative">
         
         <div class="p-3 sm:p-4 flex gap-3 border-b border-gray-700 bg-gray-800 shrink-0 relative z-20">
-            <img id="modalPoster" src="" onclick="togglePosterSize(this)" class="w-20 h-28 object-cover rounded border border-gray-700 shrink-0 cursor-pointer transition-all duration-300 z-50" />
+            <img id="modalPoster" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onclick="togglePosterSize(this)" class="w-20 h-28 object-cover rounded border border-gray-700 shrink-0 cursor-pointer transition-all duration-300 z-50" />
             <div class="min-w-0 flex-1 flex flex-col justify-center">
                 <div class="flex justify-between items-start">
                     <h2 id="modalTitle" class="font-black text-white text-lg leading-tight line-clamp-2 pr-2">Détails</h2>
@@ -299,7 +303,6 @@
                 </div>
             </div>
 
-            <!-- BOUTON MOVIX INTEGRE ICI -->
             <a id="btnMovixRedirect" href="#" target="_blank" class="flex items-center justify-center gap-2 w-full py-2.5 mt-2 mb-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs shadow transition">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 9-14 9V3z" /></svg>
                 Voir sur Movix
@@ -371,6 +374,7 @@
 
     let library = JSON.parse(localStorage.getItem('personal_tracker_db')) || [];
     let preferredPlatforms = JSON.parse(localStorage.getItem('preferred_platforms') || '[]');
+    let syncQueue = JSON.parse(localStorage.getItem('tv_time_sync_queue') || '[]'); // Background Sync Queue
     
     let currentMediaType = 'series', searchResults = [];
     let showsCache = [];
@@ -394,48 +398,143 @@
     window.activeGlobalFilter = null;
     const seasonColors = ['bg-teal-500', 'bg-cyan-500', 'bg-emerald-500', 'bg-teal-400', 'bg-cyan-400', 'bg-emerald-400', 'bg-teal-600', 'bg-cyan-600'];
 
+    // ------------------------------------------
+    // SYSTEME LAZY LOADING AVANCE
+    // ------------------------------------------
+    const imageObserver = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const img = entry.target;
+                if (img.dataset.src) {
+                    img.src = img.dataset.src;
+                    img.removeAttribute('data-src');
+                    img.classList.add('lazy-loaded');
+                }
+                observer.unobserve(img);
+            }
+        });
+    }, { rootMargin: '150px 0px', threshold: 0.01 });
+
+    function observeLazyImages() {
+        document.querySelectorAll('img.lazy-image:not(.observed)').forEach(img => {
+            img.classList.add('observed');
+            imageObserver.observe(img);
+        });
+    }
+
+    // Proxy WebP Dynamique
+    function getOptimizedImageUrl(url, width = 300) {
+        if (!url || url === 'N/A' || url === 'image_par_defaut.jpg') return 'https://placehold.co/150x220/1f2937/a1a1aa?text=No+Image';
+        return `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=webp&w=${width}`;
+    }
+
+    // ------------------------------------------
+    // PAGINATION SCROLL (Search / Discover / Suggestions)
+    // ------------------------------------------
     const searchObserver = new IntersectionObserver(entries => {
         if (entries[0].isIntersecting && searchPage * PAGE_SIZE < searchResults.length) { 
             searchPage++; renderSearchGrid(false); 
         }
     });
-    
     const discoverObserver = new IntersectionObserver(entries => {
         if (entries[0].isIntersecting && discoverPage * PAGE_SIZE < discoverResults.length) { 
             discoverPage++; renderDiscoverGrid(false); 
         }
     });
-    
     const suggestionsObserver = new IntersectionObserver(entries => {
         if(entries[0].isIntersecting && modalSuggestionsPool.length > 0) { 
             modalSuggestionsPage++; appendSuggestions(); 
         }
     });
     
-    // Mode Offline Handling
-    window.addEventListener('online', () => loadFromCloud());
+    // ------------------------------------------
+    // GESTION RESEAU & BACKGROUND SYNC
+    // ------------------------------------------
+    window.addEventListener('online', () => { loadFromCloud(); processSyncQueue(); });
     window.addEventListener('offline', updateOfflineStatus);
     
     function updateOfflineStatus() {
         const statusEl = document.getElementById('cloudStatus');
-        statusEl.textContent = '🔴 Hors-ligne';
+        const queueLen = syncQueue.length;
+        statusEl.textContent = queueLen > 0 ? `🔴 Offline (${queueLen})` : '🔴 Hors-ligne';
         statusEl.className = 'cursor-pointer text-[10px] px-2 py-0.5 bg-red-900 text-red-400 rounded-full font-bold shadow border border-red-900/50';
     }
 
-    // Push Notifications Logic
+    function queueForSync(item) {
+        const existingIdx = syncQueue.findIndex(i => i.id === item.id);
+        if(existingIdx !== -1) syncQueue[existingIdx] = item;
+        else syncQueue.push(item);
+        localStorage.setItem('tv_time_sync_queue', JSON.stringify(syncQueue));
+        updateOfflineStatus(); // Met à jour le compteur sur le bouton rouge
+    }
+
+    async function processSyncQueue() {
+        if(!navigator.onLine || syncQueue.length === 0 || typeof supabaseClient === 'undefined') return;
+        const statusEl = document.getElementById('cloudStatus');
+        statusEl.textContent = '⏳ Sync bg...';
+        try {
+            const upsertData = syncQueue.map(item => ({ user_id: localUserId, media_id: item.id, media_data: item, last_modified: item.last_modified || Date.now() }));
+            await supabaseClient.from('user_library').upsert(upsertData, { onConflict: 'user_id,media_id' });
+            syncQueue = [];
+            localStorage.setItem('tv_time_sync_queue', JSON.stringify([]));
+            statusEl.textContent = '🟢 Cloud';
+            statusEl.className = 'cursor-pointer text-[10px] px-2 py-0.5 bg-gray-900 text-emerald-400 rounded-full font-bold transition-colors shadow border border-emerald-900/50';
+        } catch(e) {
+            updateOfflineStatus();
+        }
+    }
+
+    async function saveLocalDB(syncItem = null) {
+        try {
+            const cache = library.slice(0, 50); 
+            localStorage.setItem('personal_tracker_db', JSON.stringify(cache));
+        } catch (e) { console.warn("Cache local complet, seule la synchro Cloud est active."); }
+        
+        updateHeaderCount();
+        
+        if (syncItem && typeof supabaseClient !== 'undefined') {
+            if (navigator.onLine) {
+                try {
+                    await supabaseClient.from('user_library').upsert({
+                        user_id: localUserId, media_id: syncItem.id, media_data: syncItem, last_modified: syncItem.last_modified || Date.now()
+                    }, { onConflict: 'user_id,media_id' });
+                } catch (e) { queueForSync(syncItem); }
+            } else {
+                queueForSync(syncItem);
+            }
+        }
+    }
+
+    async function loadFromCloud() {
+        if (!navigator.onLine) { updateOfflineStatus(); return; }
+        const statusEl = document.getElementById('cloudStatus');
+        statusEl.textContent = '⏳ Check...';
+        try {
+            const { data, error } = await supabaseClient.from('user_library').select('media_data').eq('user_id', localUserId);
+            if (data && data.length > 0) {
+                library = data.map(row => row.media_data);
+                saveLocalDB(false); 
+                statusEl.textContent = '🟢 Cloud';
+                statusEl.className = 'cursor-pointer text-[10px] px-2 py-0.5 bg-gray-900 text-emerald-400 rounded-full font-bold transition-colors shadow border border-emerald-900/50';
+                if(!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
+                if(!document.getElementById('tab-profile').classList.contains('hidden')) renderProfile();
+            } else {
+                statusEl.textContent = '🟢 Cloud';
+                statusEl.className = 'cursor-pointer text-[10px] px-2 py-0.5 bg-gray-900 text-emerald-400 rounded-full font-bold transition-colors shadow border border-emerald-900/50';
+            }
+        } catch(e) { statusEl.textContent = '🔴 Erreur Sync'; }
+    }
+
+    // ------------------------------------------
+    // NOTIFICATIONS SYSTEM
+    // ------------------------------------------
     function requestNotificationPermission() {
         if ("Notification" in window) {
             Notification.requestPermission().then(permission => {
-                if (permission === "granted") {
-                    alert("Notifications activées !");
-                    checkDailyNotifications();
-                } else {
-                    alert("Permission refusée.");
-                }
+                if (permission === "granted") { alert("Notifications activées !"); checkDailyNotifications(); } 
+                else { alert("Permission refusée."); }
             });
-        } else {
-            alert("Les notifications ne sont pas supportées par ce navigateur.");
-        }
+        } else { alert("Les notifications ne sont pas supportées par ce navigateur."); }
     }
 
     function checkDailyNotifications() {
@@ -470,12 +569,16 @@
         }
     }
 
+    // ------------------------------------------
+    // INITIALISATION DOM
+    // ------------------------------------------
     window.addEventListener('DOMContentLoaded', () => {
         deduplicateLibrary();
         updateHeaderCount();
         preloadShowsCache();
         
         loadFromCloud(); 
+        processSyncQueue();
         checkDailyNotifications(); 
         
         const sSentinel = document.getElementById('searchSentinel');
@@ -560,39 +663,7 @@
         library = unique;
     }
 
-    async function saveLocalDB(syncItem = null) {
-        try {
-            const cache = library.slice(0, 50); 
-            localStorage.setItem('personal_tracker_db', JSON.stringify(cache));
-        } catch (e) { console.warn("Cache local complet, seule la synchro Cloud est active."); }
-        updateHeaderCount();
-        if (syncItem && typeof supabaseClient !== 'undefined') {
-            try {
-                await supabaseClient.from('user_library').upsert({
-                    user_id: localUserId, media_id: syncItem.id, media_data: syncItem, last_modified: syncItem.last_modified || Date.now()
-                }, { onConflict: 'user_id,media_id' });
-            } catch (e) {}
-        }
-    }
-    
-    async function loadFromCloud() {
-        if (!navigator.onLine) { updateOfflineStatus(); return; }
-        const statusEl = document.getElementById('cloudStatus');
-        statusEl.textContent = '⏳ Check...';
-        try {
-            const { data, error } = await supabaseClient.from('user_library').select('media_data').eq('user_id', localUserId);
-            if (data && data.length > 0) {
-                library = data.map(row => row.media_data);
-                saveLocalDB(false); 
-                statusEl.textContent = '🟢 Cloud';
-                statusEl.className = 'cursor-pointer text-[10px] px-2 py-0.5 bg-gray-900 text-emerald-400 rounded-full font-bold transition-colors shadow border border-emerald-900/50';
-                if(!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
-                if(!document.getElementById('tab-profile').classList.contains('hidden')) renderProfile();
-            }
-        } catch(e) { statusEl.textContent = '🔴 Erreur Sync'; }
-    }
-
-    async function forceSync() { await loadFromCloud(); }
+    async function forceSync() { await loadFromCloud(); processSyncQueue(); }
 
     function updateHeaderCount() {
         const el = document.getElementById('libCount');
@@ -666,7 +737,6 @@
                 (t.id === v.id) || (t.title && v.title && t.title.toLowerCase() === v.title.toLowerCase() && t.type === v.type)
             ) === i);
             
-            // Tri: Préférence plateforme d'abord, puis par note
             searchResults.sort((a,b) => {
                 const aPref = preferredPlatforms.includes(a.network) ? 1 : 0;
                 const bPref = preferredPlatforms.includes(b.network) ? 1 : 0;
@@ -692,6 +762,7 @@
             container.innerHTML = '';
             discoverResults.slice(0, discoverPage * PAGE_SIZE).forEach(m => container.appendChild(createMediaCard(m, false)));
         }
+        observeLazyImages();
     }
 
     function renderSearchGrid(clear = false) {
@@ -703,6 +774,7 @@
         const limit = clear ? searchPage * PAGE_SIZE : start + PAGE_SIZE;
         const slice = filtered.slice(start, limit);
         slice.forEach(m => container.appendChild(createMediaCard(m, false)));
+        observeLazyImages();
     }
 
     async function ensureShowsPool() {
@@ -770,7 +842,6 @@
         
         discoverResults = discoverResults.filter((v,i,a)=>a.findIndex(t=>(t.id===v.id))===i);
 
-        // Tri par plateforme préférée
         discoverResults.sort((a,b) => {
             const aPref = preferredPlatforms.includes(a.network) ? 1 : 0;
             const bPref = preferredPlatforms.includes(b.network) ? 1 : 0;
@@ -787,6 +858,7 @@
         const start = clear ? 0 : (discoverPage - 1) * PAGE_SIZE;
         const limit = clear ? discoverPage * PAGE_SIZE : start + PAGE_SIZE;
         discoverResults.slice(start, limit).forEach(m => container.appendChild(createMediaCard(m, false)));
+        observeLazyImages();
     }
 
     function applyGlobalFilter(type, value) {
@@ -918,6 +990,7 @@
         if (filtered.length === 0) {
             grid.innerHTML = '<p class="col-span-full text-center text-gray-500 text-sm py-10">Aucun résultat trouvé.</p>';
         }
+        observeLazyImages();
     }   
     
     function getProgress(item) {
@@ -974,8 +1047,8 @@
             else openPreviewModal(media);
         };
     
-        const imgSrc = (media.image && media.image !== 'N/A' && media.image !== 'image_par_defaut.jpg') 
-            ? media.image : 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSzNFY2uiCR89dXMmbtsvSRDxJtnpN8NJFkcNtJIz-kCA&s=10';
+        // Proxy Image Dynamique (WebP/AVIF)
+        const optimizedImgSrc = getOptimizedImageUrl(media.image, 300);
         
         const calcRating = getCalculatedRating(media);
         const ratingDisplay = calcRating > 0 ? calcRating.toFixed(1) : 'N/A';
@@ -1014,7 +1087,7 @@
     
         div.innerHTML = `
             <div class="relative w-full">
-                <img src="${imgSrc}" class="media-poster bg-gray-900" loading="lazy" />
+                <img data-src="${optimizedImgSrc}" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null; this.src='${media.image}';" class="media-poster bg-gray-900 lazy-image" />
                 ${ratingOverlay}
                 ${yearOverlay}
                 ${removeBtn}
@@ -1138,7 +1211,11 @@
         document.getElementById('modalTitle').textContent = media.title_fr || media.title;
         
         const posterEl = document.getElementById('modalPoster');
-        posterEl.src = (media.image && media.image !== 'N/A' && media.image !== 'image_par_defaut.jpg') ? media.image : 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSzNFY2uiCR89dXMmbtsvSRDxJtnpN8NJFkcNtJIz-kCA&s=10';
+        // Application du format WebP pour l'image HD de la modale
+        const hdImg = getOptimizedImageUrl(media.image, 600);
+        posterEl.src = hdImg;
+        posterEl.onerror = () => { posterEl.src = media.image; }; // Fallback natif
+
         if(posterEl.classList.contains('fixed')) togglePosterSize(posterEl);
 
         document.getElementById('modalSummary').textContent = media.summary || 'Aucun résumé.';
@@ -1435,14 +1512,18 @@
                 s.genres?.forEach(g => { if(bGenres.includes(g)) sharedGenres++; });
                 score += (sharedGenres * 4); 
 
-                // Boost des plateformes préférées dans les suggestions
+                // Boost des plateformes
                 if (preferredPlatforms.includes(s.network?.name)) score += 10;
                 if (s.network?.name === baseMedia?.network && baseMedia?.network) score += 3;
                 
                 score += (s.rating?.average||0); 
                 
-                return { show: s, score };
-            }).filter(i => i.score > 3).sort((a,b) => b.score - a.score).map(i => normalizeShow(i.show));
+                // Moteur Match %
+                // Score Max théorique pondéré autour de 55. Ramené sur une échelle réaliste de 40 à 99%.
+                let matchPercent = Math.min(99, Math.max(30, Math.round((score / 50) * 100)));
+                
+                return { show: s, score, matchPercent };
+            }).filter(i => i.score > 3).sort((a,b) => b.score - a.score).map(i => ({ ...normalizeShow(i.show), matchPercent: i.matchPercent }));
             
             modalSuggestionsPage = 1;
             appendSuggestions();
@@ -1457,12 +1538,15 @@
             const div = document.createElement('div');
             div.className = 'bg-gray-900 border border-gray-700 p-2 rounded-xl flex gap-3 items-center';
             const displayTitle = n.title_fr || n.title;
+            const optimizedThumb = getOptimizedImageUrl(n.image, 100);
+            
             div.innerHTML = `
-                <img onclick="closeModal(); openPreviewModal(${JSON.stringify(n).replace(/"/g, '&quot;')})" src="${n.image || 'https://placehold.co/40x60'}" class="w-12 h-16 object-cover rounded border border-gray-800 cursor-pointer" />
+                <img data-src="${optimizedThumb}" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null; this.src='${n.image}';" onclick="closeModal(); openPreviewModal(${JSON.stringify(n).replace(/"/g, '&quot;')})" class="w-12 h-16 object-cover rounded border border-gray-800 cursor-pointer lazy-image" />
                 <div class="flex-1 min-w-0" onclick="closeModal(); openPreviewModal(${JSON.stringify(n).replace(/"/g, '&quot;')})">
                     <h4 class="text-xs font-bold text-white truncate cursor-pointer">${displayTitle}</h4>
-                    <div class="flex items-center gap-1.5 mt-1">
+                    <div class="flex flex-col items-start gap-1 mt-1">
                         <span class="text-[9px] text-gray-400 border border-gray-700 px-1 rounded">${n.premiered}</span>
+                        <span class="text-[9px] font-black text-pink-400 bg-pink-900/40 px-1.5 py-0.5 rounded border border-pink-700/50 shadow-sm mt-0.5">Match ${n.matchPercent}%</span>
                     </div>
                 </div>
                 <div class="flex flex-col gap-1 w-24">
@@ -1471,6 +1555,7 @@
             `;
             list.appendChild(div);
         });
+        observeLazyImages();
     }
 
     function setCalFilter(f) {
@@ -1478,7 +1563,7 @@
         ['all','today','week','month'].forEach(id => {
             document.getElementById(`cal-${id}`).className = id === f ? 'shrink-0 text-[11px] px-3 py-1.5 rounded-lg font-bold bg-teal-600 text-white' : 'shrink-0 text-[11px] px-3 py-1.5 rounded-lg font-bold bg-gray-800 text-gray-400 border border-gray-700';
         });
-        document.getElementById(`cal-${id}`).className = id === f ? 'shrink-0 text-[11px] px-3 py-1.5 rounded-lg font-bold bg-teal-600 text-white' : 'shrink-0 text-[11px] px-3 py-1.5 rounded-lg font-bold bg-gray-800 text-gray-400 border border-gray-700';
+        renderCalendarTab();
     }
 
     function renderCalendarTab() {
@@ -1522,10 +1607,12 @@
                 const calcR = getCalculatedRating(mediaObj);
                 const rating = calcR > 0 ? `★ ${calcR.toFixed(1)}` : 'N/A';
                 const platform = mediaObj?.network || '';
+                
+                const optImg = getOptimizedImageUrl(ep.showImage, 150);
 
                 container.innerHTML += `
                 <div onclick="openLibraryModal('${ep.mediaId}')" class="bg-gray-800 border border-gray-700 p-3 rounded-xl flex gap-3 items-center cursor-pointer hover:border-teal-500 transition shadow relative">
-                    <img src="${ep.showImage}" class="w-10 h-14 object-cover rounded-lg shrink-0 bg-gray-900" />
+                    <img data-src="${optImg}" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null; this.src='${ep.showImage}';" class="w-10 h-14 object-cover rounded-lg shrink-0 bg-gray-900 lazy-image" />
                     <div class="flex-1 min-w-0">
                         <div class="text-[9px] font-black text-teal-400 truncate">${ep.showTitle}</div>
                         <h4 class="font-bold text-white text-xs truncate mt-0.5">${subTxt}</h4>
@@ -1537,6 +1624,7 @@
                 </div>`;
             });
         });
+        observeLazyImages();
     }
 
     function formatDurationProfile(totalMin) {
@@ -1553,7 +1641,6 @@
     }
 
     function renderAdminPlatforms() {
-        // Comptage de la popularité de chaque plateforme présente dans la bibliothèque
         const counts = {};
         library.forEach(i => {
             if (i.network && i.network !== 'Inconnu') {
@@ -1561,7 +1648,6 @@
             }
         });
         
-        // Extraction et tri des plateformes : les plus utilisées d'abord
         const platforms = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
         
         const container = document.getElementById('adminPlatformList');
