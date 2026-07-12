@@ -126,11 +126,11 @@
         
         <div class="flex gap-2 overflow-x-auto pb-1 hide-scroll">
             <select id="librarySortFilter" onchange="renderLibrary()" class="bg-gray-800 border border-gray-700 rounded-lg text-[10px] px-2 py-1 text-gray-300 shrink-0">
-                <option value="prog_desc" selected>Avancée (Max ➔ Min)</option>
+                <option value="date_desc" selected>Dernière activité</option>
+                <option value="prog_desc">Avancée (Max ➔ Min)</option>
                 <option value="prog_asc">Avancée (Min ➔ Max)</option>
                 <option value="title_asc">Titre (A ➔ Z)</option>
                 <option value="title_desc">Titre (Z ➔ A)</option>
-                <option value="date_desc">Ajout (Plus récent)</option>
                 <option value="date_asc">Ajout (Plus ancien)</option>
                 <option value="rating_desc">Note (Meilleure)</option>
                 <option value="rating_asc">Note (Moins bonne)</option>
@@ -705,7 +705,7 @@
         document.getElementById('libraryDiffusionFilter').value = 'all';
         document.getElementById('smartGenreFilter').value = 'all';
         document.getElementById('smartNetworkFilter').value = 'all';
-        document.getElementById('librarySortFilter').value = 'prog_desc';
+        document.getElementById('librarySortFilter').value = 'date_desc';
         clearGlobalFilter();
     }
 
@@ -778,7 +778,17 @@
         filtered.sort((a, b) => {
             if (sortVal === 'title_asc') return (a.title || '').localeCompare(b.title || '');
             if (sortVal === 'title_desc') return (b.title || '').localeCompare(a.title || '');
-            if (sortVal === 'date_desc') return (b.addedAt || b.last_modified || 0) - (a.addedAt || a.last_modified || 0);
+            if (sortVal === 'date_desc') {
+            const dateA = a.last_modified || a.addedAt || 0;
+            const dateB = b.last_modified || b.addedAt || 0;
+            if (dateA !== dateB) return dateB - dateA;
+            const progA = getProgress(a);
+            const progB = getProgress(b);
+            if (progA !== progB) return progB - progA;
+            const weightA = ((a.type || 'series') === 'series' ? 1 : 2);
+            const weightB = ((b.type || 'series') === 'series' ? 1 : 2);
+            return weightA - weightB;
+        }
             if (sortVal === 'date_asc') return (a.addedAt || a.last_modified || 0) - (b.addedAt || b.last_modified || 0);
             if (sortVal === 'rating_desc') return getCalculatedRating(b) - getCalculatedRating(a);
             if (sortVal === 'rating_asc') return getCalculatedRating(a) - getCalculatedRating(b);
@@ -853,6 +863,7 @@
     function createMediaCard(media, isLib = false) {
         const isAnime = media.genres?.includes('Anime') || media.genres?.includes('Animation');
         const bgColorClass = media.type === 'movie' ? 'bg-amber-900/60' : (isAnime ? 'bg-purple-900/60' : 'bg-teal-900/60');
+        const barColorClass = media.type === 'movie' ? 'bg-amber-500' : (isAnime ? 'bg-purple-500' : 'bg-teal-500');
         
         const div = document.createElement('div');
         div.className = 'bg-gray-800 rounded-xl border border-gray-700 overflow-hidden cursor-pointer shadow-sm relative flex flex-col hover:border-gray-500 transition-colors';
@@ -895,6 +906,12 @@
         }
         
         const displayTitle = media.title_fr || media.title || 'Inconnu';
+        
+        let progressBarHtml = '';
+        if (isLib) {
+            const prog = getProgress(media);
+            progressBarHtml = `<div class="w-full h-1 bg-gray-900/80 rounded-full overflow-hidden mb-1.5 shadow-inner"><div class="h-full ${barColorClass} transition-all duration-500" style="width: ${prog}%"></div></div>`;
+        }
     
         div.innerHTML = `
             <div class="relative w-full">
@@ -905,6 +922,7 @@
                 ${libOverlay}
             </div>
             <div class="p-2 flex-1 flex flex-col ${isLib ? bgColorClass : 'bg-gray-800'}">
+                ${progressBarHtml}
                 <h3 class="font-bold text-white text-[11px] truncate leading-tight" title="${displayTitle}">${displayTitle}</h3>
                 ${!isLib ? `<div class="mt-auto pt-1" id="actions-${media.id}">${buildCardActionsHTML(media)}</div>` : ''}
             </div>
@@ -1689,6 +1707,12 @@
     }
 
     window.addEventListener('focus', () => loadFromCloud());
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            loadFromCloud();
+        }
+    });
 
     function toggleMovixManager() {
         const section = document.getElementById('movixManagerSection');
