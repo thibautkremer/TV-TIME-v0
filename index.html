@@ -29,7 +29,7 @@
             🍿 TV TIME <span class="text-white text-xs px-2 py-0.5 bg-teal-600 rounded">REBORN</span>
         </h1>
         <div class="flex items-center gap-2">
-            <button onclick="forceSync()" id="cloudStatus" class="cursor-pointer text-[10px] px-2 py-0.5 bg-gray-900 text-gray-400 rounded-full font-bold transition-colors shadow">○ Local</button>
+            <button onclick="forceSync()" id="cloudStatus" class="cursor-pointer text-[10px] px-2 py-0.5 bg-gray-900 text-gray-400 rounded-full font-bold transition-colors shadow border border-gray-700">○ Local</button>
             <span id="libCount" class="text-[10px] px-2 py-0.5 bg-teal-950 text-teal-400 rounded-full font-bold border border-teal-900/50 hidden">0</span>
         </div>
     </div>
@@ -98,7 +98,6 @@
 
     <!-- TAB: LIBRARY -->
     <div id="tab-library" class="space-y-3">
-        <!-- Bandeau Filtre Global Actif -->
         <div id="globalFilterActive" class="hidden bg-indigo-900/50 border border-indigo-700 text-indigo-200 px-3 py-2 rounded-lg text-xs flex justify-between items-center mb-1">
             <span id="globalFilterText" class="font-bold"></span>
             <button onclick="clearGlobalFilter()" class="font-bold bg-indigo-700 hover:bg-indigo-600 px-2 py-1 rounded text-white transition">✕ Effacer</button>
@@ -231,6 +230,18 @@
                 <button onclick="clearAll()" class="col-span-2 bg-gray-800 hover:bg-red-950 border border-red-900/40 text-red-400 text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow flex justify-center items-center gap-2">
                     <span>🗑 Vider Cache Local</span>
                 </button>
+
+                <!-- Préférences de plateformes -->
+                <div class="col-span-2 bg-gray-900 p-3 rounded-xl border border-gray-700 mt-2">
+                    <h4 class="text-xs font-bold text-teal-400 mb-2">⭐ Plateformes préférées (Boost recherche)</h4>
+                    <div id="adminPlatformList" class="flex flex-wrap gap-2"></div>
+                    <button onclick="savePlatformPrefs()" class="w-full mt-3 bg-teal-600 hover:bg-teal-500 text-white text-[10px] font-bold py-2 rounded-lg transition">💾 Enregistrer Préférences</button>
+                </div>
+
+                <!-- Notifications -->
+                <button onclick="requestNotificationPermission()" class="col-span-2 bg-yellow-600 hover:bg-yellow-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition flex justify-center items-center gap-2">
+                    <span>🔔 Activer Notifications de Sortie</span>
+                </button>
             </div>
         </div>
 
@@ -313,8 +324,11 @@
                 </div>
 
                 <div id="modalSeasonSelectionRow" class="space-y-2 mt-2">
-                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Saisons</h3>
-                    <div id="modalSeasonTabs" class="flex gap-1.5 overflow-x-auto pb-1 hide-scroll"></div>
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Saisons</h3>
+                        <button id="modalSeasonSummaryBtn" class="hidden text-[10px] bg-red-600 hover:bg-red-500 text-white font-bold px-2 py-1 rounded shadow flex items-center gap-1 transition">▶️ Résumé YT</button>
+                    </div>
+                    <div id="modalSeasonTabs" class="flex gap-1.5 overflow-x-auto pb-1 hide-scroll mt-1"></div>
                 </div>
                 
                 <div class="relative h-12 bg-gray-900 rounded-lg border border-gray-700">
@@ -356,11 +370,13 @@
     const localUserId = 'tvr_master_user_2026';
 
     let library = JSON.parse(localStorage.getItem('personal_tracker_db')) || [];
+    let preferredPlatforms = JSON.parse(localStorage.getItem('preferred_platforms') || '[]');
+    
     let currentMediaType = 'series', searchResults = [];
     let showsCache = [];
     let activeModalMediaIndex = null, modalMode = 'preview', previewEpisodes = [];
     let calFilter = 'all';
-    let currentSeriesAvgRating = 7.0; // Fallback = moyenne réelle de la série (calculée dynamiquement), 7.0 uniquement si aucune note n'existe du tout
+    let currentSeriesAvgRating = 7.0; 
     
     let currentDiscoverMode = 'mix';
     let discoverMediaType = 'series'; 
@@ -375,12 +391,9 @@
     let modalSuggestionsPage = 1;
     let currentModalMediaId = null; 
 
-    // Filtre global depuis le profil
     window.activeGlobalFilter = null;
-
     const seasonColors = ['bg-teal-500', 'bg-cyan-500', 'bg-emerald-500', 'bg-teal-400', 'bg-cyan-400', 'bg-emerald-400', 'bg-teal-600', 'bg-cyan-600'];
 
-    // Observers pour le scroll infini
     const searchObserver = new IntersectionObserver(entries => {
         if (entries[0].isIntersecting && searchPage * PAGE_SIZE < searchResults.length) { 
             searchPage++; renderSearchGrid(false); 
@@ -399,38 +412,88 @@
         }
     });
     
+    // Mode Offline Handling
+    window.addEventListener('online', () => loadFromCloud());
+    window.addEventListener('offline', updateOfflineStatus);
+    
+    function updateOfflineStatus() {
+        const statusEl = document.getElementById('cloudStatus');
+        statusEl.textContent = '🔴 Hors-ligne';
+        statusEl.className = 'cursor-pointer text-[10px] px-2 py-0.5 bg-red-900 text-red-400 rounded-full font-bold shadow border border-red-900/50';
+    }
+
+    // Push Notifications Logic
+    function requestNotificationPermission() {
+        if ("Notification" in window) {
+            Notification.requestPermission().then(permission => {
+                if (permission === "granted") {
+                    alert("Notifications activées !");
+                    checkDailyNotifications();
+                } else {
+                    alert("Permission refusée.");
+                }
+            });
+        } else {
+            alert("Les notifications ne sont pas supportées par ce navigateur.");
+        }
+    }
+
+    function checkDailyNotifications() {
+        if (!("Notification" in window) || Notification.permission !== "granted") return;
+        const notified = JSON.parse(localStorage.getItem('notified_items_v2') || '[]');
+        let newNotifications = [];
+
+        library.forEach(item => {
+            if (item.type === 'movie' && item.premiered === todayString && item.status !== 'Watched') {
+                const nid = `movie-${item.id}-${todayString}`;
+                if (!notified.includes(nid)) {
+                    newNotifications.push({ title: "Sortie Film 🍿", body: `${item.title_fr || item.title} sort aujourd'hui !`, id: nid });
+                }
+            } else if (item.type === 'series') {
+                (item.episodes || []).forEach(ep => {
+                    if (ep.airdate === todayString && !ep.watched) {
+                        const nid = `ep-${item.id}-${ep.season}-${ep.number}`;
+                        if (!notified.includes(nid)) {
+                            newNotifications.push({ title: "Nouvel Épisode 📺", body: `${item.title_fr || item.title} S${ep.season}E${ep.number} est disponible !`, id: nid });
+                        }
+                    }
+                });
+            }
+        });
+
+        if (newNotifications.length > 0) {
+            newNotifications.forEach(n => {
+                try { new Notification(n.title, { body: n.body }); } catch(e){}
+                notified.push(n.id);
+            });
+            localStorage.setItem('notified_items_v2', JSON.stringify(notified));
+        }
+    }
+
     window.addEventListener('DOMContentLoaded', () => {
         deduplicateLibrary();
         updateHeaderCount();
         preloadShowsCache();
         
         loadFromCloud(); 
+        checkDailyNotifications(); // Check notifications on load
         
         const sSentinel = document.getElementById('searchSentinel');
         if (sSentinel) searchObserver.observe(sSentinel);
         const dSentinel = document.getElementById('discoverSentinel');
         if (dSentinel) discoverObserver.observe(dSentinel);
 
-        // Ouvre Suivi par défaut
         switchTab('library');
     });
 
-    // --- GESTURES SMARTPHONE ---
-    let touchstartX = 0;
-    let touchendX = 0;
+    let touchstartX = 0; let touchendX = 0;
     const modalEl = document.getElementById('mediaModal');
-    modalEl.addEventListener('touchstart', e => { 
-        touchstartX = e.changedTouches[0].screenX; 
-    }, {passive: true});
+    modalEl.addEventListener('touchstart', e => { touchstartX = e.changedTouches[0].screenX; }, {passive: true});
     modalEl.addEventListener('touchend', e => {
         touchendX = e.changedTouches[0].screenX;
-        // Si swipe vers la droite > 100px
-        if (touchendX - touchstartX > 100) {
-            if(!modalEl.classList.contains('hidden')) closeModal();
-        }
+        if (touchendX - touchstartX > 100) { if(!modalEl.classList.contains('hidden')) closeModal(); }
     }, {passive: true});
 
-    // Zoom Affiche
     function togglePosterSize(img) {
         if(img.classList.contains('fixed')) {
             img.className = 'w-20 h-28 object-cover rounded border border-gray-700 shrink-0 cursor-pointer transition-all duration-300 z-50';
@@ -456,8 +519,6 @@
         return (media.rating && !isNaN(media.rating) && media.rating > 0) ? parseFloat(media.rating) : 0;
     }
 
-    // NOUVEAU : moyenne réelle des notes d'épisodes d'une série (ignore les épisodes sans note)
-    // Utilisée comme valeur de repli pour les épisodes non notés, à la place d'un 7.0 fixe.
     function computeAvgEpisodeRating(eps) {
         const valid = (eps || []).map(e => {
             const v = (typeof e.rating === 'object' && e.rating !== null) ? (e.rating.average || 0) : (parseFloat(e.rating) || 0);
@@ -467,8 +528,6 @@
         return parseFloat((valid.reduce((a, b) => a + b, 0) / valid.length).toFixed(1));
     }
 
-    // NOUVEAU : enrichit un item issu d'OMDb (recherche "s=") avec sa vraie note/genres/résumé
-    // via une fiche complète OMDb ("i="), car l'endpoint de recherche OMDb ne renvoie jamais de note.
     async function enrichOmdbItem(item) {
         try {
             const res = await fetch(`${OMDB_API}&i=${item.apiId}&plot=short`).then(r => r.json());
@@ -489,7 +548,6 @@
         return items;
     }
 
-    // --- UTILS BASE LOCALE & CLOUD ---
     function deduplicateLibrary() {
         const unique = [];
         const seen = new Set();
@@ -506,9 +564,7 @@
         try {
             const cache = library.slice(0, 50); 
             localStorage.setItem('personal_tracker_db', JSON.stringify(cache));
-        } catch (e) {
-            console.warn("Cache local complet, seule la synchro Cloud est active.");
-        }
+        } catch (e) { console.warn("Cache local complet, seule la synchro Cloud est active."); }
         updateHeaderCount();
         if (syncItem && typeof supabaseClient !== 'undefined') {
             try {
@@ -520,6 +576,7 @@
     }
     
     async function loadFromCloud() {
+        if (!navigator.onLine) { updateOfflineStatus(); return; }
         const statusEl = document.getElementById('cloudStatus');
         statusEl.textContent = '⏳ Check...';
         try {
@@ -559,7 +616,6 @@
         if (name === 'calendar') renderCalendarTab();
     }
 
-    // --- RECHERCHE ---
     function setMediaType(type) {
         currentMediaType = type;
         document.getElementById('btn-series').className = type === 'series' ? 'py-2 text-sm font-bold rounded-lg bg-teal-600 text-white shadow' : 'py-2 text-sm font-bold rounded-lg text-gray-400';
@@ -582,16 +638,13 @@
             const q = query.toLowerCase();
             let results = [];
 
-            // 1. Recherche dans le cache local (plus permissif pour le matching partiel)
             if (showsCache.length === 0) await ensureShowsPool();
             const localMatches = showsCache.filter(s => s.name.toLowerCase().includes(q));
             results = results.concat(localMatches.map(normalizeShow));
 
-            // 2. API TVMaze 
             const tvmazeRes = await fetch(`${TVMAZE_API}/search/shows?q=${encodeURIComponent(query)}`).then(r => r.json()).catch(()=>[]);
             if (Array.isArray(tvmazeRes)) results = results.concat(tvmazeRes.map(i => normalizeShow(i.show)));
             
-            // 3. API OMDB (Films + Séries pour plus de couverture souple)
             const [omdbMovies, omdbSeries] = await Promise.all([
                 fetch(`${OMDB_API}&s=${encodeURIComponent(query)}&type=movie`).then(r => r.json()).catch(()=>({Search:[]})),
                 fetch(`${OMDB_API}&s=${encodeURIComponent(query)}&type=series`).then(r => r.json()).catch(()=>({Search:[]}))
@@ -606,19 +659,20 @@
                 image: m.Poster !== 'N/A' ? m.Poster : '', rating: 0, genres: [], premiered: m.Year, runtime: 45, summary: ''
             })) : [];
 
-            // NOUVEAU : la recherche OMDb ("s=") ne fournit jamais de note.
-            // On va chercher la vraie note (et le résumé/genres/durée) via la fiche complète ("i=")
-            // pour que l'affiche affiche une vraie note dès la recherche, sans attendre le clic.
             await Promise.all([enrichOmdbList(omdbMovieItems), enrichOmdbList(omdbSeriesItems)]);
-
             results = results.concat(omdbMovieItems, omdbSeriesItems);
             
-            // DÉDUPLICATION PAR ID ET PAR TITRE (Empêche les doublons TVMaze vs OMDb)
             searchResults = results.filter((v,i,a) => a.findIndex(t => 
                 (t.id === v.id) || (t.title && v.title && t.title.toLowerCase() === v.title.toLowerCase() && t.type === v.type)
             ) === i);
             
-            searchResults.sort((a,b) => (b.rating || 0) - (a.rating || 0));
+            // Tri: Préférence plateforme d'abord, puis par note
+            searchResults.sort((a,b) => {
+                const aPref = preferredPlatforms.includes(a.network) ? 1 : 0;
+                const bPref = preferredPlatforms.includes(b.network) ? 1 : 0;
+                if (bPref !== aPref) return bPref - aPref;
+                return (b.rating || 0) - (a.rating || 0);
+            });
 
             resetAndDisplaySearch();
         } catch(e) {}
@@ -651,7 +705,6 @@
         slice.forEach(m => container.appendChild(createMediaCard(m, false)));
     }
 
-    // --- DECOUVERTE ---
     async function ensureShowsPool() {
         if (showsCache.length > 0) return;
         const res = await fetch(`${TVMAZE_API}/shows?page=0`);
@@ -711,11 +764,20 @@
                     image: m.Poster !== 'N/A' ? m.Poster : '', rating: 0, premiered: m.Year
                 })).filter(v => !libIds.has(v.id)).sort(() => 0.5 - Math.random());
 
-            // NOUVEAU : même enrichissement que pour la recherche, pour avoir de vraies notes en Découverte
             await enrichOmdbList(uniqueMovies);
             discoverResults = uniqueMovies;
         }
+        
         discoverResults = discoverResults.filter((v,i,a)=>a.findIndex(t=>(t.id===v.id))===i);
+
+        // Tri par plateforme préférée
+        discoverResults.sort((a,b) => {
+            const aPref = preferredPlatforms.includes(a.network) ? 1 : 0;
+            const bPref = preferredPlatforms.includes(b.network) ? 1 : 0;
+            if (bPref !== aPref) return bPref - aPref;
+            return 0; // Garde l'ordre (mix, top, ou random précédent)
+        });
+
         discoverPage = 1; renderDiscoverGrid(true);
     }
 
@@ -727,7 +789,6 @@
         discoverResults.slice(start, limit).forEach(m => container.appendChild(createMediaCard(m, false)));
     }
 
-    // --- FILTRE GLOBAL & RESET ---
     function applyGlobalFilter(type, value) {
         window.activeGlobalFilter = { type, value };
         switchTab('library');
@@ -750,7 +811,6 @@
         clearGlobalFilter();
     }
 
-    // --- SUIVIS (LIBRARY) ---
     function renderLibrary() {
         const grid = document.getElementById('libraryGrid');
         const filterIndicator = document.getElementById('globalFilterActive');
@@ -866,16 +926,15 @@
         return Math.round((watched / item.episodes.length) * 100);
     }
 
-    // --- CARTES MEDIAS ---
-    
-    // NOUVEAU: Détecte si un média est dans la lib par ID ou par TITRE (évite les doublons API)
     function isMediaInLibrary(media) {
         return library.find(i => i.id === media.id || (i.title && media.title && i.title.toLowerCase() === media.title.toLowerCase() && i.type === media.type));
     }
 
+    // Gestion visuelle des doublons (Désactive les boutons dans Search/Discover)
     function buildCardActionsHTML(media) {
         const libItem = isMediaInLibrary(media);
-        if (libItem) return `<button onclick="event.stopPropagation(); handleRemove('${libItem.id}')" class="w-full text-center text-[10px] bg-gray-900 hover:bg-gray-800 text-gray-500 hover:text-red-400 border border-gray-700 py-1.5 rounded transition shadow-sm">✕ Retirer</button>`;
+        if (libItem) return `<div class="w-full text-center text-[10px] bg-emerald-900/50 text-emerald-400 border border-emerald-900 py-1.5 rounded shadow-sm font-bold">✓ Dans ma liste</div>`;
+        
         return `
         <div class="flex gap-1.5 w-full">
             <button onclick="event.stopPropagation(); handleQuickAdd(this.parentElement.parentElement, '${media.id}', false)" class="flex-1 text-center text-[10px] bg-teal-600 hover:bg-teal-500 text-white font-bold py-1.5 rounded transition shadow-sm">+ Voir</button>
@@ -929,7 +988,7 @@
             yearOverlay = `<div class="absolute top-1 right-1 bg-gray-900/80 text-gray-400 text-[10px] font-bold px-1.5 py-0.5 rounded z-10 border border-gray-700">${year}</div>`;
         }
 
-        const removeBtn = isLib ? `<button onclick="handleRemove('${media.id}')" class="absolute top-1 right-1 bg-black/70 text-red-500 text-[10px] font-black px-1.5 py-0.5 rounded z-10 border border-gray-800 hover:bg-red-900">✕</button>` : '';
+        const removeBtn = isLib ? `<button onclick="event.stopPropagation(); handleRemove('${media.id}')" class="absolute top-1 right-1 bg-black/70 text-red-500 text-[10px] font-black px-1.5 py-0.5 rounded z-10 border border-gray-800 hover:bg-red-900">✕</button>` : '';
     
         let libOverlay = '';
         if (isLib) {
@@ -1005,7 +1064,6 @@
         let media = searchResults.find(r => r.id === mediaId) || discoverResults.find(r => r.id === mediaId);
         if(!media) return;
 
-        // RESOLUTION OMDb vers TVMaze à la volée avant ajout
         if (media.type === 'series' && String(media.apiId).startsWith('tt')) {
             try {
                 const lookup = await fetch(`${TVMAZE_API}/lookup/shows?imdb=${media.apiId}`);
@@ -1022,7 +1080,6 @@
             } catch(e) {}
         }
         
-        // Résolution OMDB Film complet si nécessaire
         if (media.type === 'movie' && String(media.apiId).startsWith('tt') && !media.summary) {
             try {
                 const omdbFull = await fetch(`${OMDB_API}&i=${media.apiId}&plot=short`).then(r=>r.json());
@@ -1036,30 +1093,34 @@
             } catch(e) {}
         }
 
-        // On vérifie une dernière fois si ce n'est pas déjà dans la base après résolution ID
         if (isMediaInLibrary(media)) return;
 
         let episodes = [];
+        let avgRating = 0;
         if (media.type === 'series') {
             try {
                 const res = await fetch(`${TVMAZE_API}/shows/${media.apiId}/episodes`);
                 const apiEps = await res.json();
+                let sumR = 0, countR = 0;
                 episodes = apiEps.map(apiEp => {
                     const isReleased = apiEp.airdate && apiEp.airdate <= todayString;
+                    const r = apiEp.rating?.average || 0;
+                    if(r > 0) { sumR += r; countR++; }
                     return {
                         id: apiEp.id, season: apiEp.season, number: apiEp.number, name: apiEp.name,
-                        airdate: apiEp.airdate, runtime: apiEp.runtime, rating: apiEp.rating?.average||0, watched: watched && isReleased
+                        airdate: apiEp.airdate, runtime: apiEp.runtime, rating: r, watched: watched && isReleased
                     };
                 });
+                avgRating = countR > 0 ? sumR / countR : 0;
             } catch(e) {}
         }
         
-        const newItem = { ...media, episodes, status: watched ? 'Watched' : 'In Progress', addedAt: Date.now(), last_modified: Date.now() };
+        const finalRating = (media.rating && media.rating > 0) ? media.rating : avgRating;
+        const newItem = { ...media, episodes, rating: finalRating, status: watched ? 'Watched' : 'In Progress', addedAt: Date.now(), last_modified: Date.now() };
         library.push(newItem);
         saveLocalDB(newItem);
     }
 
-    // --- MODALES ---
     function normalizeShow(show) {
         let st = show.status || 'Running';
         if (show.summary && /cancel/i.test(show.summary)) st = 'Canceled';
@@ -1112,7 +1173,6 @@
     async function openPreviewModal(media) {
         modalMode = 'preview'; activeModalMediaIndex = null;
         
-        // --- RECUPERATION DONNEES MANQUANTES ---
         if (media.type === 'series' && String(media.apiId).startsWith('tt')) {
             try {
                 const lookup = await fetch(`${TVMAZE_API}/lookup/shows?imdb=${media.apiId}`);
@@ -1224,7 +1284,6 @@
         if(posterEl.classList.contains('fixed')) togglePosterSize(posterEl);
     }
 
-    // --- GRAPHIQUES ---
     function renderGlobalGraph(eps) {
         const container = document.getElementById('modalGlobalGraph');
         container.innerHTML = '';
@@ -1249,7 +1308,6 @@
         });
     }
 
-    // --- SAISONS & EPISODES ---
     function buildSeasonTabs(episodes, isLib) {
         const seasons = [...new Set(episodes.map(e => e.season))];
         const tabs = document.getElementById('modalSeasonTabs');
@@ -1263,6 +1321,18 @@
             else targetSeason = seasons[seasons.length - 1]; 
         }
 
+        const summaryBtn = document.getElementById('modalSeasonSummaryBtn');
+        if (seasons.length > 0) summaryBtn.classList.remove('hidden');
+        else summaryBtn.classList.add('hidden');
+
+        function updateSummaryBtn(season) {
+            summaryBtn.onclick = () => {
+                const title = document.getElementById('modalTitle').textContent;
+                const query = `${title} saison ${season} résumé complet FR`;
+                window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, '_blank');
+            };
+        }
+
         seasons.forEach((s) => {
             const btn = document.createElement('button');
             const colorClass = seasonColors[(s - 1) % seasonColors.length] || 'bg-teal-600';
@@ -1273,10 +1343,15 @@
                 Array.from(tabs.children).forEach(b=>b.className = 'px-3 py-1 text-xs font-bold rounded-lg shrink-0 bg-gray-700 text-gray-300');
                 e.target.className = `px-3 py-1 text-xs font-bold rounded-lg shrink-0 ${colorClass} text-white`;
                 renderEpisodes(episodes.filter(ep => ep.season === s), isLib);
+                updateSummaryBtn(s);
             };
             tabs.appendChild(btn);
         });
-        if (seasons.length > 0) renderEpisodes(episodes.filter(ep => ep.season === targetSeason), isLib);
+        
+        if (seasons.length > 0) {
+            renderEpisodes(episodes.filter(ep => ep.season === targetSeason), isLib);
+            updateSummaryBtn(targetSeason);
+        }
     }
 
     function renderEpisodes(eps, isLib) {
@@ -1326,7 +1401,6 @@
         if(!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
     }
 
-    // --- SUGGESTIONS ---
     document.getElementById('modalViewSuggestionsBtn').onclick = () => {
         const block = document.getElementById('modalSuggestionsBlock');
         if(block.classList.contains('hidden')) {
@@ -1362,7 +1436,10 @@
                 s.genres?.forEach(g => { if(bGenres.includes(g)) sharedGenres++; });
                 score += (sharedGenres * 4); 
 
+                // Boost des plateformes préférées dans les suggestions
+                if (preferredPlatforms.includes(s.network?.name)) score += 10;
                 if (s.network?.name === baseMedia?.network && baseMedia?.network) score += 3;
+                
                 score += (s.rating?.average||0); 
                 
                 return { show: s, score };
@@ -1397,7 +1474,6 @@
         });
     }
 
-    // --- CALENDRIER ---
     function setCalFilter(f) {
         calFilter = f;
         ['all','today','week','month'].forEach(id => {
@@ -1464,7 +1540,6 @@
         });
     }
 
-    // --- PROFIL & IMPORT ---
     function formatDurationProfile(totalMin) {
         if (isNaN(totalMin) || totalMin <= 0) return '0 h';
         let r = Math.max(0, Math.round(totalMin));
@@ -1478,7 +1553,31 @@
         return p.join(' ');
     }
 
+    function renderAdminPlatforms() {
+        const platforms = [...new Set(library.map(i => i.network).filter(n => n && n !== 'Inconnu'))].sort();
+        const container = document.getElementById('adminPlatformList');
+        container.innerHTML = platforms.map(p => {
+            const isSelected = preferredPlatforms.includes(p);
+            const activeClass = "flex items-center gap-1 cursor-pointer text-xs bg-gray-800 px-2 py-1 rounded border border-teal-500 text-teal-400";
+            const inactiveClass = "flex items-center gap-1 cursor-pointer text-xs bg-gray-800 px-2 py-1 rounded border border-gray-700 text-gray-400";
+            return `
+                <label class="${isSelected ? activeClass : inactiveClass}">
+                    <input type="checkbox" value="${p}" class="hidden pref-platform-checkbox" ${isSelected ? 'checked' : ''} onchange="this.parentElement.className = this.checked ? '${activeClass}' : '${inactiveClass}'">
+                    ${p}
+                </label>`;
+        }).join('');
+    }
+
+    function savePlatformPrefs() {
+        const checkboxes = document.querySelectorAll('.pref-platform-checkbox');
+        preferredPlatforms = Array.from(checkboxes).filter(c => c.checked).map(c => c.value);
+        localStorage.setItem('preferred_platforms', JSON.stringify(preferredPlatforms));
+        alert('Préférences de plateformes enregistrées ! La recherche les mettra désormais en avant.');
+    }
+
     function renderProfile() {
+        renderAdminPlatforms(); // Met à jour la liste des plateformes dans l'admin
+        
         const series = library.filter(i => i.type === 'series' && !(i.genres || []).includes('Anime') && !(i.genres || []).includes('Animation'));
         const animes = library.filter(i => (i.genres || []).includes('Anime') || (i.genres || []).includes('Animation'));
         const movies = library.filter(i => i.type === 'movie');
@@ -1538,7 +1637,6 @@
             <div class="text-xs font-bold text-amber-400">${movies.length > 0 ? Math.round((mFinished/movies.length)*100) : 0}%</div>
             <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Films vus</div>`;
     
-        // Barres interactives (Filtre Global)
         const gc = {}; library.forEach(i => (i.genres || []).forEach(g => gc[g] = (gc[g] || 0) + 1));
         const sortedGenres = Object.entries(gc).sort((a, b) => b[1] - a[1]);
         const maxG = sortedGenres.length > 0 ? sortedGenres[0][1] : 1;
@@ -1607,7 +1705,6 @@
                 let data = null;
 
                 if (item.type === 'series' && item.apiId) {
-                    // Update AKA pour titre FR
                     try {
                         const akaRes = await fetch(`https://api.tvmaze.com/shows/${item.apiId}/akas`);
                         if(akaRes.ok) {
@@ -1628,7 +1725,6 @@
                     if (data.image?.medium && item.image !== data.image.medium) { item.image = data.image.medium; changed = true; updates.push("Affiche"); }
                     if (data.summary && item.summary !== data.summary.replace(/<[^>]*>/g, '')) { item.summary = data.summary.replace(/<[^>]*>/g, ''); changed = true; updates.push("Résumé"); }
                     
-                    // Statut & Annulation
                     let newStatus = data.status;
                     if (data.summary && /cancel/i.test(data.summary)) newStatus = 'Canceled';
                     if (newStatus && item.status_production !== newStatus) { item.status_production = newStatus; changed = true; updates.push("Status"); }
@@ -1749,14 +1845,6 @@
         if (!confirm('Vider le cache local ? La sauvegarde Cloud restera intacte.')) return;
         library = []; localStorage.removeItem('personal_tracker_db'); renderLibrary(); renderProfile();
     }
-
-    window.addEventListener('focus', () => loadFromCloud());
-
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-            loadFromCloud();
-        }
-    });
 
     function toggleMovixManager() {
         const section = document.getElementById('movixManagerSection');
