@@ -360,6 +360,7 @@
     let showsCache = [];
     let activeModalMediaIndex = null, modalMode = 'preview', previewEpisodes = [];
     let calFilter = 'all';
+    let currentSeriesAvgRating = 7.0; // Fallback = moyenne réelle de la série (calculée dynamiquement), 7.0 uniquement si aucune note n'existe du tout
     
     let currentDiscoverMode = 'mix';
     let discoverMediaType = 'series'; 
@@ -453,6 +454,39 @@
             if (count > 0) return parseFloat((total / count).toFixed(1));
         }
         return (media.rating && !isNaN(media.rating) && media.rating > 0) ? parseFloat(media.rating) : 0;
+    }
+
+    // NOUVEAU : moyenne réelle des notes d'épisodes d'une série (ignore les épisodes sans note)
+    // Utilisée comme valeur de repli pour les épisodes non notés, à la place d'un 7.0 fixe.
+    function computeAvgEpisodeRating(eps) {
+        const valid = (eps || []).map(e => {
+            const v = (typeof e.rating === 'object' && e.rating !== null) ? (e.rating.average || 0) : (parseFloat(e.rating) || 0);
+            return v;
+        }).filter(r => r > 0);
+        if (valid.length === 0) return 7.0;
+        return parseFloat((valid.reduce((a, b) => a + b, 0) / valid.length).toFixed(1));
+    }
+
+    // NOUVEAU : enrichit un item issu d'OMDb (recherche "s=") avec sa vraie note/genres/résumé
+    // via une fiche complète OMDb ("i="), car l'endpoint de recherche OMDb ne renvoie jamais de note.
+    async function enrichOmdbItem(item) {
+        try {
+            const res = await fetch(`${OMDB_API}&i=${item.apiId}&plot=short`).then(r => r.json());
+            if (res && res.Response === "True") {
+                if (res.imdbRating && res.imdbRating !== 'N/A') item.rating = parseFloat(res.imdbRating) || 0;
+                if (res.Genre && res.Genre !== 'N/A') item.genres = res.Genre.split(',').map(g => g.trim());
+                if (res.Plot && res.Plot !== 'N/A') item.summary = res.Plot;
+                if (res.Runtime && res.Runtime !== 'N/A') { const r = parseInt(res.Runtime); if (r) item.runtime = r; }
+                if (res.Production && res.Production !== 'N/A') item.network = res.Production;
+                if ((!item.image || item.image === '') && res.Poster && res.Poster !== 'N/A') item.image = res.Poster;
+            }
+        } catch (e) {}
+        return item;
+    }
+
+    async function enrichOmdbList(items) {
+        await Promise.all(items.map(item => enrichOmdbItem(item)));
+        return items;
     }
 
     // --- UTILS BASE LOCALE & CLOUD ---
@@ -563,18 +597,21 @@
                 fetch(`${OMDB_API}&s=${encodeURIComponent(query)}&type=series`).then(r => r.json()).catch(()=>({Search:[]}))
             ]);
             
-            if (omdbMovies.Search) {
-                results = results.concat(omdbMovies.Search.map(m => ({
-                    id: `movie-${m.imdbID}`, apiId: m.imdbID, title: m.Title, type: 'movie', 
-                    image: m.Poster !== 'N/A' ? m.Poster : '', rating: 0, genres: [], premiered: m.Year, runtime: 120, summary: ''
-                })));
-            }
-            if (omdbSeries.Search) {
-                results = results.concat(omdbSeries.Search.map(m => ({
-                    id: `series-${m.imdbID}`, apiId: m.imdbID, title: m.Title, type: 'series', 
-                    image: m.Poster !== 'N/A' ? m.Poster : '', rating: 0, genres: [], premiered: m.Year, runtime: 45, summary: ''
-                })));
-            }
+            let omdbMovieItems = omdbMovies.Search ? omdbMovies.Search.map(m => ({
+                id: `movie-${m.imdbID}`, apiId: m.imdbID, title: m.Title, type: 'movie', 
+                image: m.Poster !== 'N/A' ? m.Poster : '', rating: 0, genres: [], premiered: m.Year, runtime: 120, summary: ''
+            })) : [];
+            let omdbSeriesItems = omdbSeries.Search ? omdbSeries.Search.map(m => ({
+                id: `series-${m.imdbID}`, apiId: m.imdbID, title: m.Title, type: 'series', 
+                image: m.Poster !== 'N/A' ? m.Poster : '', rating: 0, genres: [], premiered: m.Year, runtime: 45, summary: ''
+            })) : [];
+
+            // NOUVEAU : la recherche OMDb ("s=") ne fournit jamais de note.
+            // On va chercher la vraie note (et le résumé/genres/durée) via la fiche complète ("i=")
+            // pour que l'affiche affiche une vraie note dès la recherche, sans attendre le clic.
+            await Promise.all([enrichOmdbList(omdbMovieItems), enrichOmdbList(omdbSeriesItems)]);
+
+            results = results.concat(omdbMovieItems, omdbSeriesItems);
             
             // DÉDUPLICATION PAR ID ET PAR TITRE (Empêche les doublons TVMaze vs OMDb)
             searchResults = results.filter((v,i,a) => a.findIndex(t => 
@@ -668,11 +705,15 @@
                     if(data.Search) moviePool = moviePool.concat(data.Search);
                 } catch (e) {}
             }
-            discoverResults = [...new Map(moviePool.map(m => [m.imdbID, m])).values()]
+            let uniqueMovies = [...new Map(moviePool.map(m => [m.imdbID, m])).values()]
                 .map(m => ({
                     id: `movie-${m.imdbID}`, apiId: m.imdbID, title: m.Title, type: 'movie', 
                     image: m.Poster !== 'N/A' ? m.Poster : '', rating: 0, premiered: m.Year
                 })).filter(v => !libIds.has(v.id)).sort(() => 0.5 - Math.random());
+
+            // NOUVEAU : même enrichissement que pour la recherche, pour avoir de vraies notes en Découverte
+            await enrichOmdbList(uniqueMovies);
+            discoverResults = uniqueMovies;
         }
         discoverResults = discoverResults.filter((v,i,a)=>a.findIndex(t=>(t.id===v.id))===i);
         discoverPage = 1; renderDiscoverGrid(true);
@@ -1122,6 +1163,7 @@
                     id: e.id, season: e.season, number: e.number, name: e.name,
                     airdate: e.airdate, rating: e.rating?.average||0, watched: false
                 }));
+                currentSeriesAvgRating = computeAvgEpisodeRating(previewEpisodes);
                 buildSeasonTabs(previewEpisodes, false);
                 renderGlobalGraph(previewEpisodes);
             } catch(e) {}
@@ -1167,6 +1209,7 @@
             document.getElementById('modalProgressContainer').classList.remove('hidden');
             document.getElementById('modalProgressText').textContent = `${prog}%`;
             document.getElementById('modalProgressBar').style.width = `${prog}%`;
+            currentSeriesAvgRating = computeAvgEpisodeRating(item.episodes);
             buildSeasonTabs(item.episodes, true);
             renderGlobalGraph(item.episodes);
         }
@@ -1186,7 +1229,8 @@
         const container = document.getElementById('modalGlobalGraph');
         container.innerHTML = '';
         eps.forEach(ep => {
-            const r = ep.rating || 7.0;
+            const val = (typeof ep.rating === 'object' && ep.rating !== null) ? (ep.rating.average || 0) : (parseFloat(ep.rating) || 0);
+            const r = val > 0 ? val : currentSeriesAvgRating;
             const h = Math.max(10, (r / 10) * 100);
             const colorClass = seasonColors[(ep.season - 1) % seasonColors.length] || 'bg-teal-500';
             container.innerHTML += `<div class="flex-1 min-w-[4px] ${colorClass} hover:opacity-80 rounded-t cursor-pointer relative z-10" style="height: ${h}%" title="S${ep.season}E${ep.number}: ${r}"></div>`;
@@ -1198,7 +1242,7 @@
         container.innerHTML = '';
         eps.forEach(ep => {
             const val = (typeof ep.rating === 'object' && ep.rating !== null) ? (ep.rating.average || 0) : (ep.rating || 0);
-            const r = val > 0 ? val : 7.0; 
+            const r = val > 0 ? val : currentSeriesAvgRating; 
             const h = Math.max(10, (r / 10) * 100);
             const colorClass = seasonColors[(ep.season - 1) % seasonColors.length] || 'bg-cyan-600';
             container.innerHTML += `<div class="flex-1 min-w-[12px] ${colorClass} transition rounded-t cursor-pointer flex flex-col justify-end items-center relative z-10" style="height: ${h}%" title="E${ep.number}: ${r}"><span class="text-[8px] text-white font-bold mb-0.5 opacity-80">${r > 0 ? r : ''}</span></div>`;
