@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TV TIME REBORN</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M30 40 L70 40 L65 90 L35 90 Z' fill='%230D9488'/><path d='M20 40 Q50 10 80 40' fill='%23FBBF24'/><circle cx='40' cy='30' r='10' fill='%23FBBF24'/><circle cx='60' cy='25' r='12' fill='%23FBBF24'/></svg>">
+    <link class="flex items-center gap-1 cursor-pointer text-xs bg-gray-800 px-2 py-1 rounded border border-teal-500 text-teal-400" icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M30 40 L70 40 L65 90 L35 90 Z' fill='%230D9488'/><path d='M20 40 Q50 10 80 40' fill='%23FBBF24'/><circle cx='40' cy='30' r='10' fill='%23FBBF24'/><circle cx='60' cy='25' r='12' fill='%23FBBF24'/></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -476,7 +476,7 @@
         preloadShowsCache();
         
         loadFromCloud(); 
-        checkDailyNotifications(); // Check notifications on load
+        checkDailyNotifications(); 
         
         const sSentinel = document.getElementById('searchSentinel');
         if (sSentinel) searchObserver.observe(sSentinel);
@@ -775,7 +775,7 @@
             const aPref = preferredPlatforms.includes(a.network) ? 1 : 0;
             const bPref = preferredPlatforms.includes(b.network) ? 1 : 0;
             if (bPref !== aPref) return bPref - aPref;
-            return 0; // Garde l'ordre (mix, top, ou random précédent)
+            return 0; 
         });
 
         discoverPage = 1; renderDiscoverGrid(true);
@@ -930,10 +930,9 @@
         return library.find(i => i.id === media.id || (i.title && media.title && i.title.toLowerCase() === media.title.toLowerCase() && i.type === media.type));
     }
 
-    // Gestion visuelle des doublons (Désactive les boutons dans Search/Discover)
     function buildCardActionsHTML(media) {
         const libItem = isMediaInLibrary(media);
-        if (libItem) return `<div class="w-full text-center text-[10px] bg-emerald-900/50 text-emerald-400 border border-emerald-900 py-1.5 rounded shadow-sm font-bold">✓ Dans ma liste</div>`;
+        if (libItem) return `<button onclick="event.stopPropagation(); handleRemove('${libItem.id}')" class="w-full text-center text-[10px] bg-gray-900 hover:bg-gray-800 text-gray-500 hover:text-red-400 border border-gray-700 py-1.5 rounded transition shadow-sm">✕ Retirer</button>`;
         
         return `
         <div class="flex gap-1.5 w-full">
@@ -1479,7 +1478,7 @@
         ['all','today','week','month'].forEach(id => {
             document.getElementById(`cal-${id}`).className = id === f ? 'shrink-0 text-[11px] px-3 py-1.5 rounded-lg font-bold bg-teal-600 text-white' : 'shrink-0 text-[11px] px-3 py-1.5 rounded-lg font-bold bg-gray-800 text-gray-400 border border-gray-700';
         });
-        renderCalendarTab();
+        document.getElementById(`cal-${id}`).className = id === f ? 'shrink-0 text-[11px] px-3 py-1.5 rounded-lg font-bold bg-teal-600 text-white' : 'shrink-0 text-[11px] px-3 py-1.5 rounded-lg font-bold bg-gray-800 text-gray-400 border border-gray-700';
     }
 
     function renderCalendarTab() {
@@ -1554,7 +1553,17 @@
     }
 
     function renderAdminPlatforms() {
-        const platforms = [...new Set(library.map(i => i.network).filter(n => n && n !== 'Inconnu'))].sort();
+        // Comptage de la popularité de chaque plateforme présente dans la bibliothèque
+        const counts = {};
+        library.forEach(i => {
+            if (i.network && i.network !== 'Inconnu') {
+                counts[i.network] = (counts[i.network] || 0) + 1;
+            }
+        });
+        
+        // Extraction et tri des plateformes : les plus utilisées d'abord
+        const platforms = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+        
         const container = document.getElementById('adminPlatformList');
         container.innerHTML = platforms.map(p => {
             const isSelected = preferredPlatforms.includes(p);
@@ -1563,7 +1572,7 @@
             return `
                 <label class="${isSelected ? activeClass : inactiveClass}">
                     <input type="checkbox" value="${p}" class="hidden pref-platform-checkbox" ${isSelected ? 'checked' : ''} onchange="this.parentElement.className = this.checked ? '${activeClass}' : '${inactiveClass}'">
-                    ${p}
+                    ${p} <span class="text-[9px] opacity-60">(${counts[p]})</span>
                 </label>`;
         }).join('');
     }
@@ -1576,7 +1585,7 @@
     }
 
     function renderProfile() {
-        renderAdminPlatforms(); // Met à jour la liste des plateformes dans l'admin
+        renderAdminPlatforms(); 
         
         const series = library.filter(i => i.type === 'series' && !(i.genres || []).includes('Anime') && !(i.genres || []).includes('Animation'));
         const animes = library.filter(i => (i.genres || []).includes('Anime') || (i.genres || []).includes('Animation'));
