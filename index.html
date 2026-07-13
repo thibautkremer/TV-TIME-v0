@@ -315,6 +315,12 @@
 
             <p id="modalSummary" class="text-xs text-gray-300 leading-relaxed bg-gray-900/40 p-3 rounded-xl border border-gray-700/50"></p>
             
+            <!-- BOUTONS YOUTUBE POUR LES FILMS (affichés uniquement si c'est un film) -->
+            <div id="modalMovieActions" class="flex gap-2 hidden">
+                <button id="modalMovieTrailerBtn" class="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs shadow transition flex items-center justify-center gap-1">🎬 Bande Annonce</button>
+                <button id="modalMovieSummaryBtn" class="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-xs shadow transition flex items-center justify-center gap-1">▶️ Résumé YT</button>
+            </div>
+
             <div id="modalSeriesContent" class="space-y-4 hidden">
                 <div class="relative h-20 bg-gray-900 rounded-lg border border-gray-700 pt-1 pb-1">
                     <div class="absolute left-1 text-[6px] text-yellow-500/70 z-0 font-bold -translate-y-1/2" style="top: 0%;">10</div>
@@ -329,7 +335,10 @@
                 <div id="modalSeasonSelectionRow" class="space-y-2 mt-2">
                     <div class="flex justify-between items-center">
                         <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Saisons</h3>
-                        <button id="modalSeasonSummaryBtn" class="hidden text-[10px] bg-red-600 hover:bg-red-500 text-white font-bold px-2 py-1 rounded shadow flex items-center gap-1 transition">▶️ Résumé YT</button>
+                        <div class="flex gap-2">
+                            <button id="modalTrailerBtn" class="hidden text-[10px] bg-blue-600 hover:bg-blue-500 text-white font-bold px-2 py-1 rounded shadow flex items-center gap-1 transition">🎬 Bande Annonce</button>
+                            <button id="modalSeasonSummaryBtn" class="hidden text-[10px] bg-red-600 hover:bg-red-500 text-white font-bold px-2 py-1 rounded shadow flex items-center gap-1 transition">▶️ Résumé YT</button>
+                        </div>
                     </div>
                     <div id="modalSeasonTabs" class="flex gap-1.5 overflow-x-auto pb-1 hide-scroll mt-1"></div>
                 </div>
@@ -344,7 +353,7 @@
                 </div>
             </div>
 
-            <button id="modalViewSuggestionsBtn" class="w-full py-3 mt-4 bg-gray-900 hover:bg-gray-800 border border-teal-900/50 text-teal-400 font-bold rounded-xl text-xs shadow transition">💡 Voir des suggestions similaires</button>
+            <button id="modalViewSuggestionsBtn" class="w-full py-3 mt-4 bg-gray-900 hover:bg-gray-800 border border-teal-900/50 text-teal-400 font-bold rounded-xl text-xs shadow transition">💡 Voir des suggestions similaires (>= 75%)</button>
             <div id="modalSuggestionsBlock" class="hidden mt-2 space-y-2"></div>
         </div>
     </div>
@@ -374,7 +383,7 @@
 
     let library = JSON.parse(localStorage.getItem('personal_tracker_db')) || [];
     let preferredPlatforms = JSON.parse(localStorage.getItem('preferred_platforms') || '[]');
-    let syncQueue = JSON.parse(localStorage.getItem('tv_time_sync_queue') || '[]'); // Background Sync Queue
+    let syncQueue = JSON.parse(localStorage.getItem('tv_time_sync_queue') || '[]'); 
     
     let currentMediaType = 'series', searchResults = [];
     let showsCache = [];
@@ -386,7 +395,6 @@
     let discoverMediaType = 'series'; 
     
     const PAGE_SIZE = 30;
-    const MAX_RESULTS = 300;
     let searchPage = 1, discoverPage = 1;
     let discoverResults = [];
     let todayString = new Date().toISOString().split('T')[0];
@@ -399,10 +407,10 @@
     const seasonColors = ['bg-teal-500', 'bg-cyan-500', 'bg-emerald-500', 'bg-teal-400', 'bg-cyan-400', 'bg-emerald-400', 'bg-teal-600', 'bg-cyan-600'];
 
     // ------------------------------------------
-    // INDEX DE BIBLIOTHEQUE (O(1) lookup au lieu de O(n))
+    // INDEX DE BIBLIOTHEQUE (O(1) lookup)
     // ------------------------------------------
-    let libraryIndex = new Map();      // id -> item
-    let libraryTitleIndex = new Map(); // "type|title_lower" -> item
+    let libraryIndex = new Map();      
+    let libraryTitleIndex = new Map(); 
 
     function rebuildLibraryIndex() {
         libraryIndex = new Map();
@@ -440,14 +448,13 @@
         });
     }
 
-    // Proxy WebP Dynamique
     function getOptimizedImageUrl(url, width = 300) {
         if (!url || url === 'N/A' || url === 'image_par_defaut.jpg') return 'https://placehold.co/150x220/1f2937/a1a1aa?text=No+Image';
         return `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=webp&w=${width}`;
     }
 
     // ------------------------------------------
-    // PAGINATION SCROLL (Search / Discover / Suggestions)
+    // PAGINATION SCROLL
     // ------------------------------------------
     const searchObserver = new IntersectionObserver(entries => {
         if (entries[0].isIntersecting && searchPage * PAGE_SIZE < searchResults.length) { 
@@ -483,7 +490,7 @@
         if(existingIdx !== -1) syncQueue[existingIdx] = item;
         else syncQueue.push(item);
         localStorage.setItem('tv_time_sync_queue', JSON.stringify(syncQueue));
-        updateOfflineStatus(); // Met à jour le compteur sur le bouton rouge
+        updateOfflineStatus(); 
     }
 
     async function processSyncQueue() {
@@ -589,14 +596,16 @@
     }
 
     // ------------------------------------------
-    // INITIALISATION DOM
+    // INITIALISATION DOM & AUTO MAJ
     // ------------------------------------------
     window.addEventListener('DOMContentLoaded', () => {
         deduplicateLibrary();
         updateHeaderCount();
         preloadShowsCache();
         
-        loadFromCloud(); 
+        loadFromCloud().then(() => {
+            checkAutoMassUpdate();
+        }); 
         processSyncQueue();
         checkDailyNotifications(); 
         
@@ -607,6 +616,33 @@
 
         switchTab('library');
     });
+
+    async function checkAutoMassUpdate() {
+        const lastUpdate = localStorage.getItem('last_mass_update_time');
+        const tenDaysMs = 10 * 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        
+        if (navigator.onLine && (!lastUpdate || (now - parseInt(lastUpdate)) > tenDaysMs)) {
+            console.log("Auto MAJ API déclenchée (plus de 10 jours écoulés)");
+            localStorage.setItem('last_mass_update_time', now.toString());
+            
+            const statusEl = document.getElementById('cloudStatus');
+            if(statusEl) {
+                statusEl.textContent = '⏳ Auto-MAJ...';
+                statusEl.className = 'cursor-pointer text-[10px] px-2 py-0.5 bg-gray-900 text-yellow-400 rounded-full font-bold transition-colors shadow border border-yellow-900/50';
+            }
+
+            await massUpdateLibrary('series', true);
+            await massUpdateLibrary('movie', true);
+
+            if(statusEl) {
+                statusEl.textContent = '🟢 Cloud';
+                statusEl.className = 'cursor-pointer text-[10px] px-2 py-0.5 bg-gray-900 text-emerald-400 rounded-full font-bold transition-colors shadow border border-emerald-900/50';
+            }
+            if(!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
+            if(!document.getElementById('tab-profile').classList.contains('hidden')) renderProfile();
+        }
+    }
 
     let touchstartX = 0; let touchendX = 0;
     const modalEl = document.getElementById('mediaModal');
@@ -671,7 +707,7 @@
     }
 
     // ------------------------------------------
-    // RESOLUTION D'API MUTUALISEE (evite la duplication quickAdd/openPreviewModal)
+    // RESOLUTION D'API MUTUALISEE
     // ------------------------------------------
     async function resolveSeriesFromImdb(media) {
         if (!(media.type === 'series' && String(media.apiId).startsWith('tt'))) return media;
@@ -878,13 +914,37 @@
             let pool = showsCache.filter(s => !libIds.has(`series-${s.id}`));
             
             if(currentDiscoverMode === 'mix') {
-                const gc = {};
-                library.forEach(i => (i.genres || []).forEach(g => gc[g] = (gc[g] || 0) + 1));
-                const topGenres = Object.entries(gc).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
-                const favs = topGenres.length > 0 ? topGenres : ['Anime', 'Action', 'Drama'];
+                const gc = {}; const nc = {}; let sumR = 0, countR = 0;
+                library.forEach(i => {
+                    (i.genres || []).forEach(g => gc[g] = (gc[g] || 0) + 1);
+                    if (i.network && i.network !== 'Inconnu') nc[i.network] = (nc[i.network] || 0) + 1;
+                    const r = getCalculatedRating(i);
+                    if(r>0) { sumR += r; countR++; }
+                });
+                const topGenres = Object.entries(gc).sort((a, b) => b[1] - a[1]).slice(0, 5).map(e => e[0]);
+                const topNetworks = Object.entries(nc).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
+                const userAvg = countR > 0 ? sumR / countR : 7;
                 
-                let p = pool.filter(s => s.genres?.some(g => favs.includes(g)));
-                discoverResults = [...p, ...pool].sort(() => 0.5 - Math.random()).map(normalizeShow);
+                let scoredPool = pool.map(s => {
+                    let score = 0;
+                    let sharedG = 0;
+                    s.genres?.forEach(g => { if(topGenres.includes(g)) sharedG++; });
+                    score += sharedG * 15;
+                    if(topNetworks.includes(s.network?.name) || preferredPlatforms.includes(s.network?.name)) score += 20;
+                    if(s.rating?.average >= userAvg) score += 10;
+                    
+                    let matchPercent = Math.min(99, Math.max(40, Math.round(40 + score)));
+                    let norm = normalizeShow(s);
+                    norm.matchPercent = matchPercent;
+                    return norm;
+                });
+
+                discoverResults = scoredPool.filter(s => s.matchPercent >= 75).sort((a,b) => b.matchPercent - a.matchPercent);
+                
+                if(discoverResults.length === 0) {
+                    document.getElementById('discoverGrid').innerHTML = '<p class="col-span-full text-center text-gray-500 py-10">Il faut ajouter plus de médias à vos suivis pour calculer des recommandations précises (>= 75%).</p>';
+                    return;
+                }
             } 
             else if (currentDiscoverMode === 'top') discoverResults = pool.filter(s => s.rating?.average > 0).sort((a,b) => b.rating.average - a.rating.average).map(normalizeShow);
             else if (currentDiscoverMode === 'trending') discoverResults = pool.filter(s => s.status === 'Running').sort((a,b) => b.updated - a.updated).map(normalizeShow);
@@ -900,10 +960,30 @@
                 .map(m => ({
                     id: `movie-${m.imdbID}`, apiId: m.imdbID, title: m.Title, type: 'movie', 
                     image: m.Poster !== 'N/A' ? m.Poster : '', rating: 0, premiered: m.Year
-                })).filter(v => !libIds.has(v.id)).sort(() => 0.5 - Math.random());
+                })).filter(v => !libIds.has(v.id));
 
             await enrichOmdbList(uniqueMovies);
-            discoverResults = uniqueMovies;
+
+            if(currentDiscoverMode === 'mix') {
+                const gc = {}; library.forEach(i => (i.genres || []).forEach(g => gc[g] = (gc[g] || 0) + 1));
+                const topGenres = Object.entries(gc).sort((a, b) => b[1] - a[1]).slice(0, 5).map(e => e[0]);
+                
+                let scoredPool = uniqueMovies.map(m => {
+                    let score = 0;
+                    m.genres?.forEach(g => { if(topGenres.includes(g)) score += 20; });
+                    if(preferredPlatforms.includes(m.network)) score += 20;
+                    if(m.rating >= 7) score += 10;
+                    m.matchPercent = Math.min(99, Math.max(40, Math.round(40 + score)));
+                    return m;
+                });
+                discoverResults = scoredPool.filter(s => s.matchPercent >= 75).sort((a,b) => b.matchPercent - a.matchPercent);
+                if(discoverResults.length === 0) {
+                    document.getElementById('discoverGrid').innerHTML = '<p class="col-span-full text-center text-gray-500 py-10">Il faut ajouter plus de médias à vos suivis pour calculer des recommandations précises (>= 75%).</p>';
+                    return;
+                }
+            } else {
+                discoverResults = uniqueMovies.sort(() => 0.5 - Math.random());
+            }
         }
         
         discoverResults = discoverResults.filter((v,i,a)=>a.findIndex(t=>(t.id===v.id))===i);
@@ -976,7 +1056,6 @@
         
         grid.innerHTML = '';
 
-        // Caches locaux au rendu : évitent de recalculer note/progression à chaque comparaison du tri (O(n log n) appels sinon)
         const ratingCache = new Map();
         const getRatingCached = (item) => {
             let r = ratingCache.get(item.id);
@@ -1130,7 +1209,6 @@
             else openPreviewModal(media);
         };
     
-        // Proxy Image Dynamique (WebP/AVIF)
         const optimizedImgSrc = getOptimizedImageUrl(media.image, 300);
         
         const calcRating = getCalculatedRating(media);
@@ -1160,6 +1238,8 @@
             }
         }
         
+        let matchBadge = media.matchPercent ? `<div class="absolute bottom-1 left-1 bg-pink-900/90 text-pink-300 text-[9px] font-black px-1.5 py-0.5 rounded z-10 border border-pink-700 shadow-sm">${media.matchPercent}% Match</div>` : '';
+
         const displayTitle = media.title_fr || media.title || 'Inconnu';
         
         let progressBarHtml = '';
@@ -1175,6 +1255,7 @@
                 ${yearOverlay}
                 ${removeBtn}
                 ${libOverlay}
+                ${matchBadge}
             </div>
             <div class="p-2 flex-1 flex flex-col ${isLib ? bgColorClass : 'bg-gray-800'}">
                 ${progressBarHtml}
@@ -1270,10 +1351,9 @@
         document.getElementById('modalTitle').textContent = media.title_fr || media.title;
         
         const posterEl = document.getElementById('modalPoster');
-        // Application du format WebP pour l'image HD de la modale
         const hdImg = getOptimizedImageUrl(media.image, 600);
         posterEl.src = hdImg;
-        posterEl.onerror = () => { posterEl.src = media.image; }; // Fallback natif
+        posterEl.onerror = () => { posterEl.src = media.image; };
 
         if(posterEl.classList.contains('fixed')) togglePosterSize(posterEl);
 
@@ -1297,12 +1377,23 @@
         document.getElementById('modalSeriesContent').classList.add('hidden');
         document.getElementById('modalEpisodesBlock').classList.add('hidden');
         document.getElementById('modalSuggestionsBlock').classList.add('hidden');
+        document.getElementById('modalMovieActions').classList.add('hidden');
         
         document.getElementById('modalScrollable').scrollTop = 0;
 
         const cleanTitle = (media.title_fr || media.title).split('(')[0].trim();
         const movixBtn = document.getElementById('btnMovixRedirect');
         movixBtn.href = media.movixUrl ? media.movixUrl : `https://movix.cash/search?q=${encodeURIComponent(cleanTitle)}`;
+
+        if (media.type === 'movie') {
+            document.getElementById('modalMovieActions').classList.remove('hidden');
+            document.getElementById('modalMovieTrailerBtn').onclick = () => {
+                window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(cleanTitle + ' bande annonce VF')}`, '_blank');
+            };
+            document.getElementById('modalMovieSummaryBtn').onclick = () => {
+                window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(cleanTitle + ' résumé complet FR')}`, '_blank');
+            };
+        }
     }
 
     async function openPreviewModal(media) {
@@ -1435,14 +1526,22 @@
         }
 
         const summaryBtn = document.getElementById('modalSeasonSummaryBtn');
-        if (seasons.length > 0) summaryBtn.classList.remove('hidden');
-        else summaryBtn.classList.add('hidden');
+        const trailerBtn = document.getElementById('modalTrailerBtn');
+        if (seasons.length > 0) {
+            summaryBtn.classList.remove('hidden');
+            trailerBtn.classList.remove('hidden');
+        } else {
+            summaryBtn.classList.add('hidden');
+            trailerBtn.classList.add('hidden');
+        }
 
-        function updateSummaryBtn(season) {
+        function updateActionBtns(season) {
+            const title = document.getElementById('modalTitle').textContent.split('(')[0].trim();
             summaryBtn.onclick = () => {
-                const title = document.getElementById('modalTitle').textContent;
-                const query = `${title} saison ${season} résumé complet FR`;
-                window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, '_blank');
+                window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(title + ' saison ' + season + ' résumé complet FR')}`, '_blank');
+            };
+            trailerBtn.onclick = () => {
+                window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(title + ' saison ' + season + ' bande annonce VF')}`, '_blank');
             };
         }
 
@@ -1456,14 +1555,14 @@
                 Array.from(tabs.children).forEach(b=>b.className = 'px-3 py-1 text-xs font-bold rounded-lg shrink-0 bg-gray-700 text-gray-300');
                 e.target.className = `px-3 py-1 text-xs font-bold rounded-lg shrink-0 ${colorClass} text-white`;
                 renderEpisodes(episodes.filter(ep => ep.season === s), isLib);
-                updateSummaryBtn(s);
+                updateActionBtns(s);
             };
             tabs.appendChild(btn);
         });
         
         if (seasons.length > 0) {
             renderEpisodes(episodes.filter(ep => ep.season === targetSeason), isLib);
-            updateSummaryBtn(targetSeason);
+            updateActionBtns(targetSeason);
         }
     }
 
@@ -1549,18 +1648,15 @@
                 s.genres?.forEach(g => { if(bGenres.includes(g)) sharedGenres++; });
                 score += (sharedGenres * 4); 
 
-                // Boost des plateformes
                 if (preferredPlatforms.includes(s.network?.name)) score += 10;
                 if (s.network?.name === baseMedia?.network && baseMedia?.network) score += 3;
                 
                 score += (s.rating?.average||0); 
                 
-                // Moteur Match %
-                // Score Max théorique pondéré autour de 55. Ramené sur une échelle réaliste de 40 à 99%.
-                let matchPercent = Math.min(99, Math.max(30, Math.round((score / 50) * 100)));
+                let matchPercent = Math.min(99, Math.max(40, Math.round(50 + (score * 1.5))));
                 
                 return { show: s, score, matchPercent };
-            }).filter(i => i.score > 3).sort((a,b) => b.score - a.score).map(i => ({ ...normalizeShow(i.show), matchPercent: i.matchPercent }));
+            }).filter(i => i.matchPercent >= 75).sort((a,b) => b.matchPercent - a.matchPercent).map(i => ({ ...normalizeShow(i.show), matchPercent: i.matchPercent }));
             
             modalSuggestionsPage = 1;
             appendSuggestions();
@@ -1570,6 +1666,12 @@
     function appendSuggestions() {
         const list = document.getElementById('modalSuggestionsList');
         const slice = modalSuggestionsPool.slice(0, 8); 
+
+        if(slice.length === 0 && modalSuggestionsPage === 1) {
+            list.innerHTML = '<p class="text-xs text-gray-500 text-center py-4">Aucune suggestion avec un niveau de match suffisant (>= 75%).</p>';
+            return;
+        }
+
         const frag = document.createDocumentFragment();
         
         slice.forEach(n => {
@@ -1597,228 +1699,15 @@
         observeLazyImages();
     }
 
-    function setCalFilter(f) {
-        calFilter = f;
-        ['all','today','week','month'].forEach(id => {
-            document.getElementById(`cal-${id}`).className = id === f ? 'shrink-0 text-[11px] px-3 py-1.5 rounded-lg font-bold bg-teal-600 text-white' : 'shrink-0 text-[11px] px-3 py-1.5 rounded-lg font-bold bg-gray-800 text-gray-400 border border-gray-700';
-        });
-        renderCalendarTab();
-    }
-
-    function renderCalendarTab() {
-        const container = document.getElementById('calendarTimeline');
-        container.innerHTML = '';
-        const today = new Date(); today.setHours(0,0,0,0);
-        let futureEps = [];
-
-        library.forEach(item => {
-            if (item.type === 'movie' && item.premiered && String(item.premiered).length >= 4 && item.premiered >= todayString && item.status !== 'Watched') {
-                if (calFilter === 'today' && item.premiered !== todayString) return;
-                futureEps.push({ mediaId: item.id, showTitle: item.title_fr || item.title, showImage: item.image, epName: 'SORTIE FILM', airdate: item.premiered, type: 'movie' });
-            } 
-            else if (item.type === 'series') {
-                (item.episodes||[]).forEach(ep => {
-                    if (!ep.airdate || ep.watched || item.status === 'Abandoned' || ep.airdate < todayString) return;
-                    if (calFilter === 'today' && ep.airdate !== todayString) return;
-                    if (calFilter === 'week' && ((new Date(ep.airdate) - today) / 86400000 > 7)) return;
-                    if (calFilter === 'month' && (new Date(ep.airdate).getMonth() !== today.getMonth())) return;
-                    futureEps.push({ mediaId: item.id, showTitle: item.title_fr || item.title, showImage: item.image, epName: `S${ep.season}E${ep.number} – ${ep.name}`, airdate: ep.airdate, type: 'series' });
-                });
-            }
-        });
-
-        if (!futureEps.length) { 
-            container.innerHTML = `<p class="text-xs text-gray-500 text-center py-12">Aucune sortie planifiée.</p>`; return; 
-        }
-        
-        futureEps.sort((a,b) => a.airdate.localeCompare(b.airdate));
-        const groups = {};
-        futureEps.forEach(ep => { if (!groups[ep.airdate]) groups[ep.airdate] = []; groups[ep.airdate].push(ep); });
-        
-        Object.entries(groups).forEach(([date, eps]) => {
-            const diff = Math.ceil((new Date(date) - today) / 86400000);
-            const label = diff === 0 ? "Aujourd'hui 🎉" : diff === 1 ? "Demain" : `J-${diff}`;
-            container.innerHTML += `<div class="text-[11px] font-black text-teal-400 uppercase mt-3 mb-1">${label}</div>`;
-            
-            eps.forEach(ep => {
-                const subTxt = ep.type === 'movie' ? `<span class="text-amber-500 font-bold">SORTIE FILM</span>` : ep.epName;
-                const mediaObj = libraryIndex.get(ep.mediaId);
-                const calcR = getCalculatedRating(mediaObj || {});
-                const rating = calcR > 0 ? `★ ${calcR.toFixed(1)}` : 'N/A';
-                const platform = mediaObj?.network || '';
-                
-                const optImg = getOptimizedImageUrl(ep.showImage, 150);
-
-                container.innerHTML += `
-                <div onclick="openLibraryModal('${ep.mediaId}')" class="bg-gray-800 border border-gray-700 p-3 rounded-xl flex gap-3 items-center cursor-pointer hover:border-teal-500 transition shadow relative">
-                    <img data-src="${optImg}" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null; this.src='${ep.showImage}';" class="w-10 h-14 object-cover rounded-lg shrink-0 bg-gray-900 lazy-image" />
-                    <div class="flex-1 min-w-0">
-                        <div class="text-[9px] font-black text-teal-400 truncate">${ep.showTitle}</div>
-                        <h4 class="font-bold text-white text-xs truncate mt-0.5">${subTxt}</h4>
-                        <span class="text-[10px] text-gray-500">${ep.airdate}</span>
-                    </div>
-                    
-                    <span class="absolute top-2 right-2 text-[9px] text-yellow-500 font-bold">${rating}</span>
-                    <span class="absolute bottom-2 right-2 text-[9px] text-gray-600 font-bold">${platform}</span>
-                </div>`;
-            });
-        });
-        observeLazyImages();
-    }
-
-    function formatDurationProfile(totalMin) {
-        if (isNaN(totalMin) || totalMin <= 0) return '0 h';
-        let r = Math.max(0, Math.round(totalMin));
-        const y = Math.floor(r / 525600); r -= y * 525600;
-        const mo = Math.floor(r / 43200); r -= mo * 43200;
-        const d = Math.floor(r / 1440); r -= d * 1440;
-        const h = Math.floor(r / 60); const m = r % 60;
-        const p = [];
-        if (y) p.push(`${y} an(s)`); if (mo) p.push(`${mo} mois`);
-        if (d) p.push(`${d} j`); if (h) p.push(`${h} h`); if (m) p.push(`${m} min`);
-        return p.join(' ');
-    }
-
-    function renderAdminPlatforms() {
-        const counts = {};
-        library.forEach(i => {
-            if (i.network && i.network !== 'Inconnu') {
-                counts[i.network] = (counts[i.network] || 0) + 1;
-            }
-        });
-        
-        const platforms = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
-        
-        const container = document.getElementById('adminPlatformList');
-        container.innerHTML = platforms.map(p => {
-            const isSelected = preferredPlatforms.includes(p);
-            const activeClass = "flex items-center gap-1 cursor-pointer text-xs bg-gray-800 px-2 py-1 rounded border border-teal-500 text-teal-400";
-            const inactiveClass = "flex items-center gap-1 cursor-pointer text-xs bg-gray-800 px-2 py-1 rounded border border-gray-700 text-gray-400";
-            return `
-                <label class="${isSelected ? activeClass : inactiveClass}">
-                    <input type="checkbox" value="${p}" class="hidden pref-platform-checkbox" ${isSelected ? 'checked' : ''} onchange="this.parentElement.className = this.checked ? '${activeClass}' : '${inactiveClass}'">
-                    ${p} <span class="text-[9px] opacity-60">(${counts[p]})</span>
-                </label>`;
-        }).join('');
-    }
-
-    function savePlatformPrefs() {
-        const checkboxes = document.querySelectorAll('.pref-platform-checkbox');
-        preferredPlatforms = Array.from(checkboxes).filter(c => c.checked).map(c => c.value);
-        localStorage.setItem('preferred_platforms', JSON.stringify(preferredPlatforms));
-        alert('Préférences de plateformes enregistrées ! La recherche les mettra désormais en avant.');
-    }
-
-    function renderProfile() {
-        renderAdminPlatforms(); 
-        
-        const series = library.filter(i => i.type === 'series' && !(i.genres || []).includes('Anime') && !(i.genres || []).includes('Animation'));
-        const animes = library.filter(i => (i.genres || []).includes('Anime') || (i.genres || []).includes('Animation'));
-        const movies = library.filter(i => i.type === 'movie');
-    
-        let watchedMin = 0; let backlogMin = 0;
-        library.forEach(item => {
-            if (item.type === 'movie') {
-                const r = parseInt(item.runtime) || 120;
-                if (item.status === 'Watched') watchedMin += r;
-                else if (item.status !== 'Abandoned') backlogMin += r;
-            } else if (item.type === 'series') {
-                const defR = parseInt(item.runtime) || 24; 
-                (item.episodes || []).forEach(ep => {
-                    const r = parseInt(ep.runtime) || defR;
-                    if (ep.watched) watchedMin += r;
-                    else if (item.status !== 'Abandoned') backlogMin += r;
-                });
-            }
-        });
-
-        document.getElementById('stat-hours').textContent = formatDurationProfile(watchedMin);
-        document.getElementById('stat-backlog-hours').textContent = formatDurationProfile(backlogMin);
-
-        const ratedItems = library.map(i => getCalculatedRating(i)).filter(r => r > 0);
-        const avgRating = ratedItems.length > 0 ? (ratedItems.reduce((acc, r) => acc + r, 0) / ratedItems.length).toFixed(1) : '0.0';
-        document.getElementById('stat-avg-rating').textContent = avgRating;
-    
-        const sFinished = series.filter(s => s.status === 'Watched').length;
-        document.getElementById('stat-series-grid').innerHTML = `
-            <div class="text-lg font-black text-teal-400">${sFinished} / ${series.length}</div>
-            <div class="text-xs font-bold text-teal-400">${series.length > 0 ? Math.round((sFinished/series.length)*100) : 0}%</div>
-            <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Séries finies</div>`;
-    
-        let seTotal = 0, seWatched = 0;
-        series.forEach(s => { seTotal += (s.episodes||[]).length; seWatched += (s.episodes||[]).filter(e=>e.watched).length; });
-        document.getElementById('stat-series-eps-grid').innerHTML = `
-            <div class="text-lg font-black text-teal-400">${seWatched} / ${seTotal}</div>
-            <div class="text-xs font-bold text-teal-400">${seTotal > 0 ? Math.round((seWatched/seTotal)*100) : 0}%</div>
-            <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Ép. Séries vus</div>`;
-            
-        const aFinished = animes.filter(a => a.status === 'Watched').length;
-        document.getElementById('stat-anime-grid').innerHTML = `
-            <div class="text-lg font-black text-purple-400">${aFinished} / ${animes.length}</div>
-            <div class="text-xs font-bold text-purple-400">${animes.length > 0 ? Math.round((aFinished/animes.length)*100) : 0}%</div>
-            <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Anime finis</div>`;
-    
-        let aeTotal = 0, aeWatched = 0;
-        animes.forEach(a => { aeTotal += (a.episodes||[]).length; aeWatched += (a.episodes||[]).filter(e=>e.watched).length; });
-        document.getElementById('stat-anime-eps-grid').innerHTML = `
-            <div class="text-lg font-black text-purple-400">${aeWatched} / ${aeTotal}</div>
-            <div class="text-xs font-bold text-purple-400">${aeTotal > 0 ? Math.round((aeWatched/aeTotal)*100) : 0}%</div>
-            <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Ép. Anime vus</div>`;
-    
-        const mFinished = movies.filter(m => m.status === 'Watched').length;
-        document.getElementById('stat-movies-finished').innerHTML = `
-            <div class="text-lg font-black text-amber-400">${mFinished} / ${movies.length}</div>
-            <div class="text-xs font-bold text-amber-400">${movies.length > 0 ? Math.round((mFinished/movies.length)*100) : 0}%</div>
-            <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Films vus</div>`;
-    
-        const gc = {}; library.forEach(i => (i.genres || []).forEach(g => gc[g] = (gc[g] || 0) + 1));
-        const sortedGenres = Object.entries(gc).sort((a, b) => b[1] - a[1]);
-        const maxG = sortedGenres.length > 0 ? sortedGenres[0][1] : 1;
-        document.getElementById('stat-genre-bars').innerHTML = sortedGenres.slice(0, 5).map(([g, c]) => `
-            <div onclick="applyGlobalFilter('genre', '${g}')" class="cursor-pointer hover:opacity-80 transition group">
-                <div class="flex justify-between text-[10px] mb-1 font-bold"><span class="text-gray-300 group-hover:text-white">${g}</span><span class="text-teal-500">${c}</span></div>
-                <div class="w-full h-2 bg-gray-700 rounded-full overflow-hidden"><div class="h-full bg-teal-500" style="width:${Math.round(c / maxG * 100)}%"></div></div>
-            </div>`).join('');
-    
-        const nc = {}; library.forEach(i => { if (i.network && i.network !== 'Inconnu') nc[i.network] = (nc[i.network] || 0) + 1; });
-        const sortedNets = Object.entries(nc).sort((a, b) => b[1] - a[1]);
-        const maxN = sortedNets.length > 0 ? sortedNets[0][1] : 1;
-        document.getElementById('stat-network-bars').innerHTML = sortedNets.slice(0, 6).map(([n, c]) => `
-            <div onclick="applyGlobalFilter('network', '${n}')" class="cursor-pointer hover:opacity-80 transition group">
-                <div class="flex justify-between text-[10px] mb-1 font-bold"><span class="text-gray-300 group-hover:text-white">${n}</span><span class="text-blue-500">${c}</span></div>
-                <div class="w-full h-2 bg-gray-700 rounded-full overflow-hidden"><div class="h-full bg-blue-500" style="width:${Math.round(c / maxN * 100)}%"></div></div>
-            </div>`).join('');
-
-        const rc = {};
-        library.forEach(i => {
-            const r = getCalculatedRating(i);
-            if (r > 0) {
-                let rounded = Math.round(r * 2) / 2;
-                let key = rounded < 5 ? "< 5" : rounded.toFixed(1).replace('.0', '');
-                rc[key] = (rc[key] || 0) + 1;
-            }
-        });
-        let ratingKeys = []; for (let i = 10; i >= 5; i -= 0.5) ratingKeys.push(i.toFixed(1).replace('.0', '')); ratingKeys.push("< 5");
-        const activeRatings = ratingKeys.filter(k => rc[k] > 0);
-        const maxR = activeRatings.length > 0 ? Math.max(...activeRatings.map(k => rc[k])) : 1;
-        document.getElementById('stat-rating-bars').innerHTML = activeRatings.map(k => `
-            <div onclick="applyGlobalFilter('rating', '${k}')" class="cursor-pointer hover:opacity-80 transition group">
-                <div class="flex justify-between text-[10px] mb-1 font-bold"><span class="text-gray-300 group-hover:text-white">${k}</span><span class="text-yellow-500">${rc[k]}</span></div>
-                <div class="w-full h-2 bg-gray-700 rounded-full overflow-hidden"><div class="h-full bg-yellow-400" style="width:${Math.round(rc[k] / maxR * 100)}%"></div></div>
-            </div>`).join('');
-        
-        if (activeRatings.length === 0) {
-            document.getElementById('stat-rating-bars').innerHTML = '<div class="text-[10px] text-gray-500 italic text-center py-2">Aucune note attribuée</div>';
-        }
-    }
-
-    async function massUpdateLibrary(type) {
+    async function massUpdateLibrary(type, silent = false) {
         const btnId = type === 'series' ? 'btn-mass-update-series' : 'btn-mass-update-movie';
         const btn = document.getElementById(btnId);
-        const originalContent = btn.innerHTML;
+        const originalContent = btn ? btn.innerHTML : '';
         
-        document.getElementById('btn-mass-update-series').disabled = true;
-        document.getElementById('btn-mass-update-movie').disabled = true;
+        if (!silent && btn) {
+            document.getElementById('btn-mass-update-series').disabled = true;
+            document.getElementById('btn-mass-update-movie').disabled = true;
+        }
 
         const sanitizePlatform = (p) => {
             if (!p || p === 'N/A' || p.toLowerCase().includes('trakt')) return 'Theater';
@@ -1832,7 +1721,7 @@
         for (let i = 0; i < itemsToProcess.length; i++) {
             let item = itemsToProcess[i];
             let updates = []; 
-            btn.innerHTML = `<span class="truncate w-full text-center px-1">⏳ [${i+1}/${itemsToProcess.length}] ${item.title}</span>`;
+            if (!silent && btn) btn.innerHTML = `<span class="truncate w-full text-center px-1">⏳ [${i+1}/${itemsToProcess.length}] ${item.title}</span>`;
 
             try {
                 let changed = false;
@@ -1869,10 +1758,14 @@
                     let foundAnyEpisodeRating = false;
                     const seriesRating = data.rating?.average || 0;
 
-                    if (data._embedded?.episodes && item.episodes) {
+                    if (data._embedded?.episodes) {
+                        if (!item.episodes) item.episodes = [];
+                        const existingEpIds = new Set(item.episodes.map(e => e.id));
+                        let newEpsAdded = 0;
+
                         data._embedded.episodes.forEach(apiEp => {
-                            const localEp = item.episodes.find(e => e.id === apiEp.id);
-                            if (localEp) {
+                            if (existingEpIds.has(apiEp.id)) {
+                                const localEp = item.episodes.find(e => e.id === apiEp.id);
                                 const newR = apiEp.rating?.average || 0;
                                 if (newR > 0) foundAnyEpisodeRating = true;
                                 const newS = apiEp.summary ? apiEp.summary.replace(/<[^>]*>/g, '') : '';
@@ -1880,8 +1773,25 @@
                                 if (localEp.rating !== newR || localEp.summary !== newS || localEp.runtime !== newRun) { 
                                     localEp.rating = newR; localEp.summary = newS; localEp.runtime = newRun; changed = true; 
                                 }
+                            } else {
+                                // AJOUT DES NOUVEAUX EPISODES (Corrections Failes)
+                                item.episodes.push({
+                                    id: apiEp.id, season: apiEp.season, number: apiEp.number, name: apiEp.name,
+                                    airdate: apiEp.airdate, runtime: apiEp.runtime, rating: apiEp.rating?.average || 0, watched: false
+                                });
+                                newEpsAdded++;
+                                changed = true;
                             }
                         });
+
+                        if (newEpsAdded > 0) {
+                            updates.push(`+${newEpsAdded} épisodes`);
+                            item.status = item.episodes.every(e => e.watched || !e.airdate || e.airdate > todayString) ? 'Watched' : 'In Progress';
+                            item.episodes.sort((a,b) => {
+                                if(a.season !== b.season) return a.season - b.season;
+                                return a.number - b.number;
+                            });
+                        }
                     }
 
                     if (!foundAnyEpisodeRating && seriesRating > 0) {
@@ -1890,7 +1800,6 @@
                     } else if (data.rating?.average && item.rating !== data.rating.average) {
                         item.rating = data.rating.average; changed = true; updates.push("Note");
                     }
-                    if (changed && !updates.includes("Détails Épisodes") && updates.length > 0) updates.push("Détails Épisodes");
                 } 
                 else if (item.type === 'movie') {
                     let attemptData = null;
@@ -1930,96 +1839,14 @@
             await new Promise(r => setTimeout(r, 800));
         }
 
-        btn.innerHTML = originalContent;
-        document.getElementById('btn-mass-update-series').disabled = false;
-        document.getElementById('btn-mass-update-movie').disabled = false;
-        alert(`Bilan (${type}) :\n✅ ${updatedCount} mis à jour\n➖ ${skippedCount} OK\n❌ ${errorCount} erreurs.`);
-        location.reload();
-    }
-
-    async function importLibrary(event) {
-        const files = event.target.files;
-        if (!files.length) return;
-        alert("Import en cours... Ne fermez pas la page.");
-        for (let file of files) {
-            if (file.name.endsWith('.json')) {
-                const text = await file.text();
-                try {
-                    const data = JSON.parse(text);
-                    for (let raw of data) {
-                        const idx = library.findIndex(x => x.id === raw.id || x.title === raw.title);
-                        if(idx !== -1) library[idx] = {...library[idx], ...raw, last_modified: Date.now()};
-                        else library.push({...raw, last_modified: Date.now()});
-                        
-                        if (supabaseClient) {
-                            await supabaseClient.from('user_library').upsert({ 
-                                user_id: localUserId, media_id: raw.id, media_data: raw, last_modified: Date.now() 
-                            }, { onConflict: 'user_id, media_id' });
-                        }
-                    }
-                } catch(err) { alert('Erreur JSON sur ' + file.name); }
-            }
+        if (!silent) {
+            localStorage.setItem('last_mass_update_time', Date.now().toString());
+            if (btn) btn.innerHTML = originalContent;
+            document.getElementById('btn-mass-update-series').disabled = false;
+            document.getElementById('btn-mass-update-movie').disabled = false;
+            alert(`Bilan (${type}) :\n✅ ${updatedCount} mis à jour\n➖ ${skippedCount} OK\n❌ ${errorCount} erreurs.`);
+            location.reload();
         }
-        rebuildLibraryIndex();
-        renderProfile(); renderLibrary(); 
-        alert("Import et synchronisation Cloud terminés !");
-    }
-    
-    function exportLibrary() {
-        if (library.length === 0) { alert("Rien à exporter."); return; }
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(library, null, 2));
-        const downloadAnchorNode = document.createElement('a');
-        downloadAnchorNode.setAttribute("href", dataStr);
-        downloadAnchorNode.setAttribute("download", "tv_time_backup.json");
-        document.body.appendChild(downloadAnchorNode);
-        downloadAnchorNode.click();
-        downloadAnchorNode.remove();
-    }
-
-    function clearAll() {
-        if (!confirm('Vider le cache local ? La sauvegarde Cloud restera intacte.')) return;
-        library = []; rebuildLibraryIndex(); localStorage.removeItem('personal_tracker_db'); renderLibrary(); renderProfile();
-    }
-
-    function toggleMovixManager() {
-        const section = document.getElementById('movixManagerSection');
-        section.classList.toggle('hidden');
-        if(!section.classList.contains('hidden')) renderMovixManager();
-    }
-
-    function renderMovixManager() {
-        const body = document.getElementById('movixManagerBody');
-        body.innerHTML = '';
-        const targets = library.filter(m => m.status !== 'Watched');
-        targets.forEach(m => {
-            const displayTitle = m.title_fr || m.title;
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td class="py-2 truncate max-w-[120px] text-gray-300 font-bold" title="${displayTitle}">${displayTitle}</td>
-                <td class="py-2"><input type="text" data-id="${m.id}" value="${m.movixUrl || ''}" placeholder="https://movix.cash/..." class="bg-gray-900 border border-gray-600 rounded px-2 py-1 w-full text-[10px] text-white"></td>
-            `;
-            body.appendChild(row);
-        });
-    }
-
-    async function saveAllMovixUrls() {
-        const inputs = document.querySelectorAll('#movixManagerBody input');
-        const updates = [];
-        inputs.forEach(input => {
-            const id = input.getAttribute('data-id');
-            const url = input.value.trim();
-            const media = library.find(m => m.id === id);
-            if(media) { media.movixUrl = url; media.last_modified = Date.now(); updates.push(media); }
-        });
-        saveLocalDB(); 
-        if(updates.length > 0) {
-            await supabaseClient.from('user_library').upsert(
-                updates.map(m => ({ user_id: localUserId, media_id: m.id, media_data: m, last_modified: m.last_modified })), 
-                { onConflict: 'user_id,media_id' }
-            );
-        }
-        alert("URLs sauvegardées et synchronisées !");
-        toggleMovixManager();
     }
 </script>
 </body>
