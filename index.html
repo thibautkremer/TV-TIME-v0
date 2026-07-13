@@ -315,6 +315,12 @@
 
             <p id="modalSummary" class="text-xs text-gray-300 leading-relaxed bg-gray-900/40 p-3 rounded-xl border border-gray-700/50"></p>
             
+            <!-- BOUTONS YOUTUBE POUR LES FILMS -->
+            <div id="modalMovieActions" class="flex gap-2 hidden">
+                <button id="modalMovieTrailerBtn" class="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs shadow transition flex items-center justify-center gap-1">🎬 Bande Annonce</button>
+                <button id="modalMovieSummaryBtn" class="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-xs shadow transition flex items-center justify-center gap-1">▶️ Résumé YT</button>
+            </div>
+
             <div id="modalSeriesContent" class="space-y-4 hidden">
                 <div class="relative h-20 bg-gray-900 rounded-lg border border-gray-700 pt-1 pb-1">
                     <div class="absolute left-1 text-[6px] text-yellow-500/70 z-0 font-bold -translate-y-1/2" style="top: 0%;">10</div>
@@ -329,7 +335,10 @@
                 <div id="modalSeasonSelectionRow" class="space-y-2 mt-2">
                     <div class="flex justify-between items-center">
                         <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Saisons</h3>
-                        <button id="modalSeasonSummaryBtn" class="hidden text-[10px] bg-red-600 hover:bg-red-500 text-white font-bold px-2 py-1 rounded shadow flex items-center gap-1 transition">▶️ Résumé YT</button>
+                        <div class="flex gap-2">
+                            <button id="modalTrailerBtn" class="hidden text-[10px] bg-blue-600 hover:bg-blue-500 text-white font-bold px-2 py-1 rounded shadow flex items-center gap-1 transition">🎬 Bande Annonce</button>
+                            <button id="modalSeasonSummaryBtn" class="hidden text-[10px] bg-red-600 hover:bg-red-500 text-white font-bold px-2 py-1 rounded shadow flex items-center gap-1 transition">▶️ Résumé YT</button>
+                        </div>
                     </div>
                     <div id="modalSeasonTabs" class="flex gap-1.5 overflow-x-auto pb-1 hide-scroll mt-1"></div>
                 </div>
@@ -344,7 +353,7 @@
                 </div>
             </div>
 
-            <button id="modalViewSuggestionsBtn" class="w-full py-3 mt-4 bg-gray-900 hover:bg-gray-800 border border-teal-900/50 text-teal-400 font-bold rounded-xl text-xs shadow transition">💡 Voir des suggestions similaires</button>
+            <button id="modalViewSuggestionsBtn" class="w-full py-3 mt-4 bg-gray-900 hover:bg-gray-800 border border-teal-900/50 text-teal-400 font-bold rounded-xl text-xs shadow transition">💡 Voir des suggestions similaires (>= 75%)</button>
             <div id="modalSuggestionsBlock" class="hidden mt-2 space-y-2"></div>
         </div>
     </div>
@@ -374,7 +383,7 @@
 
     let library = JSON.parse(localStorage.getItem('personal_tracker_db')) || [];
     let preferredPlatforms = JSON.parse(localStorage.getItem('preferred_platforms') || '[]');
-    let syncQueue = JSON.parse(localStorage.getItem('tv_time_sync_queue') || '[]'); // Background Sync Queue
+    let syncQueue = JSON.parse(localStorage.getItem('tv_time_sync_queue') || '[]'); 
     
     let currentMediaType = 'series', searchResults = [];
     let showsCache = [];
@@ -386,7 +395,6 @@
     let discoverMediaType = 'series'; 
     
     const PAGE_SIZE = 30;
-    const MAX_RESULTS = 300;
     let searchPage = 1, discoverPage = 1;
     let discoverResults = [];
     let todayString = new Date().toISOString().split('T')[0];
@@ -399,10 +407,10 @@
     const seasonColors = ['bg-teal-500', 'bg-cyan-500', 'bg-emerald-500', 'bg-teal-400', 'bg-cyan-400', 'bg-emerald-400', 'bg-teal-600', 'bg-cyan-600'];
 
     // ------------------------------------------
-    // INDEX DE BIBLIOTHEQUE (O(1) lookup au lieu de O(n))
+    // INDEX DE BIBLIOTHEQUE (O(1) lookup)
     // ------------------------------------------
-    let libraryIndex = new Map();      // id -> item
-    let libraryTitleIndex = new Map(); // "type|title_lower" -> item
+    let libraryIndex = new Map();      
+    let libraryTitleIndex = new Map(); 
 
     function rebuildLibraryIndex() {
         libraryIndex = new Map();
@@ -440,14 +448,13 @@
         });
     }
 
-    // Proxy WebP Dynamique
     function getOptimizedImageUrl(url, width = 300) {
         if (!url || url === 'N/A' || url === 'image_par_defaut.jpg') return 'https://placehold.co/150x220/1f2937/a1a1aa?text=No+Image';
         return `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=webp&w=${width}`;
     }
 
     // ------------------------------------------
-    // PAGINATION SCROLL (Search / Discover / Suggestions)
+    // PAGINATION SCROLL
     // ------------------------------------------
     const searchObserver = new IntersectionObserver(entries => {
         if (entries[0].isIntersecting && searchPage * PAGE_SIZE < searchResults.length) { 
@@ -483,7 +490,7 @@
         if(existingIdx !== -1) syncQueue[existingIdx] = item;
         else syncQueue.push(item);
         localStorage.setItem('tv_time_sync_queue', JSON.stringify(syncQueue));
-        updateOfflineStatus(); // Met à jour le compteur sur le bouton rouge
+        updateOfflineStatus(); 
     }
 
     async function processSyncQueue() {
@@ -589,14 +596,16 @@
     }
 
     // ------------------------------------------
-    // INITIALISATION DOM
+    // INITIALISATION DOM & AUTO MAJ
     // ------------------------------------------
     window.addEventListener('DOMContentLoaded', () => {
         deduplicateLibrary();
         updateHeaderCount();
         preloadShowsCache();
         
-        loadFromCloud(); 
+        loadFromCloud().then(() => {
+            checkAutoMassUpdate();
+        }); 
         processSyncQueue();
         checkDailyNotifications(); 
         
@@ -607,6 +616,33 @@
 
         switchTab('library');
     });
+
+    async function checkAutoMassUpdate() {
+        const lastUpdate = localStorage.getItem('last_mass_update_time');
+        const tenDaysMs = 10 * 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        
+        if (navigator.onLine && (!lastUpdate || (now - parseInt(lastUpdate)) > tenDaysMs)) {
+            console.log("Auto MAJ API déclenchée (plus de 10 jours écoulés)");
+            localStorage.setItem('last_mass_update_time', now.toString());
+            
+            const statusEl = document.getElementById('cloudStatus');
+            if(statusEl) {
+                statusEl.textContent = '⏳ Auto-MAJ...';
+                statusEl.className = 'cursor-pointer text-[10px] px-2 py-0.5 bg-gray-900 text-yellow-400 rounded-full font-bold transition-colors shadow border border-yellow-900/50';
+            }
+
+            await massUpdateLibrary('series', true);
+            await massUpdateLibrary('movie', true);
+
+            if(statusEl) {
+                statusEl.textContent = '🟢 Cloud';
+                statusEl.className = 'cursor-pointer text-[10px] px-2 py-0.5 bg-gray-900 text-emerald-400 rounded-full font-bold transition-colors shadow border border-emerald-900/50';
+            }
+            if(!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
+            if(!document.getElementById('tab-profile').classList.contains('hidden')) renderProfile();
+        }
+    }
 
     let touchstartX = 0; let touchendX = 0;
     const modalEl = document.getElementById('mediaModal');
@@ -671,7 +707,7 @@
     }
 
     // ------------------------------------------
-    // RESOLUTION D'API MUTUALISEE (evite la duplication quickAdd/openPreviewModal)
+    // RESOLUTION D'API MUTUALISEE
     // ------------------------------------------
     async function resolveSeriesFromImdb(media) {
         if (!(media.type === 'series' && String(media.apiId).startsWith('tt'))) return media;
@@ -878,13 +914,37 @@
             let pool = showsCache.filter(s => !libIds.has(`series-${s.id}`));
             
             if(currentDiscoverMode === 'mix') {
-                const gc = {};
-                library.forEach(i => (i.genres || []).forEach(g => gc[g] = (gc[g] || 0) + 1));
-                const topGenres = Object.entries(gc).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
-                const favs = topGenres.length > 0 ? topGenres : ['Anime', 'Action', 'Drama'];
+                const gc = {}; const nc = {}; let sumR = 0, countR = 0;
+                library.forEach(i => {
+                    (i.genres || []).forEach(g => gc[g] = (gc[g] || 0) + 1);
+                    if (i.network && i.network !== 'Inconnu') nc[i.network] = (nc[i.network] || 0) + 1;
+                    const r = getCalculatedRating(i);
+                    if(r>0) { sumR += r; countR++; }
+                });
+                const topGenres = Object.entries(gc).sort((a, b) => b[1] - a[1]).slice(0, 5).map(e => e[0]);
+                const topNetworks = Object.entries(nc).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
+                const userAvg = countR > 0 ? sumR / countR : 7;
                 
-                let p = pool.filter(s => s.genres?.some(g => favs.includes(g)));
-                discoverResults = [...p, ...pool].sort(() => 0.5 - Math.random()).map(normalizeShow);
+                let scoredPool = pool.map(s => {
+                    let score = 0;
+                    let sharedG = 0;
+                    s.genres?.forEach(g => { if(topGenres.includes(g)) sharedG++; });
+                    score += sharedG * 15;
+                    if(topNetworks.includes(s.network?.name) || preferredPlatforms.includes(s.network?.name)) score += 20;
+                    if(s.rating?.average >= userAvg) score += 10;
+                    
+                    let matchPercent = Math.min(99, Math.max(40, Math.round(40 + score)));
+                    let norm = normalizeShow(s);
+                    norm.matchPercent = matchPercent;
+                    return norm;
+                });
+
+                discoverResults = scoredPool.filter(s => s.matchPercent >= 75).sort((a,b) => b.matchPercent - a.matchPercent);
+                
+                if(discoverResults.length === 0) {
+                    document.getElementById('discoverGrid').innerHTML = '<p class="col-span-full text-center text-gray-500 py-10">Il faut ajouter plus de médias à vos suivis pour calculer des recommandations précises (>= 75%).</p>';
+                    return;
+                }
             } 
             else if (currentDiscoverMode === 'top') discoverResults = pool.filter(s => s.rating?.average > 0).sort((a,b) => b.rating.average - a.rating.average).map(normalizeShow);
             else if (currentDiscoverMode === 'trending') discoverResults = pool.filter(s => s.status === 'Running').sort((a,b) => b.updated - a.updated).map(normalizeShow);
@@ -900,10 +960,30 @@
                 .map(m => ({
                     id: `movie-${m.imdbID}`, apiId: m.imdbID, title: m.Title, type: 'movie', 
                     image: m.Poster !== 'N/A' ? m.Poster : '', rating: 0, premiered: m.Year
-                })).filter(v => !libIds.has(v.id)).sort(() => 0.5 - Math.random());
+                })).filter(v => !libIds.has(v.id));
 
             await enrichOmdbList(uniqueMovies);
-            discoverResults = uniqueMovies;
+
+            if(currentDiscoverMode === 'mix') {
+                const gc = {}; library.forEach(i => (i.genres || []).forEach(g => gc[g] = (gc[g] || 0) + 1));
+                const topGenres = Object.entries(gc).sort((a, b) => b[1] - a[1]).slice(0, 5).map(e => e[0]);
+                
+                let scoredPool = uniqueMovies.map(m => {
+                    let score = 0;
+                    m.genres?.forEach(g => { if(topGenres.includes(g)) score += 20; });
+                    if(preferredPlatforms.includes(m.network)) score += 20;
+                    if(m.rating >= 7) score += 10;
+                    m.matchPercent = Math.min(99, Math.max(40, Math.round(40 + score)));
+                    return m;
+                });
+                discoverResults = scoredPool.filter(s => s.matchPercent >= 75).sort((a,b) => b.matchPercent - a.matchPercent);
+                if(discoverResults.length === 0) {
+                    document.getElementById('discoverGrid').innerHTML = '<p class="col-span-full text-center text-gray-500 py-10">Il faut ajouter plus de médias à vos suivis pour calculer des recommandations précises (>= 75%).</p>';
+                    return;
+                }
+            } else {
+                discoverResults = uniqueMovies.sort(() => 0.5 - Math.random());
+            }
         }
         
         discoverResults = discoverResults.filter((v,i,a)=>a.findIndex(t=>(t.id===v.id))===i);
@@ -976,7 +1056,6 @@
         
         grid.innerHTML = '';
 
-        // Caches locaux au rendu : évitent de recalculer note/progression à chaque comparaison du tri (O(n log n) appels sinon)
         const ratingCache = new Map();
         const getRatingCached = (item) => {
             let r = ratingCache.get(item.id);
@@ -1130,7 +1209,6 @@
             else openPreviewModal(media);
         };
     
-        // Proxy Image Dynamique (WebP/AVIF)
         const optimizedImgSrc = getOptimizedImageUrl(media.image, 300);
         
         const calcRating = getCalculatedRating(media);
@@ -1160,6 +1238,8 @@
             }
         }
         
+        let matchBadge = media.matchPercent ? `<div class="absolute bottom-1 left-1 bg-pink-900/90 text-pink-300 text-[9px] font-black px-1.5 py-0.5 rounded z-10 border border-pink-700 shadow-sm">${media.matchPercent}% Match</div>` : '';
+
         const displayTitle = media.title_fr || media.title || 'Inconnu';
         
         let progressBarHtml = '';
@@ -1175,6 +1255,7 @@
                 ${yearOverlay}
                 ${removeBtn}
                 ${libOverlay}
+                ${matchBadge}
             </div>
             <div class="p-2 flex-1 flex flex-col ${isLib ? bgColorClass : 'bg-gray-800'}">
                 ${progressBarHtml}
@@ -1270,10 +1351,9 @@
         document.getElementById('modalTitle').textContent = media.title_fr || media.title;
         
         const posterEl = document.getElementById('modalPoster');
-        // Application du format WebP pour l'image HD de la modale
         const hdImg = getOptimizedImageUrl(media.image, 600);
         posterEl.src = hdImg;
-        posterEl.onerror = () => { posterEl.src = media.image; }; // Fallback natif
+        posterEl.onerror = () => { posterEl.src = media.image; };
 
         if(posterEl.classList.contains('fixed')) togglePosterSize(posterEl);
 
@@ -1297,12 +1377,23 @@
         document.getElementById('modalSeriesContent').classList.add('hidden');
         document.getElementById('modalEpisodesBlock').classList.add('hidden');
         document.getElementById('modalSuggestionsBlock').classList.add('hidden');
+        document.getElementById('modalMovieActions').classList.add('hidden');
         
         document.getElementById('modalScrollable').scrollTop = 0;
 
         const cleanTitle = (media.title_fr || media.title).split('(')[0].trim();
         const movixBtn = document.getElementById('btnMovixRedirect');
         movixBtn.href = media.movixUrl ? media.movixUrl : `https://movix.cash/search?q=${encodeURIComponent(cleanTitle)}`;
+
+        if (media.type === 'movie') {
+            document.getElementById('modalMovieActions').classList.remove('hidden');
+            document.getElementById('modalMovieTrailerBtn').onclick = () => {
+                window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(cleanTitle + ' bande annonce VF')}`, '_blank');
+            };
+            document.getElementById('modalMovieSummaryBtn').onclick = () => {
+                window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(cleanTitle + ' résumé complet FR')}`, '_blank');
+            };
+        }
     }
 
     async function openPreviewModal(media) {
@@ -1435,14 +1526,22 @@
         }
 
         const summaryBtn = document.getElementById('modalSeasonSummaryBtn');
-        if (seasons.length > 0) summaryBtn.classList.remove('hidden');
-        else summaryBtn.classList.add('hidden');
+        const trailerBtn = document.getElementById('modalTrailerBtn');
+        if (seasons.length > 0) {
+            summaryBtn.classList.remove('hidden');
+            trailerBtn.classList.remove('hidden');
+        } else {
+            summaryBtn.classList.add('hidden');
+            trailerBtn.classList.add('hidden');
+        }
 
-        function updateSummaryBtn(season) {
+        function updateActionBtns(season) {
+            const title = document.getElementById('modalTitle').textContent.split('(')[0].trim();
             summaryBtn.onclick = () => {
-                const title = document.getElementById('modalTitle').textContent;
-                const query = `${title} saison ${season} résumé complet FR`;
-                window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, '_blank');
+                window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(title + ' saison ' + season + ' résumé complet FR')}`, '_blank');
+            };
+            trailerBtn.onclick = () => {
+                window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(title + ' saison ' + season + ' bande annonce VF')}`, '_blank');
             };
         }
 
@@ -1456,14 +1555,14 @@
                 Array.from(tabs.children).forEach(b=>b.className = 'px-3 py-1 text-xs font-bold rounded-lg shrink-0 bg-gray-700 text-gray-300');
                 e.target.className = `px-3 py-1 text-xs font-bold rounded-lg shrink-0 ${colorClass} text-white`;
                 renderEpisodes(episodes.filter(ep => ep.season === s), isLib);
-                updateSummaryBtn(s);
+                updateActionBtns(s);
             };
             tabs.appendChild(btn);
         });
         
         if (seasons.length > 0) {
             renderEpisodes(episodes.filter(ep => ep.season === targetSeason), isLib);
-            updateSummaryBtn(targetSeason);
+            updateActionBtns(targetSeason);
         }
     }
 
@@ -1549,18 +1648,15 @@
                 s.genres?.forEach(g => { if(bGenres.includes(g)) sharedGenres++; });
                 score += (sharedGenres * 4); 
 
-                // Boost des plateformes
                 if (preferredPlatforms.includes(s.network?.name)) score += 10;
                 if (s.network?.name === baseMedia?.network && baseMedia?.network) score += 3;
                 
                 score += (s.rating?.average||0); 
                 
-                // Moteur Match %
-                // Score Max théorique pondéré autour de 55. Ramené sur une échelle réaliste de 40 à 99%.
-                let matchPercent = Math.min(99, Math.max(30, Math.round((score / 50) * 100)));
+                let matchPercent = Math.min(99, Math.max(40, Math.round(50 + (score * 1.5))));
                 
                 return { show: s, score, matchPercent };
-            }).filter(i => i.score > 3).sort((a,b) => b.score - a.score).map(i => ({ ...normalizeShow(i.show), matchPercent: i.matchPercent }));
+            }).filter(i => i.matchPercent >= 75).sort((a,b) => b.matchPercent - a.matchPercent).map(i => ({ ...normalizeShow(i.show), matchPercent: i.matchPercent }));
             
             modalSuggestionsPage = 1;
             appendSuggestions();
@@ -1570,6 +1666,12 @@
     function appendSuggestions() {
         const list = document.getElementById('modalSuggestionsList');
         const slice = modalSuggestionsPool.slice(0, 8); 
+
+        if(slice.length === 0 && modalSuggestionsPage === 1) {
+            list.innerHTML = '<p class="text-xs text-gray-500 text-center py-4">Aucune suggestion avec un niveau de match suffisant (>= 75%).</p>';
+            return;
+        }
+
         const frag = document.createDocumentFragment();
         
         slice.forEach(n => {
@@ -1597,74 +1699,159 @@
         observeLazyImages();
     }
 
-    function setCalFilter(f) {
-        calFilter = f;
-        ['all','today','week','month'].forEach(id => {
-            document.getElementById(`cal-${id}`).className = id === f ? 'shrink-0 text-[11px] px-3 py-1.5 rounded-lg font-bold bg-teal-600 text-white' : 'shrink-0 text-[11px] px-3 py-1.5 rounded-lg font-bold bg-gray-800 text-gray-400 border border-gray-700';
-        });
-        renderCalendarTab();
-    }
-
-    function renderCalendarTab() {
-        const container = document.getElementById('calendarTimeline');
-        container.innerHTML = '';
-        const today = new Date(); today.setHours(0,0,0,0);
-        let futureEps = [];
-
-        library.forEach(item => {
-            if (item.type === 'movie' && item.premiered && String(item.premiered).length >= 4 && item.premiered >= todayString && item.status !== 'Watched') {
-                if (calFilter === 'today' && item.premiered !== todayString) return;
-                futureEps.push({ mediaId: item.id, showTitle: item.title_fr || item.title, showImage: item.image, epName: 'SORTIE FILM', airdate: item.premiered, type: 'movie' });
-            } 
-            else if (item.type === 'series') {
-                (item.episodes||[]).forEach(ep => {
-                    if (!ep.airdate || ep.watched || item.status === 'Abandoned' || ep.airdate < todayString) return;
-                    if (calFilter === 'today' && ep.airdate !== todayString) return;
-                    if (calFilter === 'week' && ((new Date(ep.airdate) - today) / 86400000 > 7)) return;
-                    if (calFilter === 'month' && (new Date(ep.airdate).getMonth() !== today.getMonth())) return;
-                    futureEps.push({ mediaId: item.id, showTitle: item.title_fr || item.title, showImage: item.image, epName: `S${ep.season}E${ep.number} – ${ep.name}`, airdate: ep.airdate, type: 'series' });
-                });
-            }
-        });
-
-        if (!futureEps.length) { 
-            container.innerHTML = `<p class="text-xs text-gray-500 text-center py-12">Aucune sortie planifiée.</p>`; return; 
+    async function massUpdateLibrary(type, silent = false) {
+        const btnId = type === 'series' ? 'btn-mass-update-series' : 'btn-mass-update-movie';
+        const btn = document.getElementById(btnId);
+        const originalContent = btn ? btn.innerHTML : '';
+        
+        if (!silent && btn) {
+            document.getElementById('btn-mass-update-series').disabled = true;
+            document.getElementById('btn-mass-update-movie').disabled = true;
         }
-        
-        futureEps.sort((a,b) => a.airdate.localeCompare(b.airdate));
-        const groups = {};
-        futureEps.forEach(ep => { if (!groups[ep.airdate]) groups[ep.airdate] = []; groups[ep.airdate].push(ep); });
-        
-        Object.entries(groups).forEach(([date, eps]) => {
-            const diff = Math.ceil((new Date(date) - today) / 86400000);
-            const label = diff === 0 ? "Aujourd'hui 🎉" : diff === 1 ? "Demain" : `J-${diff}`;
-            container.innerHTML += `<div class="text-[11px] font-black text-teal-400 uppercase mt-3 mb-1">${label}</div>`;
-            
-            eps.forEach(ep => {
-                const subTxt = ep.type === 'movie' ? `<span class="text-amber-500 font-bold">SORTIE FILM</span>` : ep.epName;
-                const mediaObj = libraryIndex.get(ep.mediaId);
-                const calcR = getCalculatedRating(mediaObj || {});
-                const rating = calcR > 0 ? `★ ${calcR.toFixed(1)}` : 'N/A';
-                const platform = mediaObj?.network || '';
-                
-                const optImg = getOptimizedImageUrl(ep.showImage, 150);
 
-                container.innerHTML += `
-                <div onclick="openLibraryModal('${ep.mediaId}')" class="bg-gray-800 border border-gray-700 p-3 rounded-xl flex gap-3 items-center cursor-pointer hover:border-teal-500 transition shadow relative">
-                    <img data-src="${optImg}" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null; this.src='${ep.showImage}';" class="w-10 h-14 object-cover rounded-lg shrink-0 bg-gray-900 lazy-image" />
-                    <div class="flex-1 min-w-0">
-                        <div class="text-[9px] font-black text-teal-400 truncate">${ep.showTitle}</div>
-                        <h4 class="font-bold text-white text-xs truncate mt-0.5">${subTxt}</h4>
-                        <span class="text-[10px] text-gray-500">${ep.airdate}</span>
-                    </div>
+        const sanitizePlatform = (p) => {
+            if (!p || p === 'N/A' || p.toLowerCase().includes('trakt')) return 'Theater';
+            return p;
+        };
+
+        let updatedCount = 0; let skippedCount = 0; let errorCount = 0;
+        const OMDB_API_KEY = 'd99a3838'; 
+        const itemsToProcess = library.filter(i => i.type === type);
+
+        for (let i = 0; i < itemsToProcess.length; i++) {
+            let item = itemsToProcess[i];
+            let updates = []; 
+            if (!silent && btn) btn.innerHTML = `<span class="truncate w-full text-center px-1">⏳ [${i+1}/${itemsToProcess.length}] ${item.title}</span>`;
+
+            try {
+                let changed = false;
+                let data = null;
+
+                if (item.type === 'series' && item.apiId) {
+                    try {
+                        const akaRes = await fetch(`https://api.tvmaze.com/shows/${item.apiId}/akas`);
+                        if(akaRes.ok) {
+                            const akas = await akaRes.json();
+                            const frAka = akas.find(a => a.country?.code === 'FR');
+                            if(frAka && item.title_fr !== frAka.name) {
+                                item.title_fr = frAka.name;
+                                changed = true; updates.push("Titre FR");
+                            }
+                        }
+                    } catch(e){}
+
+                    const res = await fetch(`https://api.tvmaze.com/shows/${item.apiId}?embed=episodes`);
+                    if (!res.ok) throw new Error(`TVMaze API Error`);
+                    data = await res.json();
                     
-                    <span class="absolute top-2 right-2 text-[9px] text-yellow-500 font-bold">${rating}</span>
-                    <span class="absolute bottom-2 right-2 text-[9px] text-gray-600 font-bold">${platform}</span>
-                </div>`;
-            });
-        });
-        observeLazyImages();
+                    if (data.runtime || data.averageRuntime) { const r = data.runtime || data.averageRuntime; if (item.runtime !== r) { item.runtime = r; changed = true; updates.push("Durée"); } }
+                    if (data.image?.medium && item.image !== data.image.medium) { item.image = data.image.medium; changed = true; updates.push("Affiche"); }
+                    if (data.summary && item.summary !== data.summary.replace(/<[^>]*>/g, '')) { item.summary = data.summary.replace(/<[^>]*>/g, ''); changed = true; updates.push("Résumé"); }
+                    
+                    let newStatus = data.status;
+                    if (data.summary && /cancel/i.test(data.summary)) newStatus = 'Canceled';
+                    if (newStatus && item.status_production !== newStatus) { item.status_production = newStatus; changed = true; updates.push("Status"); }
+                    
+                    const net = sanitizePlatform(data.network?.name || data.webChannel?.name);
+                    if (net && item.network !== net) { item.network = net; changed = true; updates.push("Plateforme"); }
+                    
+                    let foundAnyEpisodeRating = false;
+                    const seriesRating = data.rating?.average || 0;
+
+                    if (data._embedded?.episodes) {
+                        if (!item.episodes) item.episodes = [];
+                        const existingEpIds = new Set(item.episodes.map(e => e.id));
+                        let newEpsAdded = 0;
+
+                        data._embedded.episodes.forEach(apiEp => {
+                            if (existingEpIds.has(apiEp.id)) {
+                                const localEp = item.episodes.find(e => e.id === apiEp.id);
+                                const newR = apiEp.rating?.average || 0;
+                                if (newR > 0) foundAnyEpisodeRating = true;
+                                const newS = apiEp.summary ? apiEp.summary.replace(/<[^>]*>/g, '') : '';
+                                const newRun = apiEp.runtime || 0;
+                                if (localEp.rating !== newR || localEp.summary !== newS || localEp.runtime !== newRun) { 
+                                    localEp.rating = newR; localEp.summary = newS; localEp.runtime = newRun; changed = true; 
+                                }
+                            } else {
+                                // AJOUT DES NOUVEAUX EPISODES
+                                item.episodes.push({
+                                    id: apiEp.id, season: apiEp.season, number: apiEp.number, name: apiEp.name,
+                                    airdate: apiEp.airdate, runtime: apiEp.runtime, rating: apiEp.rating?.average || 0, watched: false
+                                });
+                                newEpsAdded++;
+                                changed = true;
+                            }
+                        });
+
+                        if (newEpsAdded > 0) {
+                            updates.push(`+${newEpsAdded} épisodes`);
+                            item.status = item.episodes.every(e => e.watched || !e.airdate || e.airdate > todayString) ? 'Watched' : 'In Progress';
+                            item.episodes.sort((a,b) => {
+                                if(a.season !== b.season) return a.season - b.season;
+                                return a.number - b.number;
+                            });
+                        }
+                    }
+
+                    if (!foundAnyEpisodeRating && seriesRating > 0) {
+                        item.episodes.forEach(e => { if (e.rating !== seriesRating) { e.rating = seriesRating; changed = true; }});
+                        if (item.rating !== seriesRating) { item.rating = seriesRating; changed = true; }
+                    } else if (data.rating?.average && item.rating !== data.rating.average) {
+                        item.rating = data.rating.average; changed = true; updates.push("Note");
+                    }
+                } 
+                else if (item.type === 'movie') {
+                    let attemptData = null;
+                    if (item.apiId) {
+                        const res = await fetch(`https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&i=${item.apiId}&plot=full`);
+                        if (res.ok) attemptData = await res.json();
+                    }
+                    if (!attemptData || attemptData.Response === "False") {
+                        let year = (item.premiered && item.premiered !== 'N/A') ? String(item.premiered).split('-')[0] : '';
+                        const res2 = await fetch(`https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&t=${encodeURIComponent(item.title)}&y=${year}&type=movie&plot=full`);
+                        if (res2.ok) attemptData = await res2.json();
+                        if (attemptData.Response === "True" && attemptData.imdbID) item.apiId = attemptData.imdbID;
+                    }
+                    data = attemptData;
+                    if (!data || data.Response === "False") throw new Error(`Non trouvé`);
+
+                    if (data.Runtime && data.Runtime !== "N/A") { const run = parseInt(data.Runtime); if (run && item.runtime !== run) { item.runtime = run; changed = true; updates.push("Durée"); } }
+                    if (data.Poster && data.Poster !== "N/A" && item.image !== data.Poster) { item.image = data.Poster; changed = true; updates.push("Affiche"); }
+                    if (data.Plot && item.summary !== data.Plot) { item.summary = data.Plot; changed = true; updates.push("Résumé"); }
+                    if (data.Genre) { const newGenres = data.Genre.split(', '); if (JSON.stringify(item.genres) !== JSON.stringify(newGenres)) { item.genres = newGenres; changed = true; updates.push("Genres"); } }
+                    const prod = sanitizePlatform(data.Production);
+                    if (prod && item.network !== prod) { item.network = prod; changed = true; updates.push("Plateforme"); }
+                    if (data.imdbRating && data.imdbRating !== "N/A" && item.rating !== parseFloat(data.imdbRating)) { item.rating = parseFloat(data.imdbRating); changed = true; updates.push("Note"); }
+                }
+
+                if (changed) {
+                    item.last_modified = Date.now();
+                    await supabaseClient.from('user_library').upsert({ 
+                        user_id: localUserId, media_id: item.id, media_data: item, last_modified: item.last_modified
+                    }, { onConflict: 'user_id,media_id' });
+                    saveLocalDB();
+                    updatedCount++;
+                } else {
+                    skippedCount++;
+                }
+            } catch (e) { errorCount++; }
+            await new Promise(r => setTimeout(r, 800));
+        }
+
+        if (!silent) {
+            localStorage.setItem('last_mass_update_time', Date.now().toString());
+            if (btn) btn.innerHTML = originalContent;
+            document.getElementById('btn-mass-update-series').disabled = false;
+            document.getElementById('btn-mass-update-movie').disabled = false;
+            alert(`Bilan (${type}) :\n✅ ${updatedCount} mis à jour\n➖ ${skippedCount} OK\n❌ ${errorCount} erreurs.`);
+            location.reload();
+        }
     }
+
+    // ==========================================
+    // REINTEGRATION DES FONCTIONS PROFIL & ADMIN PERDUES
+    // ==========================================
 
     function formatDurationProfile(totalMin) {
         if (isNaN(totalMin) || totalMin <= 0) return '0 h';
@@ -1810,131 +1997,6 @@
         if (activeRatings.length === 0) {
             document.getElementById('stat-rating-bars').innerHTML = '<div class="text-[10px] text-gray-500 italic text-center py-2">Aucune note attribuée</div>';
         }
-    }
-
-    async function massUpdateLibrary(type) {
-        const btnId = type === 'series' ? 'btn-mass-update-series' : 'btn-mass-update-movie';
-        const btn = document.getElementById(btnId);
-        const originalContent = btn.innerHTML;
-        
-        document.getElementById('btn-mass-update-series').disabled = true;
-        document.getElementById('btn-mass-update-movie').disabled = true;
-
-        const sanitizePlatform = (p) => {
-            if (!p || p === 'N/A' || p.toLowerCase().includes('trakt')) return 'Theater';
-            return p;
-        };
-
-        let updatedCount = 0; let skippedCount = 0; let errorCount = 0;
-        const OMDB_API_KEY = 'd99a3838'; 
-        const itemsToProcess = library.filter(i => i.type === type);
-
-        for (let i = 0; i < itemsToProcess.length; i++) {
-            let item = itemsToProcess[i];
-            let updates = []; 
-            btn.innerHTML = `<span class="truncate w-full text-center px-1">⏳ [${i+1}/${itemsToProcess.length}] ${item.title}</span>`;
-
-            try {
-                let changed = false;
-                let data = null;
-
-                if (item.type === 'series' && item.apiId) {
-                    try {
-                        const akaRes = await fetch(`https://api.tvmaze.com/shows/${item.apiId}/akas`);
-                        if(akaRes.ok) {
-                            const akas = await akaRes.json();
-                            const frAka = akas.find(a => a.country?.code === 'FR');
-                            if(frAka && item.title_fr !== frAka.name) {
-                                item.title_fr = frAka.name;
-                                changed = true; updates.push("Titre FR");
-                            }
-                        }
-                    } catch(e){}
-
-                    const res = await fetch(`https://api.tvmaze.com/shows/${item.apiId}?embed=episodes`);
-                    if (!res.ok) throw new Error(`TVMaze API Error`);
-                    data = await res.json();
-                    
-                    if (data.runtime || data.averageRuntime) { const r = data.runtime || data.averageRuntime; if (item.runtime !== r) { item.runtime = r; changed = true; updates.push("Durée"); } }
-                    if (data.image?.medium && item.image !== data.image.medium) { item.image = data.image.medium; changed = true; updates.push("Affiche"); }
-                    if (data.summary && item.summary !== data.summary.replace(/<[^>]*>/g, '')) { item.summary = data.summary.replace(/<[^>]*>/g, ''); changed = true; updates.push("Résumé"); }
-                    
-                    let newStatus = data.status;
-                    if (data.summary && /cancel/i.test(data.summary)) newStatus = 'Canceled';
-                    if (newStatus && item.status_production !== newStatus) { item.status_production = newStatus; changed = true; updates.push("Status"); }
-                    
-                    const net = sanitizePlatform(data.network?.name || data.webChannel?.name);
-                    if (net && item.network !== net) { item.network = net; changed = true; updates.push("Plateforme"); }
-                    
-                    let foundAnyEpisodeRating = false;
-                    const seriesRating = data.rating?.average || 0;
-
-                    if (data._embedded?.episodes && item.episodes) {
-                        data._embedded.episodes.forEach(apiEp => {
-                            const localEp = item.episodes.find(e => e.id === apiEp.id);
-                            if (localEp) {
-                                const newR = apiEp.rating?.average || 0;
-                                if (newR > 0) foundAnyEpisodeRating = true;
-                                const newS = apiEp.summary ? apiEp.summary.replace(/<[^>]*>/g, '') : '';
-                                const newRun = apiEp.runtime || 0;
-                                if (localEp.rating !== newR || localEp.summary !== newS || localEp.runtime !== newRun) { 
-                                    localEp.rating = newR; localEp.summary = newS; localEp.runtime = newRun; changed = true; 
-                                }
-                            }
-                        });
-                    }
-
-                    if (!foundAnyEpisodeRating && seriesRating > 0) {
-                        item.episodes.forEach(e => { if (e.rating !== seriesRating) { e.rating = seriesRating; changed = true; }});
-                        if (item.rating !== seriesRating) { item.rating = seriesRating; changed = true; }
-                    } else if (data.rating?.average && item.rating !== data.rating.average) {
-                        item.rating = data.rating.average; changed = true; updates.push("Note");
-                    }
-                    if (changed && !updates.includes("Détails Épisodes") && updates.length > 0) updates.push("Détails Épisodes");
-                } 
-                else if (item.type === 'movie') {
-                    let attemptData = null;
-                    if (item.apiId) {
-                        const res = await fetch(`https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&i=${item.apiId}&plot=full`);
-                        if (res.ok) attemptData = await res.json();
-                    }
-                    if (!attemptData || attemptData.Response === "False") {
-                        let year = (item.premiered && item.premiered !== 'N/A') ? String(item.premiered).split('-')[0] : '';
-                        const res2 = await fetch(`https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&t=${encodeURIComponent(item.title)}&y=${year}&type=movie&plot=full`);
-                        if (res2.ok) attemptData = await res2.json();
-                        if (attemptData.Response === "True" && attemptData.imdbID) item.apiId = attemptData.imdbID;
-                    }
-                    data = attemptData;
-                    if (!data || data.Response === "False") throw new Error(`Non trouvé`);
-
-                    if (data.Runtime && data.Runtime !== "N/A") { const run = parseInt(data.Runtime); if (run && item.runtime !== run) { item.runtime = run; changed = true; updates.push("Durée"); } }
-                    if (data.Poster && data.Poster !== "N/A" && item.image !== data.Poster) { item.image = data.Poster; changed = true; updates.push("Affiche"); }
-                    if (data.Plot && item.summary !== data.Plot) { item.summary = data.Plot; changed = true; updates.push("Résumé"); }
-                    if (data.Genre) { const newGenres = data.Genre.split(', '); if (JSON.stringify(item.genres) !== JSON.stringify(newGenres)) { item.genres = newGenres; changed = true; updates.push("Genres"); } }
-                    const prod = sanitizePlatform(data.Production);
-                    if (prod && item.network !== prod) { item.network = prod; changed = true; updates.push("Plateforme"); }
-                    if (data.imdbRating && data.imdbRating !== "N/A" && item.rating !== parseFloat(data.imdbRating)) { item.rating = parseFloat(data.imdbRating); changed = true; updates.push("Note"); }
-                }
-
-                if (changed) {
-                    item.last_modified = Date.now();
-                    await supabaseClient.from('user_library').upsert({ 
-                        user_id: localUserId, media_id: item.id, media_data: item, last_modified: item.last_modified
-                    }, { onConflict: 'user_id,media_id' });
-                    saveLocalDB();
-                    updatedCount++;
-                } else {
-                    skippedCount++;
-                }
-            } catch (e) { errorCount++; }
-            await new Promise(r => setTimeout(r, 800));
-        }
-
-        btn.innerHTML = originalContent;
-        document.getElementById('btn-mass-update-series').disabled = false;
-        document.getElementById('btn-mass-update-movie').disabled = false;
-        alert(`Bilan (${type}) :\n✅ ${updatedCount} mis à jour\n➖ ${skippedCount} OK\n❌ ${errorCount} erreurs.`);
-        location.reload();
     }
 
     async function importLibrary(event) {
