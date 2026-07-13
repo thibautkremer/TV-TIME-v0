@@ -230,7 +230,17 @@
                 </button>
                 
                 <button onclick="toggleMovixManager()" class="col-span-2 bg-indigo-700 hover:bg-indigo-600 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow">⚙️ Remplir Liens Movix</button>
-                
+                <!-- Section Tableau Movix -->
+                <div id="movixManagerSection" class="hidden bg-gray-800 p-4 rounded-xl border border-gray-700">
+                    <h3 class="text-xs font-bold text-white mb-3">🔗 Liaison Directe Movix (Médias en cours)</h3>
+                    <div class="max-h-60 overflow-y-auto mb-3 pr-2">
+                        <table class="w-full text-xs text-left">
+                            <thead class="text-gray-400"><tr><th class="pb-2">Média</th><th class="pb-2">URL / Code</th></tr></thead>
+                            <tbody id="movixManagerBody"></tbody>
+                        </table>
+                    </div>
+                    <button onclick="saveAllMovixUrls()" class="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 rounded-lg text-xs">Sauvegarder Liens</button>
+                </div>
                 <button onclick="clearAll()" class="col-span-2 bg-gray-800 hover:bg-red-950 border border-red-900/40 text-red-400 text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow flex justify-center items-center gap-2">
                     <span>🗑 Vider Cache Local</span>
                 </button>
@@ -247,19 +257,7 @@
                     <span>🔔 Activer Notifications de Sortie</span>
                 </button>
             </div>
-        </div>
-
-        <!-- Section Tableau Movix -->
-        <div id="movixManagerSection" class="hidden bg-gray-800 p-4 rounded-xl border border-gray-700">
-            <h3 class="text-xs font-bold text-white mb-3">🔗 Liaison Directe Movix (Médias en cours)</h3>
-            <div class="max-h-60 overflow-y-auto mb-3 pr-2">
-                <table class="w-full text-xs text-left">
-                    <thead class="text-gray-400"><tr><th class="pb-2">Média</th><th class="pb-2">URL / Code</th></tr></thead>
-                    <tbody id="movixManagerBody"></tbody>
-                </table>
-            </div>
-            <button onclick="saveAllMovixUrls()" class="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 rounded-lg text-xs">Sauvegarder Liens</button>
-        </div>
+        </div>        
     </div>
 </main>
 
@@ -537,7 +535,12 @@
         try {
             const { data, error } = await supabaseClient.from('user_library').select('media_data').eq('user_id', localUserId);
             if (data && data.length > 0) {
-                library = data.map(row => row.media_data);
+                const prefsRow = data.find(row => row.media_id === 'prefs_platforms');
+                if (prefsRow && prefsRow.media_data && prefsRow.media_data.platforms) {
+                    preferredPlatforms = prefsRow.media_data.platforms;
+                    localStorage.setItem('preferred_platforms', JSON.stringify(preferredPlatforms));
+                }
+                library = data.filter(row => row.media_id !== 'prefs_platforms').map(row => row.media_data);
                 rebuildLibraryIndex();
                 saveLocalDB(false); 
                 statusEl.textContent = '🟢 Cloud';
@@ -1626,7 +1629,8 @@
 
     async function renderSuggestions(currentId) {
         const block = document.getElementById('modalSuggestionsBlock');
-        block.innerHTML = `<div id="modalSuggestionsList" class="space-y-2"></div><div id="modalSuggestionsSentinel" class="h-4"></div>`;
+        // Ajout d'un texte de chargement pendant la recherche dynamique
+        block.innerHTML = `<div id="modalSuggestionsList" class="space-y-2"><p class="text-xs text-teal-400 text-center py-4 animate-pulse">Recherche de la franchise en cours...</p></div>`;
         try {
             await ensureShowsPool();
             const baseMedia = library.find(i=>i.id===currentId) || searchResults.find(i=>i.id===currentId) || discoverResults.find(i=>i.id===currentId);
@@ -1634,12 +1638,44 @@
             const baseTitle = baseMedia?.title.toLowerCase() || "";
             const baseTitleFr = (baseMedia?.title_fr || "").toLowerCase();
             
-            modalSuggestionsPool = showsCache.filter(s => `series-${s.id}` !== currentId).map(s => {
+            let dynamicPool = [...showsCache];
+            
+            // NOUVEAU : Fetch dynamique pour attraper les suites, films et spin-offs (ex: Dragon Ball GT)
+            if (baseTitle) {
+                try {
+                    // On prend les 2 premiers mots du titre pour trouver la franchise globale
+                    const cleanBase = baseTitle.replace(/[^a-zA-Z0-9 ]/g, "").split(' ').slice(0, 2).join(' '); 
+                    const [tvRes, omdbRes] = await Promise.all([
+                        fetch(`${TVMAZE_API}/search/shows?q=${encodeURIComponent(cleanBase)}`).then(r => r.json()).catch(()=>[]),
+                        fetch(`${OMDB_API}&s=${encodeURIComponent(cleanBase)}`).then(r => r.json()).catch(()=>({Search:[]}))
+                    ]);
+                    
+                    if (Array.isArray(tvRes)) {
+                        tvRes.forEach(item => {
+                            if (!dynamicPool.find(s => s.id === item.show.id)) dynamicPool.push(item.show);
+                        });
+                    }
+                    if (omdbRes.Search) {
+                        omdbRes.Search.forEach(m => {
+                            if (!dynamicPool.find(s => String(s.id) === m.imdbID)) {
+                                dynamicPool.push({
+                                    id: m.imdbID, name: m.Title, type: m.Type === 'movie' ? 'movie' : 'series',
+                                    premiered: m.Year, image: { medium: m.Poster !== 'N/A' ? m.Poster : '' },
+                                    genres: [], network: { name: 'Inconnu' }, rating: { average: 0 }
+                                });
+                            }
+                        });
+                    }
+                } catch(e) {}
+            }
+            
+            modalSuggestionsPool = dynamicPool.filter(s => `series-${s.id}` !== currentId && `movie-${s.id}` !== currentId).map(s => {
                 let score = 0;
                 const sTitle = s.name.toLowerCase();
                 
-                if (baseTitle && (sTitle.includes(baseTitle) || baseTitle.includes(sTitle))) score += 15;
-                if (baseTitleFr && (sTitle.includes(baseTitleFr) || baseTitleFr.includes(sTitle))) score += 15;
+                // Score fortement augmenté (25) si le nom de la franchise est présent
+                if (baseTitle && (sTitle.includes(baseTitle) || baseTitle.includes(sTitle))) score += 25; 
+                if (baseTitleFr && (sTitle.includes(baseTitleFr) || baseTitleFr.includes(sTitle))) score += 25; 
                 
                 const bWords = baseTitle.split(/\s+/).filter(w=>w.length>3);
                 bWords.forEach(w => { if(sTitle.includes(w)) score += 5; });
@@ -1655,10 +1691,21 @@
                 
                 let matchPercent = Math.min(99, Math.max(40, Math.round(50 + (score * 1.5))));
                 
-                return { show: s, score, matchPercent };
-            }).filter(i => i.matchPercent >= 75).sort((a,b) => b.matchPercent - a.matchPercent).map(i => ({ ...normalizeShow(i.show), matchPercent: i.matchPercent }));
+                let norm;
+                if (s.type === 'movie' || String(s.id).startsWith('tt')) {
+                    norm = { id: `movie-${s.id}`, apiId: s.id, title: s.name, type: 'movie', image: s.image?.medium || '', premiered: s.premiered || 'N/A' };
+                } else {
+                    norm = normalizeShow(s);
+                }
+                
+                return { ...norm, score, matchPercent };
+            }).filter(i => i.matchPercent >= 75).sort((a,b) => b.matchPercent - a.matchPercent);
+            
+            // Éliminer les doublons finaux
+            modalSuggestionsPool = modalSuggestionsPool.filter((v,i,a) => a.findIndex(t => t.id === v.id) === i);
             
             modalSuggestionsPage = 1;
+            document.getElementById('modalSuggestionsList').innerHTML = ''; // Nettoyer le loader
             appendSuggestions();
         } catch(e) {}
     }
@@ -1889,11 +1936,23 @@
         }).join('');
     }
 
-    function savePlatformPrefs() {
+    async function savePlatformPrefs() {
         const checkboxes = document.querySelectorAll('.pref-platform-checkbox');
         preferredPlatforms = Array.from(checkboxes).filter(c => c.checked).map(c => c.value);
         localStorage.setItem('preferred_platforms', JSON.stringify(preferredPlatforms));
-        alert('Préférences de plateformes enregistrées ! La recherche les mettra désormais en avant.');
+        
+        if (typeof supabaseClient !== 'undefined' && navigator.onLine) {
+            try {
+                // Sauvegarde comme un faux média dans Supabase
+                await supabaseClient.from('user_library').upsert({
+                    user_id: localUserId, 
+                    media_id: 'prefs_platforms', 
+                    media_data: { id: 'prefs_platforms', platforms: preferredPlatforms }, 
+                    last_modified: Date.now()
+                }, { onConflict: 'user_id,media_id' });
+            } catch(e) {}
+        }
+        alert('Préférences de plateformes enregistrées et synchronisées sur le Cloud !');
     }
 
     function renderProfile() {
