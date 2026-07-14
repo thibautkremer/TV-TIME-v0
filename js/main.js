@@ -1,6 +1,6 @@
 'use strict';
 // ============================================================
-// MAIN — bootstrap de l'app (doit être chargé en dernier)
+// MAIN — bootstrap asynchrone et gestes tactiles
 // ============================================================
 
 window.addEventListener('online', () => { loadFromCloud(); processSyncQueue(); });
@@ -12,12 +12,23 @@ if ('serviceWorker' in navigator) {
     });
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-    deduplicateLibrary(); updateHeaderCount();
+// ARCHITECTURE : Chargement asynchrone complet pour attendre IndexedDB
+window.addEventListener('DOMContentLoaded', async () => {
+    // 1. Récupération de la base via IndexedDB avant d'afficher quoi que ce soit
+    library = (await localforage.getItem('personal_tracker_db')) || [];
+    rebuildLibraryIndex();
+    deduplicateLibrary(); 
+    updateHeaderCount();
+    
+    // 2. Synchronisation et mise à jour
     loadFromCloud().then(() => { checkAutoMassUpdate(); });
     processSyncQueue(); checkDailyNotifications();
+    
+    // 3. Observers
     const sSentinel = document.getElementById('searchSentinel'); if (sSentinel) searchObserver.observe(sSentinel);
     const dSentinel = document.getElementById('discoverSentinel'); if (dSentinel) discoverObserver.observe(dSentinel);
+    
+    // 4. Initialisation interface
     switchTab('library');
 
     document.getElementById('searchInput').addEventListener('input', e => {
@@ -33,11 +44,44 @@ window.addEventListener('DOMContentLoaded', () => {
         if (block.classList.contains('hidden')) { renderSuggestions(currentModalMediaId); block.classList.remove('hidden'); setTimeout(() => block.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100); } else { block.classList.add('hidden'); }
     };
 
-    let touchstartX = 0; let touchendX = 0;
+    // UX : Gestes tactiles pour fermer la modale
+    let modalStartX = 0, modalEndX = 0;
     const modalEl = document.getElementById('mediaModal');
-    modalEl.addEventListener('touchstart', e => { touchstartX = e.changedTouches[0].screenX; }, { passive: true });
-    modalEl.addEventListener('touchend', e => { touchendX = e.changedTouches[0].screenX; if (touchendX - touchstartX > 100) { if (!modalEl.classList.contains('hidden')) closeModal(); } }, { passive: true });
+    modalEl.addEventListener('touchstart', e => { modalStartX = e.changedTouches[0].screenX; }, { passive: true });
+    modalEl.addEventListener('touchend', e => { modalEndX = e.changedTouches[0].screenX; if (modalEndX - modalStartX > 100 && !modalEl.classList.contains('hidden')) closeModal(); }, { passive: true });
+
+    // UX : NOUVEAU - Swipe Gestures pour naviguer entre les onglets
+    setupTabSwiping();
 });
+
+function setupTabSwiping() {
+    let touchstartX = 0;
+    let touchendX = 0;
+    const tabsList = ['search', 'discover', 'calendar', 'library', 'profile'];
+    const mainContainer = document.getElementById('mainContainer');
+
+    function handleGlobalSwipe() {
+        // Bloquer le swipe si la modale est ouverte pour éviter les conflits
+        if (!document.getElementById('mediaModal').classList.contains('hidden')) return;
+
+        const diffX = touchstartX - touchendX;
+        
+        // Seuil de détection pour le swipe (80px)
+        if (Math.abs(diffX) > 80) {
+            const currentTab = tabsList.find(t => !document.getElementById(`tab-${t}`).classList.contains('hidden'));
+            const currentIdx = tabsList.indexOf(currentTab);
+            
+            if (diffX > 0 && currentIdx < tabsList.length - 1) {
+                switchTab(tabsList[currentIdx + 1]); // Swipe Gauche -> Onglet Suivant
+            } else if (diffX < 0 && currentIdx > 0) {
+                switchTab(tabsList[currentIdx - 1]); // Swipe Droite -> Onglet Précédent
+            }
+        }
+    }
+
+    mainContainer.addEventListener('touchstart', e => { touchstartX = e.changedTouches[0].screenX; }, { passive: true });
+    mainContainer.addEventListener('touchend', e => { touchendX = e.changedTouches[0].screenX; handleGlobalSwipe(); }, { passive: true });
+}
 
 async function checkAutoMassUpdate() {
     const lastUpdate = localStorage.getItem('last_mass_update_time');
