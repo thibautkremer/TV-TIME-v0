@@ -1,11 +1,7 @@
 'use strict';
 // ============================================================
-// ADMIN — MAJ de masse API et gestion des liens Movix
+// ADMIN — MAJ de masse API 100% TMDB
 // ============================================================
-
-async function migrateToTmdbIds() {
-    console.log("Migration TMDB déjà effectuée.");
-}
 
 async function massUpdateLibrary(type, silent = false) {
     const btnId = type === 'series' ? 'btn-mass-update-series' : 'btn-mass-update-movie';
