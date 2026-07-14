@@ -65,14 +65,3 @@ function togglePosterSize(img) {
     if (img.classList.contains('fixed')) img.className = 'w-20 h-28 object-cover rounded border border-gray-700 shrink-0 cursor-pointer transition-all duration-300 z-50';
     else img.className = 'fixed inset-0 z-[100] w-full h-full object-contain bg-black/95 p-4 cursor-pointer transition-all duration-300';
 }
-
-function normalizeShow(show) {
-    let st = show.status || 'Running';
-    if (show.summary && /cancel/i.test(show.summary)) st = 'Canceled';
-    return {
-        id: `series-${show.id}`, apiId: show.id, title: show.name, title_fr: show.title_fr || null, type: 'series',
-        image: show.image?.medium || '', summary: show.summary?.replace(/<[^>]*>/g, '') || '', rating: show.rating?.average || 0,
-        genres: show.genres || [], status_production: st, premiered: show.premiered ? String(show.premiered).split('-')[0] : 'N/A',
-        runtime: show.runtime || show.averageRuntime || 0, network: show.network?.name || show.webChannel?.name || 'Inconnu'
-    };
-}
