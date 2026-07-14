@@ -1,7 +1,23 @@
 'use strict';
 // ============================================================
-// CARDS — carte média réutilisée par recherche/découverte/bibliothèque
+// CARDS — carte média réutilisée et Skeletons
 // ============================================================
+
+// UX : Fonction pour générer une carte de chargement animée (Skeleton)
+function createSkeletonCard() {
+    const div = document.createElement('div');
+    div.className = 'bg-gray-800 rounded-xl border border-gray-700 overflow-hidden shadow-sm flex flex-col animate-pulse h-full';
+    div.innerHTML = `
+        <div class="w-full bg-gray-700" style="aspect-ratio: 155.88 / 217.56;"></div>
+        <div class="p-2 flex-1 flex flex-col gap-2">
+            <div class="h-3 bg-gray-600 rounded w-3/4 mt-1"></div>
+            <div class="h-3 bg-gray-600 rounded w-1/2"></div>
+            <div class="mt-auto pt-1 flex gap-1.5 w-full">
+                <div class="flex-1 h-6 bg-gray-700 rounded"></div>
+            </div>
+        </div>`;
+    return div;
+}
 
 function buildCardActionsHTML(media, libItem = isMediaInLibrary(media)) {
     if (libItem) return `<button onclick="event.stopPropagation(); handleRemove('${libItem.id}')" class="w-full text-center text-[10px] bg-gray-900 hover:bg-gray-800 text-gray-500 hover:text-red-400 border border-gray-700 py-1.5 rounded transition shadow-sm">✕ Retirer</button>`;
@@ -45,7 +61,7 @@ function createMediaCard(media, isLib = false) {
     const isAnime = media.genres?.includes('Anime') || media.genres?.includes('Animation');
     const bgColorClass = media.type === 'movie' ? 'bg-amber-900/60' : (isAnime ? 'bg-purple-900/60' : 'bg-teal-900/60');
     const barColorClass = media.type === 'movie' ? 'bg-amber-500' : (isAnime ? 'bg-purple-500' : 'bg-teal-500');
-    const div = document.createElement('div'); div.className = 'bg-gray-800 rounded-xl border border-gray-700 overflow-hidden cursor-pointer shadow-sm relative flex flex-col hover:border-gray-500 transition-colors';
+    const div = document.createElement('div'); div.className = 'bg-gray-800 rounded-xl border border-gray-700 overflow-hidden cursor-pointer shadow-sm relative flex flex-col hover:border-gray-500 transition-colors h-full';
     const libItem = isMediaInLibrary(media);
     div.onclick = (e) => { if (e.target.closest('button')) return; if (isLib || libItem) openLibraryModal(libItem ? libItem.id : media.id); else openPreviewModal(media); };
     const optimizedImgSrc = getOptimizedImageUrl(media.image, 300);
