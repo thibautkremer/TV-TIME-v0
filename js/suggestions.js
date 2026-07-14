@@ -9,29 +9,29 @@ async function renderSuggestions(currentId) {
     const block = document.getElementById('modalSuggestionsBlock');
     block.innerHTML = `<div id="modalSuggestionsList" class="space-y-2"><p class="text-xs text-teal-400 text-center py-4 animate-pulse">Recherche des franchises et contenus similaires...</p></div>`;
     try {
-        await ensureShowsPool();
         const baseMedia = library.find(i => i.id === currentId) || searchResults.find(i => i.id === currentId) || discoverResults.find(i => i.id === currentId);
         const bGenres = baseMedia?.genres || []; const baseTitle = baseMedia?.title.toLowerCase() || ""; const baseTitleFr = (baseMedia?.title_fr || "").toLowerCase();
 
-        let dynamicPool = [...showsCache];
+        let dynamicPool = [];
 
         if (baseTitle) {
             try {
                 const cleanBase = baseTitle.replace(/[^a-zA-Z0-9 ]/g, "").split(' ').slice(0, 2).join(' ');
-                const [tvRes, tmdbRes] = await Promise.all([
-                    fetch(`${TVMAZE_API}/search/shows?q=${encodeURIComponent(cleanBase)}`).then(r => r.json()).catch(() => []),
-                    fetch(`${TMDB_BASE}/search/multi?api_key=${TMDB_API_KEY}&language=fr-FR&query=${encodeURIComponent(cleanBase)}`).then(r => r.json()).catch(() => ({ results: [] }))
-                ]);
-
-                if (Array.isArray(tvRes)) tvRes.forEach(item => { if (!dynamicPool.find(s => s.id === item.show.id)) dynamicPool.push(item.show); });
+                const tmdbRes = await fetch(`${TMDB_BASE}/search/multi?api_key=${TMDB_API_KEY}&language=fr-FR&query=${encodeURIComponent(cleanBase)}`).then(r => r.json()).catch(() => ({ results: [] }));
+                
                 if (tmdbRes.results) {
                     tmdbRes.results.forEach(m => {
                         if (m.media_type === 'movie' || m.media_type === 'tv') {
-                            if (!dynamicPool.find(s => String(s.id) === String(m.id))) {
+                            if (!dynamicPool.find(s => String(s.apiId) === String(m.id))) {
                                 dynamicPool.push({
-                                    id: m.id, name: m.title || m.name, type: m.media_type,
-                                    premiered: m.release_date || m.first_air_date, image: { medium: m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : '' },
-                                    genres: [], network: { name: 'Inconnu' }, rating: { average: m.vote_average || 0 }
+                                    id: m.media_type === 'tv' ? `series-${m.id}` : `movie-${m.id}`, 
+                                    apiId: m.id,
+                                    title: m.title || m.name, 
+                                    title_fr: m.title || m.name,
+                                    type: m.media_type === 'tv' ? 'series' : 'movie',
+                                    premiered: m.release_date || m.first_air_date ? String(m.release_date || m.first_air_date).split('-')[0] : 'N/A', 
+                                    image: m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : '',
+                                    genres: [], network: 'Inconnu', rating: m.vote_average || 0
                                 });
                             }
                         }
@@ -40,20 +40,17 @@ async function renderSuggestions(currentId) {
             } catch (e) {}
         }
 
-        modalSuggestionsPool = dynamicPool.filter(s => `series-${s.id}` !== currentId && `movie-${s.id}` !== currentId).map(s => {
-            let score = 0; const sTitle = s.name.toLowerCase();
+        modalSuggestionsPool = dynamicPool.filter(s => s.id !== currentId).map(s => {
+            let score = 0; const sTitle = s.title.toLowerCase();
             if (baseTitle && (sTitle.includes(baseTitle) || baseTitle.includes(sTitle))) score += 25;
             if (baseTitleFr && (sTitle.includes(baseTitleFr) || baseTitleFr.includes(sTitle))) score += 25;
             const bWords = baseTitle.split(/\s+/).filter(w => w.length > 3); bWords.forEach(w => { if (sTitle.includes(w)) score += 5; });
             let sharedGenres = 0; s.genres?.forEach(g => { if (bGenres.includes(g)) sharedGenres++; }); score += (sharedGenres * 4);
-            if (preferredPlatforms.includes(s.network?.name)) score += 10; if (s.network?.name === baseMedia?.network && baseMedia?.network) score += 3;
-            score += (s.rating?.average || 0);
+            if (preferredPlatforms.includes(s.network)) score += 10; if (s.network === baseMedia?.network && baseMedia?.network) score += 3;
+            score += s.rating;
             let matchPercent = Math.min(99, Math.max(40, Math.round(50 + (score * 1.5))));
 
-            let norm;
-            if (s.type === 'movie') norm = { id: `movie-${s.id}`, apiId: s.id, title: s.name, title_fr: s.name, type: 'movie', image: s.image?.medium || '', premiered: s.premiered ? String(s.premiered).split('-')[0] : 'N/A' };
-            else norm = normalizeShow(s);
-            return { ...norm, score, matchPercent };
+            return { ...s, score, matchPercent };
         }).filter(i => i.matchPercent >= 75).sort((a, b) => b.matchPercent - a.matchPercent);
 
         modalSuggestionsPool = modalSuggestionsPool.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
