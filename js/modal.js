@@ -88,12 +88,38 @@ function buildSeasonTabs(episodes, isLib) {
 }
 
 function renderEpisodes(eps, isLib) {
-    const list = document.getElementById('modalEpisodesList'); renderSeasonGraph(eps);
+    const list = document.getElementById('modalEpisodesList'); 
+    renderSeasonGraph(eps);
+    
+    // Récupération de l'ID TMDB de la série pour construire le lien
+    const item = library[activeModalMediaIndex];
+    const tmdbId = item.apiId;
+
     list.innerHTML = eps.map(ep => {
-        const isFuture = !ep.airdate || ep.airdate > todayString; const val = (typeof ep.rating === 'object' && ep.rating !== null) ? (ep.rating.average || 0) : (ep.rating || 0); const rateStr = val > 0 ? `<span class="text-[9px] text-yellow-400 font-bold ml-2">★ ${val.toFixed(1)}</span>` : '';
+        const isFuture = !ep.airdate || ep.airdate > todayString; 
+        const val = (typeof ep.rating === 'object' && ep.rating !== null) ? (ep.rating.average || 0) : (parseFloat(ep.rating) || 0); 
+        const rateStr = val > 0 ? `<span class="text-[9px] text-yellow-400 font-bold ml-2">★ ${val.toFixed(1)}</span>` : '';
         const btnClass = isFuture ? 'bg-gray-800/50 text-gray-600' : (ep.watched ? 'bg-emerald-900 text-emerald-400' : 'bg-gray-700 hover:bg-gray-600');
+        
+        // --- NOUVEAU : Construction du lien Movix ---
+        const streamUrl = !isFuture ? `https://movix.date/watch/tv/${tmdbId}/s/${ep.season}/e/${ep.number}` : '#';
+        const streamBtn = !isFuture ? `<a href="${streamUrl}" target="_blank" class="px-2 py-1 rounded text-[10px] shrink-0 font-bold bg-indigo-700 hover:bg-indigo-600 text-white transition mr-1">▶</a>` : '';
+        // ---------------------------------------------
+
         const btnAction = isLib ? `<button onclick="event.stopPropagation(); ${!isFuture ? `toggleEpCascade(${ep.id}, '${ep.season}')` : ''}" class="px-2 py-1 rounded text-[10px] shrink-0 font-bold transition ${btnClass}" ${isFuture ? 'disabled' : ''}>${ep.watched ? '✓ Vu' : 'Vu'}</button>` : '';
-        return `<div class="rounded-xl bg-gray-900/60 border border-gray-700/50 text-xs overflow-hidden cursor-pointer" onclick="toggleEpisodeDescription(this)"><div class="p-2 flex justify-between items-center"><span class="truncate text-gray-300 flex-1">E${ep.number} – <b class="text-white">${ep.name}</b> <span class="text-gray-500 ml-1">${ep.airdate || 'TBA'}</span> ${rateStr}</span>${btnAction}</div><div class="episode-desc p-2 pt-0 text-gray-400 hidden border-t border-gray-700/50"><p class="mt-2 leading-relaxed">${ep.summary || "Pas de description disponible."}</p></div></div>`;
+        
+        return `<div class="rounded-xl bg-gray-900/60 border border-gray-700/50 text-xs overflow-hidden cursor-pointer" onclick="toggleEpisodeDescription(this)">
+            <div class="p-2 flex justify-between items-center">
+                <span class="truncate text-gray-300 flex-1">E${ep.number} – <b class="text-white">${ep.name}</b> <span class="text-gray-500 ml-1">${ep.airdate || 'TBA'}</span> ${rateStr}</span>
+                <div class="flex items-center">
+                    ${streamBtn}
+                    ${btnAction}
+                </div>
+            </div>
+            <div class="episode-desc p-2 pt-0 text-gray-400 hidden border-t border-gray-700/50">
+                <p class="mt-2 leading-relaxed">${ep.summary || "Pas de description disponible."}</p>
+            </div>
+        </div>`;
     }).join('');
 }
 
