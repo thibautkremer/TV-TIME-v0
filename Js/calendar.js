@@ -1,0 +1,83 @@
+'use strict';
+// ============================================================
+// CALENDAR — onglet "Sorties" (épisodes et films à venir)
+// ============================================================
+
+function getCalendarEntries() {
+    const entries = [];
+    library.forEach(item => {
+        if (item.status === 'Abandoned') return;
+        if (item.type === 'series') {
+            (item.episodes || []).forEach(ep => {
+                if (!ep.watched && ep.airdate) {
+                    entries.push({ date: ep.airdate, type: 'episode', mediaId: item.id, title: item.title_fr || item.title, subtitle: `S${ep.season}E${ep.number}${ep.name ? ' – ' + ep.name : ''}`, image: item.image });
+                }
+            });
+        } else if (item.type === 'movie') {
+            if (item.releaseDate && item.status !== 'Watched') {
+                entries.push({ date: item.releaseDate, type: 'movie', mediaId: item.id, title: item.title_fr || item.title, subtitle: 'Sortie film', image: item.image });
+            }
+        }
+    });
+    entries.sort((a, b) => a.date.localeCompare(b.date));
+    return entries;
+}
+
+function setCalFilter(filter) {
+    calFilter = filter;
+    ['all', 'today', 'week', 'month'].forEach(f => {
+        const btn = document.getElementById(`cal-${f}`);
+        btn.className = f === filter
+            ? "shrink-0 text-[11px] px-3 py-1.5 rounded-lg font-bold bg-teal-600 text-white transition"
+            : "shrink-0 text-[11px] px-3 py-1.5 rounded-lg font-bold bg-gray-800 text-gray-400 border border-gray-700";
+    });
+    renderCalendar();
+}
+
+function renderCalendar() {
+    const container = document.getElementById('calendarTimeline');
+    let entries = getCalendarEntries();
+    const now = new Date(todayString + 'T00:00:00');
+
+    if (calFilter === 'today') {
+        entries = entries.filter(e => e.date === todayString);
+    } else if (calFilter === 'week') {
+        const weekLater = new Date(now); weekLater.setDate(weekLater.getDate() + 7);
+        entries = entries.filter(e => e.date >= todayString && new Date(e.date + 'T00:00:00') <= weekLater);
+    } else if (calFilter === 'month') {
+        const monthLater = new Date(now); monthLater.setMonth(monthLater.getMonth() + 1);
+        entries = entries.filter(e => e.date >= todayString && new Date(e.date + 'T00:00:00') <= monthLater);
+    } else {
+        // 'all' : on garde les 7 derniers jours + tout le futur, pour éviter un historique infini
+        const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
+        const weekAgoStr = weekAgo.toISOString().split('T')[0];
+        entries = entries.filter(e => e.date >= weekAgoStr);
+    }
+
+    if (entries.length === 0) { container.innerHTML = '<p class="text-center text-gray-500 text-sm py-10">Aucune sortie à afficher.</p>'; return; }
+
+    const grouped = {};
+    entries.forEach(e => { (grouped[e.date] = grouped[e.date] || []).push(e); });
+
+    const frag = document.createDocumentFragment();
+    Object.keys(grouped).sort().forEach(date => {
+        const dayWrap = document.createElement('div');
+        const isToday = date === todayString;
+        const dateObj = new Date(date + 'T00:00:00');
+        const label = isToday ? "Aujourd'hui" : dateObj.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+        dayWrap.innerHTML = `<h3 class="text-xs font-bold ${isToday ? 'text-teal-400' : 'text-gray-400'} uppercase tracking-wider mb-1.5 mt-3">${label}</h3>`;
+        const list = document.createElement('div'); list.className = 'space-y-1.5';
+        grouped[date].forEach(e => {
+            const row = document.createElement('div');
+            row.className = 'flex items-center gap-3 bg-gray-800 border border-gray-700 rounded-xl p-2 cursor-pointer hover:border-gray-500 transition';
+            row.onclick = () => openLibraryModal(e.mediaId);
+            const icon = e.type === 'movie' ? '🍿' : '📺';
+            row.innerHTML = `<img src="${getOptimizedImageUrl(e.image, 80)}" class="w-9 h-12 object-cover rounded border border-gray-700 shrink-0" /><div class="min-w-0 flex-1"><p class="text-xs font-bold text-white truncate">${icon} ${e.title}</p><p class="text-[10px] text-gray-400 truncate">${e.subtitle}</p></div>`;
+            list.appendChild(row);
+        });
+        dayWrap.appendChild(list);
+        frag.appendChild(dayWrap);
+    });
+    container.innerHTML = '';
+    container.appendChild(frag);
+}
