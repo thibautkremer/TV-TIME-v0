@@ -3,14 +3,13 @@
 // MODAL — fiche détail média (preview & bibliothèque)
 // ============================================================
 
-async function populateModalBase(media) {
+function populateModalBase(media) {
     currentModalMediaId = media.id; 
     document.getElementById('modalTitle').textContent = media.title_fr || media.title;
     
     const posterEl = document.getElementById('modalPoster'); 
     posterEl.src = getOptimizedImageUrl(media.image, 600); 
     posterEl.onerror = () => { posterEl.src = media.image; };
-    
     if (posterEl.classList.contains('fixed')) togglePosterSize(posterEl);
     
     document.getElementById('modalSummary').textContent = media.summary || 'Aucun résumé.'; 
@@ -36,40 +35,16 @@ async function populateModalBase(media) {
     document.getElementById('modalMovieActions').classList.add('hidden');
     document.getElementById('modalScrollable').scrollTop = 0;
 
-    // --- LOGIQUE DE RÉSOLUTION DYNAMIQUE MOVIX ---
     const btnMovix = document.getElementById('btnMovixRedirect');
-    const cleanTitle = (media.title_fr || media.title).split('(')[0].trim();
-    
-    btnMovix.onclick = async (e) => {
+    btnMovix.onclick = (e) => {
         e.preventDefault();
-        const originalText = btnMovix.textContent;
-        btnMovix.textContent = "Chargement...";
-        
-        try {
-            // Résolution de l'ID TMDB à la volée
-            const searchRes = await fetch(`${TMDB_BASE}/search/${media.type === 'series' ? 'tv' : 'movie'}?api_key=${TMDB_API_KEY}&language=fr-FR&query=${encodeURIComponent(cleanTitle)}`);
-            const searchData = await searchRes.json();
-            
-            if (searchData.results && searchData.results.length > 0) {
-                const realTmdbId = searchData.results[0].id;
-                // Redirection directe vers le format lecteur Movix
-                // Séries : /tv/ID, Films : /movie/ID
-                const path = media.type === 'series' ? 'tv' : 'movie';
-                window.open(`https://movix.date/${path}/${realTmdbId}`, '_blank');
-            } else {
-                alert("Impossible de trouver le média sur Movix.");
-            }
-        } catch (err) {
-            console.error("Erreur résolution Movix:", err);
-            alert("Erreur lors de la connexion.");
-        } finally {
-            btnMovix.textContent = originalText;
-        }
+        const path = media.type === 'series' ? 'tv' : 'movie';
+        window.open(`https://movix.date/${path}/${media.apiId}`, '_blank');
     };
-    // ---------------------------------------------
 
     if (media.type === 'movie') {
         document.getElementById('modalMovieActions').classList.remove('hidden');
+        const cleanTitle = (media.title_fr || media.title).split('(')[0].trim();
         document.getElementById('modalMovieTrailerBtn').onclick = () => window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(cleanTitle + ' bande annonce VF')}`, '_blank');
         document.getElementById('modalMovieSummaryBtn').onclick = () => window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(cleanTitle + ' résumé complet FR')}`, '_blank');
     }
@@ -77,7 +52,6 @@ async function populateModalBase(media) {
 
 async function openPreviewModal(media) {
     modalMode = 'preview'; activeModalMediaIndex = null;
-    await resolveSeriesFromImdb(media); await resolveMovieFromTmdb(media);
     populateModalBase(media);
     const fBtn = document.getElementById('modalActionFollowBtn'); const wBtn = document.getElementById('modalActionAllWatchedBtn');
     fBtn.textContent = '+ À regarder'; fBtn.className = "w-full py-3 bg-teal-600 text-white font-bold rounded-xl text-xs"; fBtn.onclick = async () => { fBtn.textContent = 'Ajout...'; await quickAdd(media.id, false); closeModal(); };
@@ -85,11 +59,9 @@ async function openPreviewModal(media) {
 
     if (media.type === 'series') {
         document.getElementById('modalSeriesContent').classList.remove('hidden');
-        try {
-            const res = await fetch(`${TVMAZE_API}/shows/${media.apiId}/episodes`); const apiEps = await res.json();
-            previewEpisodes = apiEps.map(e => ({ id: e.id, season: e.season, number: e.number, name: e.name, airdate: e.airdate, rating: e.rating?.average || 0, watched: false }));
-            currentSeriesAvgRating = computeAvgEpisodeRating(previewEpisodes); buildSeasonTabs(previewEpisodes, false); renderGlobalGraph(previewEpisodes);
-        } catch (e) {}
+        const apiEps = await fetchAllTmdbEpisodes(media.apiId);
+        previewEpisodes = apiEps;
+        currentSeriesAvgRating = computeAvgEpisodeRating(previewEpisodes); buildSeasonTabs(previewEpisodes, false); renderGlobalGraph(previewEpisodes);
     }
     document.getElementById('mediaModal').classList.remove('hidden');
 }
@@ -112,17 +84,8 @@ function openLibraryModal(id) {
 }
 
 function closeModal() { suggestionsObserver.disconnect(); document.getElementById('mediaModal').classList.add('hidden'); const posterEl = document.getElementById('modalPoster'); if (posterEl.classList.contains('fixed')) togglePosterSize(posterEl); }
-
-function renderGlobalGraph(eps) {
-    const container = document.getElementById('modalGlobalGraph'); const frag = document.createDocumentFragment();
-    eps.forEach(ep => { const val = (typeof ep.rating === 'object' && ep.rating !== null) ? (ep.rating.average || 0) : (parseFloat(ep.rating) || 0); const r = val > 0 ? val : currentSeriesAvgRating; const h = Math.max(10, (r / 10) * 100); const colorClass = seasonColors[(ep.season - 1) % seasonColors.length] || 'bg-teal-500'; const bar = document.createElement('div'); bar.className = `flex-1 min-w-[4px] ${colorClass} hover:opacity-80 rounded-t cursor-pointer relative z-10`; bar.style.height = `${h}%`; bar.title = `S${ep.season}E${ep.number}: ${r}`; frag.appendChild(bar); });
-    container.innerHTML = ''; container.appendChild(frag);
-}
-
-function renderSeasonGraph(eps) {
-    const container = document.getElementById('modalSeasonGraph'); container.innerHTML = '';
-    eps.forEach(ep => { const val = (typeof ep.rating === 'object' && ep.rating !== null) ? (ep.rating.average || 0) : (ep.rating || 0); const r = val > 0 ? val : currentSeriesAvgRating; const h = Math.max(10, (r / 10) * 100); const colorClass = seasonColors[(ep.season - 1) % seasonColors.length] || 'bg-cyan-600'; container.innerHTML += `<div class="flex-1 min-w-[12px] ${colorClass} transition rounded-t cursor-pointer flex flex-col justify-end items-center relative z-10" style="height: ${h}%" title="E${ep.number}: ${r}"><span class="text-[8px] text-white font-bold mb-0.5 opacity-80">${r > 0 ? r : ''}</span></div>`; });
-}
+function renderGlobalGraph(eps) { const container = document.getElementById('modalGlobalGraph'); const frag = document.createDocumentFragment(); eps.forEach(ep => { const val = (typeof ep.rating === 'object' && ep.rating !== null) ? (ep.rating.average || 0) : (parseFloat(ep.rating) || 0); const r = val > 0 ? val : currentSeriesAvgRating; const h = Math.max(10, (r / 10) * 100); const colorClass = seasonColors[(ep.season - 1) % seasonColors.length] || 'bg-teal-500'; const bar = document.createElement('div'); bar.className = `flex-1 min-w-[4px] ${colorClass} hover:opacity-80 rounded-t cursor-pointer relative z-10`; bar.style.height = `${h}%`; bar.title = `S${ep.season}E${ep.number}: ${r}`; frag.appendChild(bar); }); container.innerHTML = ''; container.appendChild(frag); }
+function renderSeasonGraph(eps) { const container = document.getElementById('modalSeasonGraph'); container.innerHTML = ''; eps.forEach(ep => { const val = (typeof ep.rating === 'object' && ep.rating !== null) ? (ep.rating.average || 0) : (ep.rating || 0); const r = val > 0 ? val : currentSeriesAvgRating; const h = Math.max(10, (r / 10) * 100); const colorClass = seasonColors[(ep.season - 1) % seasonColors.length] || 'bg-cyan-600'; container.innerHTML += `<div class="flex-1 min-w-[12px] ${colorClass} transition rounded-t cursor-pointer flex flex-col justify-end items-center relative z-10" style="height: ${h}%" title="E${ep.number}: ${r}"><span class="text-[8px] text-white font-bold mb-0.5 opacity-80">${r > 0 ? r : ''}</span></div>`; }); }
 
 function buildSeasonTabs(episodes, isLib) {
     const seasons = [...new Set(episodes.map(e => e.season))]; const tabs = document.getElementById('modalSeasonTabs'); tabs.innerHTML = ''; document.getElementById('modalEpisodesBlock').classList.remove('hidden');
@@ -139,24 +102,12 @@ function buildSeasonTabs(episodes, isLib) {
     if (seasons.length > 0) { renderEpisodes(episodes.filter(ep => ep.season === targetSeason), isLib); updateActionBtns(targetSeason); }
 }
 
-async function renderEpisodes(eps, isLib) {
+function renderEpisodes(eps, isLib) {
     const list = document.getElementById('modalEpisodesList'); 
     renderSeasonGraph(eps);
     
-    const item = library[activeModalMediaIndex];
-    const cleanTitle = (item.title_fr || item.title).split('(')[0].trim();
-
-    // Résolution automatique de l'ID TMDB pour garantir un lien valide
-    let targetId = item.apiId;
-    try {
-        const searchRes = await fetch(`${TMDB_BASE}/search/tv?api_key=${TMDB_API_KEY}&language=fr-FR&query=${encodeURIComponent(cleanTitle)}`);
-        const searchData = await searchRes.json();
-        if (searchData.results && searchData.results.length > 0) {
-            targetId = searchData.results[0].id;
-        }
-    } catch (e) {
-        console.error("Erreur lors de la résolution dynamique de l'ID :", e);
-    }
+    const item = library[activeModalMediaIndex] || { apiId: currentModalMediaId }; 
+    const targetId = item.apiId; 
 
     list.innerHTML = eps.map(ep => {
         const isFuture = !ep.airdate || ep.airdate > todayString; 
@@ -164,7 +115,6 @@ async function renderEpisodes(eps, isLib) {
         const rateStr = val > 0 ? `<span class="text-[9px] text-yellow-400 font-bold ml-2">★ ${val.toFixed(1)}</span>` : '';
         const btnClass = isFuture ? 'bg-gray-800/50 text-gray-600' : (ep.watched ? 'bg-emerald-900 text-emerald-400' : 'bg-gray-700 hover:bg-gray-600');
         
-        // --- Construction du lien dynamique vers le lecteur d'épisode ---
         const streamUrl = !isFuture ? `https://movix.date/watch/tv/${targetId}/s/${ep.season}/e/${ep.number}` : '#';
         const streamBtn = !isFuture ? `<a href="${streamUrl}" target="_blank" class="px-2 py-1 rounded text-[10px] shrink-0 font-bold bg-indigo-700 hover:bg-indigo-600 text-white transition mr-1">▶</a>` : '';
 
@@ -173,14 +123,9 @@ async function renderEpisodes(eps, isLib) {
         return `<div class="rounded-xl bg-gray-900/60 border border-gray-700/50 text-xs overflow-hidden cursor-pointer" onclick="toggleEpisodeDescription(this)">
             <div class="p-2 flex justify-between items-center">
                 <span class="truncate text-gray-300 flex-1">E${ep.number} – <b class="text-white">${ep.name}</b> <span class="text-gray-500 ml-1">${ep.airdate || 'TBA'}</span> ${rateStr}</span>
-                <div class="flex items-center">
-                    ${streamBtn}
-                    ${btnAction}
-                </div>
+                <div class="flex items-center">${streamBtn}${btnAction}</div>
             </div>
-            <div class="episode-desc p-2 pt-0 text-gray-400 hidden border-t border-gray-700/50">
-                <p class="mt-2 leading-relaxed">${ep.summary || "Pas de description disponible."}</p>
-            </div>
+            <div class="episode-desc p-2 pt-0 text-gray-400 hidden border-t border-gray-700/50"><p class="mt-2 leading-relaxed">${ep.summary || "Pas de description disponible."}</p></div>
         </div>`;
     }).join('');
 }
