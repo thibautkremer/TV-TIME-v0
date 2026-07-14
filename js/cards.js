@@ -3,7 +3,6 @@
 // CARDS — carte média réutilisée et Skeletons
 // ============================================================
 
-// UX : Fonction pour générer une carte de chargement animée (Skeleton)
 function createSkeletonCard() {
     const div = document.createElement('div');
     div.className = 'bg-gray-800 rounded-xl border border-gray-700 overflow-hidden shadow-sm flex flex-col animate-pulse h-full';
@@ -36,6 +35,7 @@ async function handleQuickAdd(container, mediaId, watched) {
     await quickAdd(mediaId, watched); refreshGrids();
 }
 
+// Autres fonctions conservées...
 function checkNextEp(id) {
     const item = library.find(i => i.id === id); if (!item) return;
     const nextEp = item.episodes?.find(e => !e.watched && e.airdate && e.airdate <= todayString);
@@ -65,11 +65,14 @@ function createMediaCard(media, isLib = false) {
     const div = document.createElement('div'); div.className = 'bg-gray-800 rounded-xl border border-gray-700 overflow-hidden cursor-pointer shadow-sm relative flex flex-col hover:border-gray-500 transition-colors h-full';
     const libItem = isMediaInLibrary(media);
     div.onclick = (e) => { if (e.target.closest('button')) return; if (isLib || libItem) openLibraryModal(libItem ? libItem.id : media.id); else openPreviewModal(media); };
+    
     const optimizedImgSrc = getOptimizedImageUrl(media.image, 300);
     const calcRating = getCalculatedRating(media); const ratingDisplay = calcRating > 0 ? calcRating.toFixed(1) : 'N/A';
     const ratingOverlay = `<div class="absolute top-1 left-1 bg-black/70 text-yellow-400 text-[10px] font-black px-1.5 py-0.5 rounded z-10 border border-gray-800">★ ${ratingDisplay}</div>`;
+    
     let yearOverlay = ''; if (!isLib && media.premiered && media.premiered !== 'N/A') { const year = String(media.premiered).split('-')[0]; yearOverlay = `<div class="absolute top-1 right-1 bg-gray-900/80 text-gray-400 text-[10px] font-bold px-1.5 py-0.5 rounded z-10 border border-gray-700">${year}</div>`; }
     const removeBtn = isLib ? `<button onclick="event.stopPropagation(); handleRemove('${media.id}')" class="absolute top-1 right-1 bg-black/70 text-red-500 text-[10px] font-black px-1.5 py-0.5 rounded z-10 border border-gray-800 hover:bg-red-900">✕</button>` : '';
+    
     let libOverlay = '';
     if (isLib) {
         if (media.type === 'series') {
@@ -81,10 +84,13 @@ function createMediaCard(media, isLib = false) {
             else libOverlay = `<button onclick="event.stopPropagation(); markMovieWatched('${media.id}')" class="absolute bottom-1 right-1 bg-emerald-600 text-white text-[9px] px-1.5 py-0.5 rounded font-black z-10">✓ Vu</button>`;
         }
     }
-    let matchBadge = media.matchPercent ? `<div class="absolute bottom-1 left-1 bg-pink-900/90 text-pink-300 text-[9px] font-black px-1.5 py-0.5 rounded z-10 border border-pink-700 shadow-sm">${media.matchPercent}% Match</div>` : '';
+    
+    // Point 3 : Match badge uniquement si non présent en bibliothèque
+    let matchBadge = (!isLib && !libItem && media.matchPercent) ? `<div class="absolute bottom-1 left-1 bg-pink-900/90 text-pink-300 text-[9px] font-black px-1.5 py-0.5 rounded z-10 border border-pink-700 shadow-sm">${media.matchPercent}% Match</div>` : '';
     const displayTitle = media.title_fr || media.title || 'Inconnu';
     let progressBarHtml = ''; if (isLib) { const prog = getProgress(media); progressBarHtml = `<div class="w-full h-1 bg-gray-900/80 rounded-full overflow-hidden mb-1.5 shadow-inner"><div class="h-full ${barColorClass} transition-all duration-500" style="width: ${prog}%"></div></div>`; }
-    div.innerHTML = `<div class="relative w-full"><img data-src="${optimizedImgSrc}" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null; this.src='${media.image}';" class="media-poster bg-gray-900 lazy-image" />${ratingOverlay}${yearOverlay}${removeBtn}${libOverlay}${matchBadge}</div><div class="p-2 flex-1 flex flex-col ${isLib ? bgColorClass : 'bg-gray-800'}">${progressBarHtml}<h3 class="font-bold text-white text-[11px] truncate leading-tight" title="${displayTitle}">${displayTitle}</h3>${!isLib ? `<div class="mt-auto pt-1" id="actions-${media.id}">${buildCardActionsHTML(media, libItem)}</div>` : ''}</div>`;
+    
+    div.innerHTML = `<div class="relative w-full"><img data-src="${optimizedImgSrc}" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null; this.src='${media.image}';" class="media-poster bg-gray-900 lazy-image" />${ratingOverlay}${yearOverlay}${removeBtn}${libOverlay}${matchBadge}</div><div class="p-2 flex-1 flex flex-col ${isLib ? bgColorClass : 'bg-gray-800'}">${progressBarHtml}<h3 class="font-bold text-white text-[11px] truncate leading-tight" title="${displayTitle}">${displayTitle}</h3>${!isLib && !libItem ? `<div class="mt-auto pt-1" id="actions-${media.id}">${buildCardActionsHTML(media)}</div>` : ''}</div>`;
     return div;
 }
 
