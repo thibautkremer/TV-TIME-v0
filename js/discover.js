@@ -57,17 +57,28 @@ async function renderDiscoverTab(force = false) {
 
         await enrichTmdbList(uniqueMovies);
 
-        if (currentDiscoverMode === 'mix') {
-            const gc = {}; library.forEach(i => (i.genres || []).forEach(g => gc[g] = (gc[g] || 0) + 1));
-            const topGenres = Object.entries(gc).sort((a, b) => b[1] - a[1]).slice(0, 5).map(e => e[0]);
-            let scoredPool = uniqueMovies.map(m => {
-                let score = 0; m.genres?.forEach(g => { if (topGenres.includes(g)) score += 20; });
-                if (preferredPlatforms.includes(m.network)) score += 20; if (m.rating >= 7) score += 10;
-                m.matchPercent = Math.min(99, Math.max(40, Math.round(40 + score))); return m;
-            });
-            discoverResults = scoredPool.filter(s => s.matchPercent >= 75).sort((a, b) => b.matchPercent - a.matchPercent);
-            if (discoverResults.length === 0) { document.getElementById('discoverGrid').innerHTML = '<p class="col-span-full text-center text-gray-500 py-10">Ajoutez plus de médias pour calculer des recommandations précises (>= 75%).</p>'; return; }
-        } else { discoverResults = uniqueMovies.sort(() => 0.5 - Math.random()); }
+        // Remplace le bloc 'mix' dans renderDiscoverTab dans discover.js
+if (currentDiscoverMode === 'mix') {
+    const gc = {}; const nc = {};
+    library.forEach(i => { 
+        (i.genres || []).forEach(g => gc[g] = (gc[g] || 0) + 1); 
+        if (i.network && i.network !== 'Inconnu') nc[i.network] = (nc[i.network] || 0) + 1; 
+    });
+
+    const topGenres = Object.entries(gc).sort((a, b) => b[1] - a[1]).slice(0, 5).map(e => e[0]);
+    
+    // On calcule un score, mais on ne filtre plus drastiquement à 75%
+    let scoredPool = pool.map(s => {
+        let score = 0;
+        s.genres?.forEach(g => { if (topGenres.includes(g)) score += 20; });
+        score += (s.rating * 2); 
+        return { ...s, matchPercent: Math.min(99, Math.max(10, Math.round(score))) };
+    });
+
+    // Tri par matchPercent, mais on autorise tous les résultats (> 10%)
+    discoverResults = scoredPool.sort((a, b) => b.matchPercent - a.matchPercent);
+}
+        else { discoverResults = uniqueMovies.sort(() => 0.5 - Math.random()); }
     }
 
     discoverResults = discoverResults.filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i);
