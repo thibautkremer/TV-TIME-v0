@@ -20,8 +20,12 @@ async function renderDiscoverTab(force = false) {
     if (!force && discoverResults.length > 0) return;
 
     if (discoverMediaType === 'series') {
-        await ensureShowsPool();
-        let pool = showsCache.filter(s => !isMediaInLibrary({ id: `series-${s.id}`, title: s.name, type: 'series' }));
+        const res = await fetch(`${TMDB_BASE}/discover/tv?api_key=${TMDB_API_KEY}&language=fr-FR&sort_by=popularity.desc&page=1`);
+        const data = await res.json();
+        let pool = data.results ? data.results.map(s => ({
+            id: `series-${s.id}`, apiId: s.id, title: s.original_name || s.name, title_fr: s.name, type: 'series',
+            image: s.poster_path ? `https://image.tmdb.org/t/p/w500${s.poster_path}` : '', rating: s.vote_average || 0, premiered: s.first_air_date ? s.first_air_date.split('-')[0] : 'N/A'
+        })).filter(v => !isMediaInLibrary(v)) : [];
 
         if (currentDiscoverMode === 'mix') {
             const gc = {}; const nc = {}; let sumR = 0, countR = 0;
@@ -34,15 +38,15 @@ async function renderDiscoverTab(force = false) {
                 let score = 0; let sharedG = 0;
                 s.genres?.forEach(g => { if (topGenres.includes(g)) sharedG++; }); score += sharedG * 15;
                 if (topNetworks.includes(s.network?.name) || preferredPlatforms.includes(s.network?.name)) score += 20;
-                if (s.rating?.average >= userAvg) score += 10;
+                if (s.rating >= userAvg) score += 10;
                 let matchPercent = Math.min(99, Math.max(40, Math.round(40 + score)));
-                let norm = normalizeShow(s); norm.matchPercent = matchPercent; return norm;
+                return { ...s, matchPercent };
             });
             discoverResults = scoredPool.filter(s => s.matchPercent >= 75).sort((a, b) => b.matchPercent - a.matchPercent);
             if (discoverResults.length === 0) { document.getElementById('discoverGrid').innerHTML = '<p class="col-span-full text-center text-gray-500 py-10">Ajoutez plus de médias pour calculer des recommandations précises (>= 75%).</p>'; return; }
         }
-        else if (currentDiscoverMode === 'top') discoverResults = pool.filter(s => s.rating?.average > 0).sort((a, b) => b.rating.average - a.rating.average).map(normalizeShow);
-        else if (currentDiscoverMode === 'trending') discoverResults = pool.filter(s => s.status === 'Running').sort((a, b) => b.updated - a.updated).map(normalizeShow);
+        else if (currentDiscoverMode === 'top') discoverResults = pool.filter(s => s.rating > 0).sort((a, b) => b.rating - a.rating);
+        else if (currentDiscoverMode === 'trending') discoverResults = pool.sort(() => 0.5 - Math.random());
     } else {
         const res = await fetch(`${TMDB_BASE}/discover/movie?api_key=${TMDB_API_KEY}&language=fr-FR&sort_by=popularity.desc&page=1`);
         const data = await res.json();
