@@ -36,38 +36,37 @@ async function populateModalBase(media) {
     document.getElementById('modalMovieActions').classList.add('hidden');
     document.getElementById('modalScrollable').scrollTop = 0;
 
-    // --- CORRECTION : Résolution dynamique du bouton Movix ---
+    // --- LOGIQUE DE RÉSOLUTION DYNAMIQUE MOVIX ---
     const btnMovix = document.getElementById('btnMovixRedirect');
     const cleanTitle = (media.title_fr || media.title).split('(')[0].trim();
     
-    // URL par défaut si pas d'ID valide
-    btnMovix.href = media.movixUrl ? media.movixUrl : `https://movix.cash/search?q=${encodeURIComponent(cleanTitle)}`;
-    
     btnMovix.onclick = async (e) => {
-        if (media.movixUrl) return; // Utilise le lien manuel si configuré
-        
         e.preventDefault();
         const originalText = btnMovix.textContent;
-        btnMovix.textContent = "Recherche ID...";
+        btnMovix.textContent = "Chargement...";
         
         try {
+            // Résolution de l'ID TMDB à la volée
             const searchRes = await fetch(`${TMDB_BASE}/search/${media.type === 'series' ? 'tv' : 'movie'}?api_key=${TMDB_API_KEY}&language=fr-FR&query=${encodeURIComponent(cleanTitle)}`);
             const searchData = await searchRes.json();
             
             if (searchData.results && searchData.results.length > 0) {
                 const realTmdbId = searchData.results[0].id;
-                // Redirection vers le lecteur Movix avec le bon ID TMDB trouvé
-                window.open(`https://movix.date/watch/${media.type === 'series' ? 'tv' : 'movie'}/${realTmdbId}`, '_blank');
+                // Redirection directe vers le format lecteur Movix
+                // Séries : /tv/ID, Films : /movie/ID
+                const path = media.type === 'series' ? 'tv' : 'movie';
+                window.open(`https://movix.date/${path}/${realTmdbId}`, '_blank');
             } else {
-                window.open(btnMovix.href, '_blank');
+                alert("Impossible de trouver le média sur Movix.");
             }
         } catch (err) {
-            window.open(btnMovix.href, '_blank');
+            console.error("Erreur résolution Movix:", err);
+            alert("Erreur lors de la connexion.");
         } finally {
             btnMovix.textContent = originalText;
         }
     };
-    // --------------------------------------------------------
+    // ---------------------------------------------
 
     if (media.type === 'movie') {
         document.getElementById('modalMovieActions').classList.remove('hidden');
@@ -143,36 +142,37 @@ function buildSeasonTabs(episodes, isLib) {
 async function renderEpisodes(eps, isLib) {
     const list = document.getElementById('modalEpisodesList'); 
     renderSeasonGraph(eps);
+    
     const item = library[activeModalMediaIndex];
     const cleanTitle = (item.title_fr || item.title).split('(')[0].trim();
 
-    // On cherche l'ID TMDB à la volée via une recherche par titre
-    // Cela garantit d'avoir toujours le bon ID pour Movix, peu importe ce qu'il y a dans ta base
-    let targetId = item.apiId; 
+    // Résolution automatique de l'ID TMDB pour garantir un lien valide
+    let targetId = item.apiId;
     try {
         const searchRes = await fetch(`${TMDB_BASE}/search/tv?api_key=${TMDB_API_KEY}&language=fr-FR&query=${encodeURIComponent(cleanTitle)}`);
         const searchData = await searchRes.json();
         if (searchData.results && searchData.results.length > 0) {
-            targetId = searchData.results[0].id; // On récupère l'ID TMDB officiel automatiquement
+            targetId = searchData.results[0].id;
         }
     } catch (e) {
-        console.error("Erreur résolution auto ID :", e);
+        console.error("Erreur lors de la résolution dynamique de l'ID :", e);
     }
 
     list.innerHTML = eps.map(ep => {
-        const isFuture = !ep.airdate || ep.airdate > todayString;
+        const isFuture = !ep.airdate || ep.airdate > todayString; 
+        const val = (typeof ep.rating === 'object' && ep.rating !== null) ? (ep.rating.average || 0) : (parseFloat(ep.rating) || 0); 
+        const rateStr = val > 0 ? `<span class="text-[9px] text-yellow-400 font-bold ml-2">★ ${val.toFixed(1)}</span>` : '';
+        const btnClass = isFuture ? 'bg-gray-800/50 text-gray-600' : (ep.watched ? 'bg-emerald-900 text-emerald-400' : 'bg-gray-700 hover:bg-gray-600');
         
-        // Utilisation du targetId résolu automatiquement
+        // --- Construction du lien dynamique vers le lecteur d'épisode ---
         const streamUrl = !isFuture ? `https://movix.date/watch/tv/${targetId}/s/${ep.season}/e/${ep.number}` : '#';
         const streamBtn = !isFuture ? `<a href="${streamUrl}" target="_blank" class="px-2 py-1 rounded text-[10px] shrink-0 font-bold bg-indigo-700 hover:bg-indigo-600 text-white transition mr-1">▶</a>` : '';
 
-        // ... (reste du code inchangé) ...
-        const btnClass = isFuture ? 'bg-gray-800/50 text-gray-600' : (ep.watched ? 'bg-emerald-900 text-emerald-400' : 'bg-gray-700 hover:bg-gray-600');
         const btnAction = isLib ? `<button onclick="event.stopPropagation(); ${!isFuture ? `toggleEpCascade(${ep.id}, '${ep.season}')` : ''}" class="px-2 py-1 rounded text-[10px] shrink-0 font-bold transition ${btnClass}" ${isFuture ? 'disabled' : ''}>${ep.watched ? '✓ Vu' : 'Vu'}</button>` : '';
         
         return `<div class="rounded-xl bg-gray-900/60 border border-gray-700/50 text-xs overflow-hidden cursor-pointer" onclick="toggleEpisodeDescription(this)">
             <div class="p-2 flex justify-between items-center">
-                <span class="truncate text-gray-300 flex-1">E${ep.number} – <b class="text-white">${ep.name}</b> <span class="text-gray-500 ml-1">${ep.airdate || 'TBA'}</span></span>
+                <span class="truncate text-gray-300 flex-1">E${ep.number} – <b class="text-white">${ep.name}</b> <span class="text-gray-500 ml-1">${ep.airdate || 'TBA'}</span> ${rateStr}</span>
                 <div class="flex items-center">
                     ${streamBtn}
                     ${btnAction}
