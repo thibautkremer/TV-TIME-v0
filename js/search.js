@@ -15,16 +15,14 @@ async function triggerFuzzySearch(query) {
         const q = query.toLowerCase(); 
         let results = [];
 
-        // On lance deux recherches TMDB en parallèle : Séries (tv) et Films (movie)
         const [tmdbTvRes, tmdbMovieRes] = await Promise.all([
             fetch(`${TMDB_BASE}/search/tv?api_key=${TMDB_API_KEY}&language=fr-FR&query=${encodeURIComponent(query)}`).then(r => r.json()).catch(() => ({ results: [] })),
             fetch(`${TMDB_BASE}/search/movie?api_key=${TMDB_API_KEY}&language=fr-FR&query=${encodeURIComponent(query)}`).then(r => r.json()).catch(() => ({ results: [] }))
         ]);
 
-        // Mapping des SÉRIES TMDB
         let tmdbTvItems = tmdbTvRes.results ? tmdbTvRes.results.map(s => ({
             id: `series-${s.id}`, 
-            apiId: s.id, // LE VRAI ID TMDB !
+            apiId: s.id,
             title: s.original_name || s.name, 
             title_fr: s.name, 
             type: 'series',
@@ -36,10 +34,9 @@ async function triggerFuzzySearch(query) {
             summary: s.overview || ''
         })) : [];
 
-        // Mapping des FILMS TMDB
         let tmdbMovieItems = tmdbMovieRes.results ? tmdbMovieRes.results.map(m => ({
             id: `movie-${m.id}`, 
-            apiId: m.id, // ID TMDB
+            apiId: m.id, 
             title: m.original_title || m.title, 
             title_fr: m.title, 
             type: 'movie',
@@ -51,13 +48,9 @@ async function triggerFuzzySearch(query) {
             summary: m.overview || ''
         })) : [];
 
-        // On fusionne les deux tableaux
         results = [...tmdbTvItems, ...tmdbMovieItems];
 
-        // Déduplication de sécurité (pour éviter d'avoir 2 fois le même film/série)
         searchResults = results.filter((v, i, a) => a.findIndex(t => (t.id === v.id) || (t.title && v.title && t.title.toLowerCase() === v.title.toLowerCase() && t.type === v.type)) === i);
-
-        // Tri par note globale (du mieux noté au moins bien noté)
         searchResults.sort((a, b) => (b.rating || 0) - (a.rating || 0));
         
         resetAndDisplaySearch();
