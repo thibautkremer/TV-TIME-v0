@@ -65,12 +65,12 @@ function appendSuggestions() {
         const div = document.createElement('div');
         div.className = 'bg-gray-900 border border-gray-700 p-2 rounded-xl flex gap-3 items-center hover:border-teal-700 transition';
         div.innerHTML = `
-            <img src="${getOptimizedImageUrl(n.image, 100)}" class="w-12 h-16 object-cover rounded border border-gray-800" />
+            <img src="${getOptimizedImageUrl(n.image, 100)}" class="w-12 h-16 object-cover rounded border border-gray-800 cursor-pointer" onclick="closeModal(); openPreviewModal(${JSON.stringify(n).replace(/"/g, '&quot;')})" />
             <div class="flex-1 min-w-0 cursor-pointer" onclick="closeModal(); openPreviewModal(${JSON.stringify(n).replace(/"/g, '&quot;')})">
                 <h4 class="text-xs font-bold text-white truncate">${n.title_fr}</h4>
                 <div class="text-[9px] text-gray-400 mt-0.5">${n.premiered} • <span class="text-yellow-400 font-bold">★ ${n.rating.toFixed(1)}</span></div>
             </div>
-            <div class="w-24">${buildCardActionsHTML(n)}</div>`;
+            <div class="w-24 actions-container">${buildCardActionsHTML(n)}</div>`;
         frag.appendChild(div);
     });
     list.appendChild(frag);
