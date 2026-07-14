@@ -13,7 +13,7 @@ if ('serviceWorker' in navigator) {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-    deduplicateLibrary(); updateHeaderCount(); preloadShowsCache();
+    deduplicateLibrary(); updateHeaderCount();
     loadFromCloud().then(() => { checkAutoMassUpdate(); });
     processSyncQueue(); checkDailyNotifications();
     const sSentinel = document.getElementById('searchSentinel'); if (sSentinel) searchObserver.observe(sSentinel);
