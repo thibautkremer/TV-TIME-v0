@@ -2,6 +2,80 @@
 // ============================================================
 // ADMIN — MAJ de masse API et gestion des liens Movix
 // ============================================================
+// A COLLER TEMPORAIREMENT DANS admin.js
+async function migrateToTmdbIds() {
+    console.log("%c[Migration TMDB] Démarrage...", "color: #eab308; font-weight: bold; font-size: 14px;");
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (let i = 0; i < library.length; i++) {
+        let item = library[i];
+        let oldId = item.apiId;
+        let newTmdbId = null;
+
+        console.log(`Traitement [${i+1}/${library.length}] : ${item.title} (Ancien ID: ${oldId})`);
+
+        try {
+            if (item.type === 'series') {
+                // Pour les séries, on fait une recherche par titre et année pour être précis
+                const cleanTitle = (item.title_fr || item.title).split('(')[0].trim();
+                let searchUrl = `${TMDB_BASE}/search/tv?api_key=${TMDB_API_KEY}&language=fr-FR&query=${encodeURIComponent(cleanTitle)}`;
+                
+                // Si on a l'année de sortie, on l'utilise pour filtrer et éviter les doublons
+                if (item.premiered) {
+                    const year = item.premiered.split('-')[0];
+                    searchUrl += `&first_air_date_year=${year}`;
+                }
+
+                const res = await fetch(searchUrl);
+                const data = await res.json();
+
+                if (data.results && data.results.length > 0) {
+                    newTmdbId = data.results[0].id;
+                }
+            } 
+            else if (item.type === 'movie') {
+                // Pour les films, si l'ID commence par 'tt' (OMDB), on utilise le /find de TMDB
+                if (String(oldId).startsWith('tt')) {
+                    const res = await fetch(`${TMDB_BASE}/find/${oldId}?api_key=${TMDB_API_KEY}&external_source=imdb_id`);
+                    const data = await res.json();
+                    if (data.movie_results && data.movie_results.length > 0) {
+                        newTmdbId = data.movie_results[0].id;
+                    }
+                } else {
+                    // C'est probablement déjà un ID TMDB
+                    newTmdbId = oldId; 
+                }
+            }
+
+            // Si on a trouvé le nouvel ID et qu'il est différent de l'ancien
+            if (newTmdbId && String(newTmdbId) !== String(oldId)) {
+                item.apiId = newTmdbId;
+                item.last_modified = Date.now();
+                
+                // Sauvegarde dans Supabase
+                await supabaseClient.from('user_library')
+                    .upsert({ user_id: localUserId, media_id: item.id, media_data: item, last_modified: item.last_modified }, { onConflict: 'user_id,media_id' });
+                
+                console.log(`%c  ✅ Succès : ${oldId} -> ${newTmdbId}`, "color: #22c55e;");
+                successCount++;
+            } else {
+                console.log(`  ➖ Inchangé ou non trouvé.`);
+            }
+
+        } catch (e) {
+            console.error(`  ❌ Erreur sur ${item.title}:`, e);
+            errorCount++;
+        }
+
+        // Pause pour ne pas spammer l'API TMDB (50 requêtes/seconde autorisées, on est larges, mais on reste prudents)
+        await new Promise(r => setTimeout(r, 200));
+    }
+
+    saveLocalDB(); // Sauvegarde locale finale
+    console.log(`%c[Migration TMDB] Terminée ! ✅ ${successCount} IDs mis à jour, ❌ ${errorCount} erreurs.`, "color: #eab308; font-weight: bold; font-size: 14px;");
+    alert(`Migration terminée !\n${successCount} IDs mis à jour.\nRecharge la page.`);
+}
 
 async function massUpdateLibrary(type, silent = false) {
     const btnId = type === 'series' ? 'btn-mass-update-series' : 'btn-mass-update-movie';
