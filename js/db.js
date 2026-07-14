@@ -1,7 +1,10 @@
 'use strict';
 // ============================================================
-// DB — persistance locale + synchronisation Supabase (cloud)
+// DB — persistance locale (IndexedDB via LocalForage) + Sync
 // ============================================================
+
+// Configuration de l'architecture IndexedDB
+localforage.config({ name: 'TV_TIME_REBORN', storeName: 'library_store' });
 
 function updateOfflineStatus() {
     const statusEl = document.getElementById('cloudStatus');
@@ -31,7 +34,11 @@ async function processSyncQueue() {
 }
 
 async function saveLocalDB(syncItem = null) {
-    try { localStorage.setItem('personal_tracker_db', JSON.stringify(library.slice(0, 50))); } catch (e) {}
+    try { 
+        // ARCHITECTURE : Sauvegarde INTÉGRALE de la librairie sans limite de taille.
+        await localforage.setItem('personal_tracker_db', library); 
+    } catch (e) { console.error("Erreur de sauvegarde locale", e); }
+    
     updateHeaderCount();
     if (syncItem && typeof supabaseClient !== 'undefined') {
         if (navigator.onLine) {
@@ -80,7 +87,9 @@ function updateHeaderCount() {
 
 function clearAll() {
     if (!confirm('Vider le cache local ? La sauvegarde Cloud restera intacte.')) return;
-    library = []; rebuildLibraryIndex(); localStorage.removeItem('personal_tracker_db'); renderLibrary(); renderProfile();
+    library = []; rebuildLibraryIndex(); 
+    localforage.removeItem('personal_tracker_db'); 
+    renderLibrary(); renderProfile();
 }
 
 function exportLibrary() {
