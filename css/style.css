@@ -1,1 +1,14 @@
+body { background-color: #111827; -webkit-tap-highlight-color: transparent; }
+.hide-scroll::-webkit-scrollbar { display: none; }
+.hide-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+.hidden { display: none !important; }
+.line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.media-poster { width: 100%; aspect-ratio: 155.88 / 217.56; object-fit: cover; }
+.media-grid { display: grid; gap: 0.5rem; grid-template-columns: repeat(3, 1fr); }
+img.lazy-loaded { animation: fadeIn 0.5s ease-in-out; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
+@media (min-width: 480px)  { .media-grid { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 640px)  { .media-grid { grid-template-columns: repeat(5, 1fr); } }
+@media (min-width: 900px)  { .media-grid { grid-template-columns: repeat(6, 1fr); } }
+@media (min-width: 1200px) { .media-grid { grid-template-columns: repeat(8, 1fr); } }
