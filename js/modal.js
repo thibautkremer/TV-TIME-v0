@@ -3,19 +3,72 @@
 // MODAL — fiche détail média (preview & bibliothèque)
 // ============================================================
 
-function populateModalBase(media) {
-    currentModalMediaId = media.id; document.getElementById('modalTitle').textContent = media.title_fr || media.title;
-    const posterEl = document.getElementById('modalPoster'); posterEl.src = getOptimizedImageUrl(media.image, 600); posterEl.onerror = () => { posterEl.src = media.image; };
+async function populateModalBase(media) {
+    currentModalMediaId = media.id; 
+    document.getElementById('modalTitle').textContent = media.title_fr || media.title;
+    
+    const posterEl = document.getElementById('modalPoster'); 
+    posterEl.src = getOptimizedImageUrl(media.image, 600); 
+    posterEl.onerror = () => { posterEl.src = media.image; };
+    
     if (posterEl.classList.contains('fixed')) togglePosterSize(posterEl);
-    document.getElementById('modalSummary').textContent = media.summary || 'Aucun résumé.'; document.getElementById('modalPremiereDate').textContent = media.premiered || 'N/A'; document.getElementById('modalRuntime').textContent = media.runtime > 0 ? `${media.runtime} min` : '-- min'; document.getElementById('modalNetwork').textContent = media.network || '';
-    const rate = getCalculatedRating(media); document.getElementById('modalGlobalRatingText').textContent = rate > 0 ? rate.toFixed(1) : 'N/A'; document.getElementById('modalGlobalRatingBar').style.width = `${(rate / 10) * 100}%`;
-    const badge = document.getElementById('modalProductionBadge'); const s = (media.status_production || '').toLowerCase();
-    if (s.includes('running')) { badge.textContent = 'En cours'; badge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-900 text-emerald-400'; } else if (s.includes('ended')) { badge.textContent = 'Terminée'; badge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-700 text-gray-300'; } else if (s.includes('cancel')) { badge.textContent = 'Annulée'; badge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-900 text-red-400'; } else { badge.textContent = media.status_production || ''; badge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-700 text-gray-300'; }
+    
+    document.getElementById('modalSummary').textContent = media.summary || 'Aucun résumé.'; 
+    document.getElementById('modalPremiereDate').textContent = media.premiered || 'N/A'; 
+    document.getElementById('modalRuntime').textContent = media.runtime > 0 ? `${media.runtime} min` : '-- min'; 
+    document.getElementById('modalNetwork').textContent = media.network || '';
+    
+    const rate = getCalculatedRating(media); 
+    document.getElementById('modalGlobalRatingText').textContent = rate > 0 ? rate.toFixed(1) : 'N/A'; 
+    document.getElementById('modalGlobalRatingBar').style.width = `${(rate / 10) * 100}%`;
+    
+    const badge = document.getElementById('modalProductionBadge'); 
+    const s = (media.status_production || '').toLowerCase();
+    if (s.includes('running')) { badge.textContent = 'En cours'; badge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-900 text-emerald-400'; } 
+    else if (s.includes('ended')) { badge.textContent = 'Terminée'; badge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-700 text-gray-300'; } 
+    else if (s.includes('cancel')) { badge.textContent = 'Annulée'; badge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-900 text-red-400'; } 
+    else { badge.textContent = media.status_production || ''; badge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-700 text-gray-300'; }
 
-    document.getElementById('modalProgressContainer').classList.add('hidden'); document.getElementById('modalSeriesContent').classList.add('hidden'); document.getElementById('modalEpisodesBlock').classList.add('hidden'); document.getElementById('modalSuggestionsBlock').classList.add('hidden'); document.getElementById('modalMovieActions').classList.add('hidden');
+    document.getElementById('modalProgressContainer').classList.add('hidden'); 
+    document.getElementById('modalSeriesContent').classList.add('hidden'); 
+    document.getElementById('modalEpisodesBlock').classList.add('hidden'); 
+    document.getElementById('modalSuggestionsBlock').classList.add('hidden'); 
+    document.getElementById('modalMovieActions').classList.add('hidden');
     document.getElementById('modalScrollable').scrollTop = 0;
+
+    // --- CORRECTION : Résolution dynamique du bouton Movix ---
+    const btnMovix = document.getElementById('btnMovixRedirect');
     const cleanTitle = (media.title_fr || media.title).split('(')[0].trim();
-    document.getElementById('btnMovixRedirect').href = media.movixUrl ? media.movixUrl : `https://movix.cash/search?q=${encodeURIComponent(cleanTitle)}`;
+    
+    // URL par défaut si pas d'ID valide
+    btnMovix.href = media.movixUrl ? media.movixUrl : `https://movix.cash/search?q=${encodeURIComponent(cleanTitle)}`;
+    
+    btnMovix.onclick = async (e) => {
+        if (media.movixUrl) return; // Utilise le lien manuel si configuré
+        
+        e.preventDefault();
+        const originalText = btnMovix.textContent;
+        btnMovix.textContent = "Recherche ID...";
+        
+        try {
+            const searchRes = await fetch(`${TMDB_BASE}/search/${media.type === 'series' ? 'tv' : 'movie'}?api_key=${TMDB_API_KEY}&language=fr-FR&query=${encodeURIComponent(cleanTitle)}`);
+            const searchData = await searchRes.json();
+            
+            if (searchData.results && searchData.results.length > 0) {
+                const realTmdbId = searchData.results[0].id;
+                // Redirection vers le lecteur Movix avec le bon ID TMDB trouvé
+                window.open(`https://movix.date/watch/${media.type === 'series' ? 'tv' : 'movie'}/${realTmdbId}`, '_blank');
+            } else {
+                window.open(btnMovix.href, '_blank');
+            }
+        } catch (err) {
+            window.open(btnMovix.href, '_blank');
+        } finally {
+            btnMovix.textContent = originalText;
+        }
+    };
+    // --------------------------------------------------------
+
     if (media.type === 'movie') {
         document.getElementById('modalMovieActions').classList.remove('hidden');
         document.getElementById('modalMovieTrailerBtn').onclick = () => window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(cleanTitle + ' bande annonce VF')}`, '_blank');
