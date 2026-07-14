@@ -18,66 +18,49 @@ async function massUpdateLibrary(type, silent = false) {
 
     for (let i = 0; i < itemsToProcess.length; i++) {
         let item = itemsToProcess[i];
-        let updates = [];
-
-        if (!silent && btn) btn.innerHTML = `<span class="truncate w-full text-center px-1">⏳ [${i + 1}/${itemsToProcess.length}] ${item.title}</span>`;
+        console.log(`[MAJ] Traitement de : ${item.title_fr || item.title}`); // Point 9 : Log de début
 
         try {
-            let changed = false; let data = null;
+            let changed = false; 
+            const res = await fetch(`${TMDB_BASE}/${type}/${item.apiId}?api_key=${TMDB_API_KEY}&language=fr-FR&append_to_response=watch/providers`);
+            if (!res.ok) throw new Error(`TMDB API Error`);
+            const data = await res.json();
 
-            if (item.type === 'series') {
-                const res = await fetch(`${TMDB_BASE}/tv/${item.apiId}?api_key=${TMDB_API_KEY}&language=fr-FR`);
-                if (!res.ok) throw new Error(`TMDB API Error`);
-                data = await res.json();
+            // Point 8 : Récupération plateforme diffusion pour films
+            if (type === 'movie' && data['watch/providers']) {
+                const prov = data['watch/providers'].results?.FR?.flatrate?.[0]?.provider_name;
+                if (prov && item.network !== prov) { item.network = prov; changed = true; }
+            }
 
-                const r = data.episode_run_time?.length ? data.episode_run_time[0] : item.runtime; 
-                if (item.runtime !== r) { item.runtime = r; changed = true; updates.push("Durée"); }
-                if (data.poster_path && item.image !== `https://image.tmdb.org/t/p/w500${data.poster_path}`) { item.image = `https://image.tmdb.org/t/p/w500${data.poster_path}`; changed = true; updates.push("Affiche"); }
-                if (data.overview && item.summary !== data.overview) { item.summary = data.overview; changed = true; updates.push("Résumé"); }
-                
-                let mappedStatus = item.status_production;
-                if (data.status === 'Ended') mappedStatus = 'Ended';
-                else if (data.status === 'Canceled') mappedStatus = 'Canceled';
-                else if (data.status === 'Returning Series') mappedStatus = 'Running';
+            // Mise à jour générique (Résumé, Affiche, Durée)
+            if (data.overview && item.summary !== data.overview) { item.summary = data.overview; changed = true; }
+            if (data.poster_path && item.image !== `https://image.tmdb.org/t/p/w500${data.poster_path}`) { item.image = `https://image.tmdb.org/t/p/w500${data.poster_path}`; changed = true; }
 
-                if (item.status_production !== mappedStatus) { item.status_production = mappedStatus; changed = true; updates.push("Status"); }
-                
-                const net = data.networks?.length ? data.networks[0].name : item.network; 
-                if (net && item.network !== net) { item.network = net; changed = true; updates.push("Plateforme"); }
-                
-                const allTmdbEps = await fetchAllTmdbEpisodes(item.apiId);
-                let newEpsAdded = 0;
-                
-                allTmdbEps.forEach(apiEp => {
-                    const existingEp = item.episodes.find(e => String(e.id) === String(apiEp.id) || (e.season === apiEp.season && e.number === apiEp.number));
-                    if (!existingEp) { 
-                        item.episodes.push({ ...apiEp, watched: false }); 
-                        newEpsAdded++; 
+            // Point 7 : Récupération notes de TOUS les épisodes des séries
+            if (type === 'series') {
+                const allEps = await fetchAllTmdbEpisodes(item.apiId);
+                item.episodes.forEach(ep => {
+                    const freshEp = allEps.find(e => e.season === ep.season && e.number === ep.number);
+                    if (freshEp && freshEp.rating !== ep.rating) { 
+                        ep.rating = freshEp.rating; 
                         changed = true; 
-                    } else {
-                        if (String(existingEp.id) !== String(apiEp.id)) { existingEp.id = apiEp.id; changed = true; }
-                        if (existingEp.name !== apiEp.name) { existingEp.name = apiEp.name; changed = true; }
-                        if (existingEp.summary !== apiEp.summary) { existingEp.summary = apiEp.summary; changed = true; }
                     }
                 });
-                if (newEpsAdded > 0) updates.push(`+${newEpsAdded} épisodes`);
-                
-            } else if (item.type === 'movie') {
-                const res = await fetch(`${TMDB_BASE}/movie/${item.apiId}?api_key=${TMDB_API_KEY}&language=fr-FR`);
-                if (res.ok) {
-                    data = await res.json();
-                    if (data.runtime && item.runtime !== data.runtime) { item.runtime = data.runtime; changed = true; updates.push("Durée"); }
-                    if (data.poster_path && item.image !== `https://image.tmdb.org/t/p/w500${data.poster_path}`) { item.image = `https://image.tmdb.org/t/p/w500${data.poster_path}`; changed = true; updates.push("Affiche"); }
-                    if (data.overview && item.summary !== data.overview) { item.summary = data.overview; changed = true; updates.push("Résumé"); }
-                }
             }
 
             if (changed) {
+                console.log(`✅ ${item.title_fr || item.title} mis à jour.`); // Point 9 : Log de succès
                 item.last_modified = Date.now();
-                await supabaseClient.from('user_library').upsert({ user_id: localUserId, media_id: item.id, media_data: item, last_modified: item.last_modified }, { onConflict: 'user_id,media_id' });
-                saveLocalDB(); updatedCount++;
-            } else { skippedCount++; }
-        } catch (e) { errorCount++; }
+                await saveLocalDB(item);
+                updatedCount++;
+            } else {
+                console.log(`➖ ${item.title_fr || item.title} : aucune mise à jour nécessaire.`); // Point 9 : Log rien à faire
+                skippedCount++;
+            }
+        } catch (e) { 
+            console.error(`❌ Erreur lors du traitement de ${item.title_fr || item.title}`, e); 
+            errorCount++; 
+        }
         await new Promise(r => setTimeout(r, 400));
     }
 
