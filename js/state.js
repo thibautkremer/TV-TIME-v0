@@ -8,7 +8,6 @@ let preferredPlatforms = JSON.parse(localStorage.getItem('preferred_platforms') 
 let syncQueue = JSON.parse(localStorage.getItem('tv_time_sync_queue') || '[]');
 
 let currentMediaType = 'series', searchResults = [];
-let showsCache = [];
 let activeModalMediaIndex = null, modalMode = 'preview', previewEpisodes = [];
 let calFilter = 'all';
 let currentSeriesAvgRating = 7.0;
