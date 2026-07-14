@@ -40,7 +40,6 @@
 
 <main class="max-w-screen-2xl mx-auto px-3 sm:px-4 pt-4 w-full">
 
-    <!-- TAB: SEARCH -->
     <div id="tab-search" class="space-y-4 hidden">
         <div class="flex flex-col gap-2">
             <div class="flex gap-2">
@@ -66,7 +65,6 @@
         <div id="searchSentinel" class="h-4"></div>
     </div>
 
-    <!-- TAB: DISCOVER -->
     <div id="tab-discover" class="space-y-4 hidden">
         <div class="bg-gray-800 p-3 sm:p-4 rounded-xl border border-gray-700 flex flex-col gap-3">
             <div class="flex justify-center items-center mb-1">                
@@ -85,7 +83,6 @@
         <div id="discoverSentinel" class="h-4"></div>
     </div>
 
-    <!-- TAB: CALENDAR -->
     <div id="tab-calendar" class="space-y-4 hidden">
         <div class="flex justify-between items-center border-b border-gray-800 pb-2">
             <h2 class="text-lg font-bold text-white">📅 Calendrier des Sorties</h2>
@@ -99,7 +96,6 @@
         <div id="calendarTimeline" class="space-y-2"></div>
     </div>
 
-    <!-- TAB: LIBRARY -->
     <div id="tab-library" class="space-y-3">
         <div id="globalFilterActive" class="hidden bg-indigo-900/50 border border-indigo-700 text-indigo-200 px-3 py-2 rounded-lg text-xs flex justify-between items-center mb-1">
             <span id="globalFilterText" class="font-bold"></span>
@@ -166,7 +162,6 @@
         <div id="libraryGrid" class="media-grid"></div>
     </div>
 
-    <!-- TAB: PROFILE -->
     <div id="tab-profile" class="space-y-4 hidden">       
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center">
@@ -204,7 +199,7 @@
             <div id="stat-rating-bars" class="space-y-3"></div>
         </div>
 
-        <!-- ADMINISTRATION ET TABLEAU MOVIX DEPLACE -->
+        <!-- ADMINISTRATION ET TABLEAU MOVIX -->
         <div class="bg-gray-800 p-3 rounded-xl border border-gray-700 shadow-md">
             <button onclick="document.getElementById('adminPanel').classList.toggle('hidden')" class="w-full text-center text-[11px] uppercase tracking-wider font-bold text-gray-400 hover:text-white py-1">⚙️ Administration ▾</button>
             <div id="adminPanel" class="hidden grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-gray-700">
@@ -224,7 +219,6 @@
                 
                 <button onclick="toggleMovixManager()" class="col-span-2 bg-indigo-700 hover:bg-indigo-600 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow">⚙️ Remplir Liens Movix</button>
                 
-                <!-- Section Tableau Movix -->
                 <div id="movixManagerSection" class="col-span-2 hidden bg-gray-900 p-4 rounded-xl border border-gray-700 mt-2">
                     <h3 class="text-xs font-bold text-white mb-3">🔗 Liaison Directe Movix (Médias en cours)</h3>
                     <div class="max-h-60 overflow-y-auto mb-3 pr-2">
@@ -353,9 +347,6 @@
 <script>
     'use strict';
     
-    // ==========================================
-    // CONFIGURATION & VARIABLES GLOBALES
-    // ==========================================
     const SUPABASE_URL = 'https://vjhegncviufyguzdrpdp.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_hLYKWsVftWedOIbDinl0mQ_9uGREGsw';
     
@@ -399,7 +390,18 @@
             if (!item || !item.id) continue;
             libraryIndex.set(item.id, item);
             if (item.title) libraryTitleIndex.set(`${item.type}|${item.title.toLowerCase()}`, item);
+            if (item.title_fr) libraryTitleIndex.set(`${item.type}|${item.title_fr.toLowerCase()}`, item);
         }
+    }
+
+    function isMediaInLibrary(media) {
+        if (!media) return undefined;
+        let found = libraryIndex.get(media.id);
+        if (found) return found;
+        if (media.title) found = libraryTitleIndex.get(`${media.type}|${media.title.toLowerCase()}`);
+        if (found) return found;
+        if (media.title_fr) found = libraryTitleIndex.get(`${media.type}|${media.title_fr.toLowerCase()}`);
+        return found;
     }
 
     const imageObserver = new IntersectionObserver((entries, observer) => {
@@ -416,7 +418,7 @@
 
     function getOptimizedImageUrl(url, width = 300) {
         if (!url || url === 'N/A' || url === 'image_par_defaut.jpg') return 'https://placehold.co/150x220/1f2937/a1a1aa?text=No+Image';
-        if (url.includes('tmdb.org')) return url; // TMDB images are already optimized by size
+        if (url.includes('tmdb.org')) return url;
         return `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=webp&w=${width}`;
     }
 
@@ -620,7 +622,6 @@
 
     async function forceSync() { await loadFromCloud(); processSyncQueue(); }
     function updateHeaderCount() { const el = document.getElementById('libCount'); if(library.length > 0) { el.textContent = library.length; el.classList.remove('hidden'); } else el.classList.add('hidden'); }
-
     function switchTab(name) {
         ['search','discover','calendar','library','profile'].forEach(t => { document.getElementById(`tab-${t}`).classList.add('hidden'); document.getElementById(`nav-${t}`).classList.replace('text-teal-400', 'text-gray-400'); document.getElementById(`nav-${t}`).classList.remove('font-bold'); });
         document.getElementById(`tab-${name}`).classList.remove('hidden'); document.getElementById(`nav-${name}`).classList.replace('text-gray-400', 'text-teal-400'); document.getElementById(`nav-${name}`).classList.add('font-bold');
@@ -658,7 +659,7 @@
             if (Array.isArray(tvmazeRes)) results = results.concat(tvmazeRes.map(i => normalizeShow(i.show)));
             
             let tmdbMovieItems = tmdbMovieRes.results ? tmdbMovieRes.results.map(m => ({
-                id: `movie-${m.id}`, apiId: m.id, title: m.title, title_fr: m.title, type: 'movie', 
+                id: `movie-${m.id}`, apiId: m.id, title: m.original_title || m.title, title_fr: m.title, type: 'movie', 
                 image: m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : '', rating: m.vote_average || 0, genres: [], premiered: m.release_date ? m.release_date.split('-')[0] : 'N/A', runtime: 120, summary: m.overview || ''
             })) : [];
 
@@ -713,11 +714,10 @@
 
     async function renderDiscoverTab(force = false) {
         if (!force && discoverResults.length > 0) return;
-        const libIds = new Set(library.map(i => i.id));
         
         if (discoverMediaType === 'series') {
             await ensureShowsPool();
-            let pool = showsCache.filter(s => !libIds.has(`series-${s.id}`));
+            let pool = showsCache.filter(s => !isMediaInLibrary({id: `series-${s.id}`, title: s.name, type: 'series'}));
             
             if(currentDiscoverMode === 'mix') {
                 const gc = {}; const nc = {}; let sumR = 0, countR = 0;
@@ -740,13 +740,12 @@
             else if (currentDiscoverMode === 'top') discoverResults = pool.filter(s => s.rating?.average > 0).sort((a,b) => b.rating.average - a.rating.average).map(normalizeShow);
             else if (currentDiscoverMode === 'trending') discoverResults = pool.filter(s => s.status === 'Running').sort((a,b) => b.updated - a.updated).map(normalizeShow);
         } else {
-            // MOVIE DISCOVER WITH TMDB
             const res = await fetch(`${TMDB_BASE}/discover/movie?api_key=${TMDB_API_KEY}&language=fr-FR&sort_by=popularity.desc&page=1`);
             const data = await res.json();
             let uniqueMovies = data.results ? data.results.map(m => ({
-                id: `movie-${m.id}`, apiId: m.id, title: m.title, title_fr: m.title, type: 'movie', 
+                id: `movie-${m.id}`, apiId: m.id, title: m.original_title || m.title, title_fr: m.title, type: 'movie', 
                 image: m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : '', rating: m.vote_average || 0, premiered: m.release_date ? m.release_date.split('-')[0] : 'N/A'
-            })).filter(v => !libIds.has(v.id)) : [];
+            })).filter(v => !isMediaInLibrary(v)) : [];
 
             await enrichTmdbList(uniqueMovies);
 
@@ -835,7 +834,6 @@
     }   
     
     function getProgress(item) { if (!item.episodes || item.episodes.length === 0) return item.status === 'Watched' ? 100 : 0; const watched = item.episodes.filter(e => e.watched).length; return Math.round((watched / item.episodes.length) * 100); }
-    function isMediaInLibrary(media) { if (!media) return undefined; return libraryIndex.get(media.id) || (media.title ? libraryTitleIndex.get(`${media.type}|${media.title.toLowerCase()}`) : undefined); }
 
     function buildCardActionsHTML(media, libItem = isMediaInLibrary(media)) {
         if (libItem) return `<button onclick="event.stopPropagation(); handleRemove('${libItem.id}')" class="w-full text-center text-[10px] bg-gray-900 hover:bg-gray-800 text-gray-500 hover:text-red-400 border border-gray-700 py-1.5 rounded transition shadow-sm">✕ Retirer</button>`;
@@ -882,6 +880,7 @@
         div.innerHTML = `<div class="relative w-full"><img data-src="${optimizedImgSrc}" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null; this.src='${media.image}';" class="media-poster bg-gray-900 lazy-image" />${ratingOverlay}${yearOverlay}${removeBtn}${libOverlay}${matchBadge}</div><div class="p-2 flex-1 flex flex-col ${isLib ? bgColorClass : 'bg-gray-800'}">${progressBarHtml}<h3 class="font-bold text-white text-[11px] truncate leading-tight" title="${displayTitle}">${displayTitle}</h3>${!isLib ? `<div class="mt-auto pt-1" id="actions-${media.id}">${buildCardActionsHTML(media, libItem)}</div>` : ''}</div>`;
         return div;
     }
+
     function checkNextEp(id) {
         const item = library.find(i => i.id === id); if(!item) return;
         const nextEp = item.episodes?.find(e => !e.watched && e.airdate && e.airdate <= todayString);
@@ -911,7 +910,7 @@
         
         const finalRating = (media.rating && media.rating > 0) ? media.rating : avgRating;
         const newItem = { ...media, episodes, rating: finalRating, status: watched ? 'Watched' : 'In Progress', addedAt: Date.now(), last_modified: Date.now() };
-        library.push(newItem); libraryIndex.set(newItem.id, newItem); if (newItem.title) libraryTitleIndex.set(`${newItem.type}|${newItem.title.toLowerCase()}`, newItem);
+        library.push(newItem); libraryIndex.set(newItem.id, newItem); if (newItem.title) libraryTitleIndex.set(`${newItem.type}|${newItem.title.toLowerCase()}`, newItem); if (newItem.title_fr) libraryTitleIndex.set(`${newItem.type}|${newItem.title_fr.toLowerCase()}`, newItem);
         saveLocalDB(newItem);
     }
 
@@ -1027,7 +1026,6 @@
         if(block.classList.contains('hidden')) { renderSuggestions(currentModalMediaId); block.classList.remove('hidden'); setTimeout(() => block.scrollIntoView({behavior: 'smooth', block: 'start'}), 100); } else { block.classList.add('hidden'); }
     };
 
-    // ALGO DE FRANCHISE DYNAMIQUE AMÉLIORÉ AVEC TMDB
     async function renderSuggestions(currentId) {
         const block = document.getElementById('modalSuggestionsBlock');
         block.innerHTML = `<div id="modalSuggestionsList" class="space-y-2"><p class="text-xs text-teal-400 text-center py-4 animate-pulse">Recherche des franchises et contenus similaires...</p></div>`;
@@ -1139,7 +1137,6 @@
                     else if (data.rating?.average && item.rating !== data.rating.average) { item.rating = data.rating.average; changed = true; updates.push("Note"); }
                 } 
                 else if (item.type === 'movie') {
-                    // TMDB UPDATE
                     let attemptData = null;
                     if (item.apiId && !String(item.apiId).startsWith('tt')) {
                         const res = await fetch(`${TMDB_BASE}/movie/${item.apiId}?api_key=${TMDB_API_KEY}&language=fr-FR`); if (res.ok) attemptData = await res.json();
