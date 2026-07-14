@@ -15,10 +15,17 @@ async function massUpdateLibrary(type, silent = false) {
 
     let updatedCount = 0; let skippedCount = 0; let errorCount = 0;
     const itemsToProcess = library.filter(i => i.type === type);
+    const totalItems = itemsToProcess.length;
 
-    for (let i = 0; i < itemsToProcess.length; i++) {
+    for (let i = 0; i < totalItems; i++) {
         let item = itemsToProcess[i];
-        console.log(`[MAJ] Traitement de : ${item.title_fr || item.title}`); // Point 9 : Log de début
+        
+        // Mise à jour du libellé du bouton pour voir l'avancement
+        if (!silent && btn) {
+            btn.innerHTML = `<span class="truncate w-full text-center px-1">⏳ [${i + 1}/${totalItems}] ${item.title_fr || item.title}</span>`;
+        }
+        
+        console.log(`[MAJ] (${i + 1}/${totalItems}) Traitement de : ${item.title_fr || item.title}`);
 
         try {
             let changed = false; 
@@ -26,17 +33,17 @@ async function massUpdateLibrary(type, silent = false) {
             if (!res.ok) throw new Error(`TMDB API Error`);
             const data = await res.json();
 
-            // Point 8 : Récupération plateforme diffusion pour films
+            // Plateformes films
             if (type === 'movie' && data['watch/providers']) {
                 const prov = data['watch/providers'].results?.FR?.flatrate?.[0]?.provider_name;
                 if (prov && item.network !== prov) { item.network = prov; changed = true; }
             }
 
-            // Mise à jour générique (Résumé, Affiche, Durée)
+            // Mise à jour générique
             if (data.overview && item.summary !== data.overview) { item.summary = data.overview; changed = true; }
             if (data.poster_path && item.image !== `https://image.tmdb.org/t/p/w500${data.poster_path}`) { item.image = `https://image.tmdb.org/t/p/w500${data.poster_path}`; changed = true; }
 
-            // Point 7 : Récupération notes de TOUS les épisodes des séries
+            // Notes de tous les épisodes
             if (type === 'series') {
                 const allEps = await fetchAllTmdbEpisodes(item.apiId);
                 item.episodes.forEach(ep => {
@@ -49,12 +56,12 @@ async function massUpdateLibrary(type, silent = false) {
             }
 
             if (changed) {
-                console.log(`✅ ${item.title_fr || item.title} mis à jour.`); // Point 9 : Log de succès
+                console.log(`✅ ${item.title_fr || item.title} mis à jour.`);
                 item.last_modified = Date.now();
                 await saveLocalDB(item);
                 updatedCount++;
             } else {
-                console.log(`➖ ${item.title_fr || item.title} : aucune mise à jour nécessaire.`); // Point 9 : Log rien à faire
+                console.log(`➖ ${item.title_fr || item.title} : aucune mise à jour nécessaire.`);
                 skippedCount++;
             }
         } catch (e) { 
