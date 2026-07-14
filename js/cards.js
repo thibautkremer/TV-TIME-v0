@@ -19,13 +19,11 @@ function createSkeletonCard() {
     return div;
 }
 
-// Remplace buildCardActionsHTML dans js/cards.js
 function buildCardActionsHTML(media) {
     const libItem = isMediaInLibrary(media);
     if (libItem) return `<button onclick="event.stopPropagation(); handleRemove('${libItem.id}')" class="w-full text-center text-[10px] bg-gray-900 hover:bg-gray-800 text-gray-500 hover:text-red-400 border border-gray-700 py-1.5 rounded transition shadow-sm">✕ Retirer</button>`;
     return `<div class="flex gap-1.5 w-full"><button onclick="event.stopPropagation(); handleQuickAdd(this.parentElement.parentElement, '${media.id}', false)" class="flex-1 text-center text-[10px] bg-teal-600 hover:bg-teal-500 text-white font-bold py-1.5 rounded transition shadow-sm">+ Voir</button><button onclick="event.stopPropagation(); handleQuickAdd(this.parentElement.parentElement, '${media.id}', true)" class="flex-1 text-center text-[10px] bg-emerald-700 hover:bg-emerald-600 text-white font-bold py-1.5 rounded transition shadow-sm">✓ Vu</button></div>`;
 }
-
 
 async function handleRemove(mediaId) {
     if (supabaseClient) { try { await supabaseClient.from('user_library').delete().eq('user_id', localUserId).eq('media_id', mediaId); } catch (e) {} }
