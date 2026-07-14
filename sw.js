@@ -1,8 +1,25 @@
-const CACHE_NAME = 'tvr-cache-v1';
+const CACHE_NAME = 'tvr-cache-v2';
 const ASSETS_TO_CACHE = [
   './index.html',
   './manifest.json',
-  'https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4',
+  './css/style.css',
+  './js/config.js',
+  './js/state.js',
+  './js/utils.js',
+  './js/db.js',
+  './js/api.js',
+  './js/notifications.js',
+  './js/cards.js',
+  './js/search.js',
+  './js/discover.js',
+  './js/library.js',
+  './js/calendar.js',
+  './js/modal.js',
+  './js/suggestions.js',
+  './js/profile.js',
+  './js/admin.js',
+  './js/main.js',
+  'https://cdn.tailwindcss.com',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'
 ];
 
