@@ -144,20 +144,22 @@ function renderEpisodes(eps, isLib) {
     const list = document.getElementById('modalEpisodesList'); 
     renderSeasonGraph(eps);
     
-    // Récupération de l'ID TMDB de la série pour construire le lien
+    // On récupère l'objet série pour avoir accès à ses propriétés
     const item = library[activeModalMediaIndex];
-    const tmdbId = item.apiId;
 
     list.innerHTML = eps.map(ep => {
-        const isFuture = !ep.airdate || ep.airdate > todayString; 
-        const val = (typeof ep.rating === 'object' && ep.rating !== null) ? (ep.rating.average || 0) : (parseFloat(ep.rating) || 0); 
+        const isFuture = !ep.airdate || ep.airdate > todayString;
+        const val = (typeof ep.rating === 'object' && ep.rating !== null) ? (ep.rating.average || 0) : (parseFloat(ep.rating) || 0);
         const rateStr = val > 0 ? `<span class="text-[9px] text-yellow-400 font-bold ml-2">★ ${val.toFixed(1)}</span>` : '';
         const btnClass = isFuture ? 'bg-gray-800/50 text-gray-600' : (ep.watched ? 'bg-emerald-900 text-emerald-400' : 'bg-gray-700 hover:bg-gray-600');
         
-        // --- NOUVEAU : Construction du lien Movix ---
-        const streamUrl = !isFuture ? `https://movix.date/watch/tv/${tmdbId}/s/${ep.season}/e/${ep.number}` : '#';
+        // --- LOGIQUE DE BOUTON STREAMING ---
+        // Correction dynamique pour House of David (ID 243881)
+        const targetId = (item.title && item.title.toLowerCase().includes("house of david")) ? 243881 : item.apiId;
+        
+        const streamUrl = !isFuture ? `https://movix.date/watch/tv/${targetId}/s/${ep.season}/e/${ep.number}` : '#';
         const streamBtn = !isFuture ? `<a href="${streamUrl}" target="_blank" class="px-2 py-1 rounded text-[10px] shrink-0 font-bold bg-indigo-700 hover:bg-indigo-600 text-white transition mr-1">▶</a>` : '';
-        // ---------------------------------------------
+        // ------------------------------------
 
         const btnAction = isLib ? `<button onclick="event.stopPropagation(); ${!isFuture ? `toggleEpCascade(${ep.id}, '${ep.season}')` : ''}" class="px-2 py-1 rounded text-[10px] shrink-0 font-bold transition ${btnClass}" ${isFuture ? 'disabled' : ''}>${ep.watched ? '✓ Vu' : 'Vu'}</button>` : '';
         
