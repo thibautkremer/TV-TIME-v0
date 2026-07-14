@@ -40,7 +40,7 @@ async function renderSuggestions(currentId) {
             premiered: (m.release_date || m.first_air_date || 'N/A').split('-')[0],
             rating: m.vote_average || 0,
             network: 'TMDB'
-        })).filter(m => !isMediaInLibrary(m));
+        }));
 
         modalSuggestionsPage = 1;
         document.getElementById('modalSuggestionsList').innerHTML = '';
@@ -56,7 +56,7 @@ function appendSuggestions() {
     const slice = modalSuggestionsPool.slice(0, 10);
     
     if (slice.length === 0) { 
-        list.innerHTML = '<p class="text-xs text-gray-500 text-center py-4">Aucune suggestion trouvée pour ce média.</p>'; 
+        list.innerHTML = '<p class="text-xs text-gray-500 text-center py-4">Aucune suggestion trouvée.</p>'; 
         return; 
     }
     
@@ -68,7 +68,7 @@ function appendSuggestions() {
             <img src="${getOptimizedImageUrl(n.image, 100)}" class="w-12 h-16 object-cover rounded border border-gray-800" />
             <div class="flex-1 min-w-0 cursor-pointer" onclick="closeModal(); openPreviewModal(${JSON.stringify(n).replace(/"/g, '&quot;')})">
                 <h4 class="text-xs font-bold text-white truncate">${n.title_fr}</h4>
-                <div class="text-[9px] text-gray-400 mt-0.5">${n.premiered} • ★ ${n.rating.toFixed(1)}</div>
+                <div class="text-[9px] text-gray-400 mt-0.5">${n.premiered} • <span class="text-yellow-400 font-bold">★ ${n.rating.toFixed(1)}</span></div>
             </div>
             <div class="w-24">${buildCardActionsHTML(n)}</div>`;
         frag.appendChild(div);
