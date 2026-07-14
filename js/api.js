@@ -1,10 +1,50 @@
 'use strict';
 // ============================================================
-// API — appels TVMaze / TMDB, résolution et enrichissement
+// API — appels TMDB exclusifs, résolution et enrichissement
 // ============================================================
 
-async function ensureShowsPool() { if (showsCache.length > 0) return; const res = await fetch(`${TVMAZE_API}/shows?page=0`); showsCache = await res.json(); }
-async function preloadShowsCache() { await ensureShowsPool(); }
+// NOUVEAU : Helper pour récupérer tous les épisodes d'une série via TMDB
+async function fetchAllTmdbEpisodes(tmdbId) {
+    let episodes = [];
+    try {
+        const showRes = await fetch(`${TMDB_BASE}/tv/${tmdbId}?api_key=${TMDB_API_KEY}&language=fr-FR`);
+        if (!showRes.ok) return episodes;
+        const showData = await showRes.json();
+        
+        // On ignore la saison 0 (les bonus/specials)
+        const seasons = showData.seasons.filter(s => s.season_number > 0);
+        
+        // Requêtes en parallèle pour toutes les saisons (beaucoup plus rapide)
+        const seasonPromises = seasons.map(s => 
+            fetch(`${TMDB_BASE}/tv/${tmdbId}/season/${s.season_number}?api_key=${TMDB_API_KEY}&language=fr-FR`)
+            .then(r => r.json()).catch(() => ({}))
+        );
+        
+        const seasonsData = await Promise.all(seasonPromises);
+        
+        seasonsData.forEach(seasonData => {
+            if (seasonData.episodes) {
+                seasonData.episodes.forEach(apiEp => {
+                    episodes.push({
+                        id: apiEp.id, 
+                        season: apiEp.season_number, 
+                        number: apiEp.episode_number, 
+                        name: apiEp.name, 
+                        airdate: apiEp.air_date, 
+                        runtime: apiEp.runtime || 0, 
+                        rating: apiEp.vote_average || 0,
+                        summary: apiEp.overview || '',
+                        watched: false
+                    });
+                });
+            }
+        });
+    } catch (e) { console.error("Erreur récupération épisodes:", e); }
+    return episodes;
+}
+
+async function ensureShowsPool() { return Promise.resolve(); }
+async function preloadShowsCache() { return Promise.resolve(); }
 
 async function enrichTmdbList(items) {
     await Promise.all(items.map(async item => {
@@ -16,26 +56,15 @@ async function enrichTmdbList(items) {
                 if (m.vote_average) item.rating = m.vote_average;
                 if (m.runtime || m.episode_run_time?.length) item.runtime = m.runtime || m.episode_run_time[0];
                 if (m.genres) item.genres = m.genres.map(g => g.name);
-                if (m.production_companies?.length) item.network = m.production_companies[0].name;
+                if (m.networks?.length) item.network = m.networks[0].name; 
+                else if (m.production_companies?.length) item.network = m.production_companies[0].name;
             }
         } catch (e) {}
     }));
     return items;
 }
 
-async function resolveSeriesFromImdb(media) {
-    if (!(media.type === 'series' && String(media.apiId).startsWith('tt'))) return media;
-    try {
-        const lookup = await fetch(`${TVMAZE_API}/lookup/shows?imdb=${media.apiId}`);
-        if (lookup.ok) {
-            const show = await lookup.json();
-            media.apiId = show.id; media.id = `series-${show.id}`; media.summary = show.summary?.replace(/<[^>]*>/g, '') || media.summary;
-            media.image = show.image?.medium || media.image; media.rating = show.rating?.average || media.rating;
-            media.status_production = show.status || media.status_production; media.network = show.network?.name || show.webChannel?.name || media.network;
-            media.premiered = show.premiered ? String(show.premiered).split('-')[0] : media.premiered; media.runtime = show.runtime || show.averageRuntime || media.runtime;
-        }
-    } catch (e) {} return media;
-}
+async function resolveSeriesFromImdb(media) { return media; } 
 
 async function resolveMovieFromTmdb(media) {
     if (media.type !== 'movie' || !media.apiId) return media;
@@ -53,27 +82,26 @@ async function resolveMovieFromTmdb(media) {
             media.genres = m.genres ? m.genres.map(g => g.name) : media.genres;
             if (m.poster_path) media.image = `https://image.tmdb.org/t/p/w500${m.poster_path}`;
             media.title_fr = m.title || media.title_fr;
-            if (m.release_date) media.releaseDate = m.release_date; // date complète (YYYY-MM-DD), utilisée par le calendrier
+            if (m.release_date) media.releaseDate = m.release_date;
         }
     } catch (e) {} return media;
 }
 
 async function quickAdd(mediaId, watched) {
-    let media = searchResults.find(r => r.id === mediaId) || discoverResults.find(r => r.id === mediaId); if (!media) return;
-    await resolveSeriesFromImdb(media); await resolveMovieFromTmdb(media);
+    let media = searchResults.find(r => r.id === mediaId) || discoverResults.find(r => r.id === mediaId); 
+    if (!media) return;
     if (isMediaInLibrary(media)) return;
 
     let episodes = []; let avgRating = 0;
     if (media.type === 'series') {
-        try {
-            const res = await fetch(`${TVMAZE_API}/shows/${media.apiId}/episodes`); const apiEps = await res.json();
-            let sumR = 0, countR = 0;
-            episodes = apiEps.map(apiEp => {
-                const isReleased = apiEp.airdate && apiEp.airdate <= todayString; const r = apiEp.rating?.average || 0; if (r > 0) { sumR += r; countR++; }
-                return { id: apiEp.id, season: apiEp.season, number: apiEp.number, name: apiEp.name, airdate: apiEp.airdate, runtime: apiEp.runtime, rating: r, watched: watched && isReleased };
-            });
-            avgRating = countR > 0 ? sumR / countR : 0;
-        } catch (e) {}
+        const apiEps = await fetchAllTmdbEpisodes(media.apiId);
+        let sumR = 0, countR = 0;
+        episodes = apiEps.map(ep => {
+            const isReleased = ep.airdate && ep.airdate <= todayString; 
+            if (ep.rating > 0) { sumR += ep.rating; countR++; }
+            return { ...ep, watched: watched && isReleased };
+        });
+        avgRating = countR > 0 ? sumR / countR : 0;
     }
 
     const finalRating = (media.rating && media.rating > 0) ? media.rating : avgRating;
