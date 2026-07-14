@@ -3,7 +3,8 @@
 // STATE — état global mutable partagé entre les modules
 // ============================================================
 
-let library = JSON.parse(localStorage.getItem('personal_tracker_db')) || [];
+// ARCHITECTURE : Suppression du chargement synchrone bloquant. Sera chargé via IndexedDB.
+let library = []; 
 let preferredPlatforms = JSON.parse(localStorage.getItem('preferred_platforms') || '[]');
 let syncQueue = JSON.parse(localStorage.getItem('tv_time_sync_queue') || '[]');
 
