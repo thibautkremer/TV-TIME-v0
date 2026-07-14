@@ -14,3 +14,4 @@ const localUserId = 'tvr_master_user_2026';
 
 const PAGE_SIZE = 30;
 const seasonColors = ['bg-teal-500', 'bg-cyan-500', 'bg-emerald-500', 'bg-teal-400', 'bg-cyan-400', 'bg-emerald-400', 'bg-teal-600', 'bg-cyan-600'];
+ 
