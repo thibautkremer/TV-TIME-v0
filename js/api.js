@@ -3,7 +3,6 @@
 // API — appels TMDB exclusifs, résolution et enrichissement
 // ============================================================
 
-// NOUVEAU : Helper pour récupérer tous les épisodes d'une série via TMDB
 async function fetchAllTmdbEpisodes(tmdbId) {
     let episodes = [];
     try {
@@ -11,10 +10,8 @@ async function fetchAllTmdbEpisodes(tmdbId) {
         if (!showRes.ok) return episodes;
         const showData = await showRes.json();
         
-        // On ignore la saison 0 (les bonus/specials)
         const seasons = showData.seasons.filter(s => s.season_number > 0);
         
-        // Requêtes en parallèle pour toutes les saisons (beaucoup plus rapide)
         const seasonPromises = seasons.map(s => 
             fetch(`${TMDB_BASE}/tv/${tmdbId}/season/${s.season_number}?api_key=${TMDB_API_KEY}&language=fr-FR`)
             .then(r => r.json()).catch(() => ({}))
@@ -43,9 +40,6 @@ async function fetchAllTmdbEpisodes(tmdbId) {
     return episodes;
 }
 
-async function ensureShowsPool() { return Promise.resolve(); }
-async function preloadShowsCache() { return Promise.resolve(); }
-
 async function enrichTmdbList(items) {
     await Promise.all(items.map(async item => {
         try {
@@ -62,29 +56,6 @@ async function enrichTmdbList(items) {
         } catch (e) {}
     }));
     return items;
-}
-
-async function resolveSeriesFromImdb(media) { return media; } 
-
-async function resolveMovieFromTmdb(media) {
-    if (media.type !== 'movie' || !media.apiId) return media;
-    try {
-        let apiIdToUse = media.apiId;
-        if (String(apiIdToUse).startsWith('tt')) {
-            const search = await fetch(`${TMDB_BASE}/find/${apiIdToUse}?api_key=${TMDB_API_KEY}&language=fr-FR&external_source=imdb_id`);
-            if (search.ok) { const s = await search.json(); if (s.movie_results?.length > 0) apiIdToUse = s.movie_results[0].id; media.apiId = apiIdToUse; }
-        }
-        const res = await fetch(`${TMDB_BASE}/movie/${apiIdToUse}?api_key=${TMDB_API_KEY}&language=fr-FR`);
-        if (res.ok) {
-            const m = await res.json();
-            media.summary = m.overview || media.summary; media.rating = m.vote_average || media.rating;
-            media.runtime = m.runtime || media.runtime; media.network = m.production_companies?.length > 0 ? m.production_companies[0].name : 'Inconnu';
-            media.genres = m.genres ? m.genres.map(g => g.name) : media.genres;
-            if (m.poster_path) media.image = `https://image.tmdb.org/t/p/w500${m.poster_path}`;
-            media.title_fr = m.title || media.title_fr;
-            if (m.release_date) media.releaseDate = m.release_date;
-        }
-    } catch (e) {} return media;
 }
 
 async function quickAdd(mediaId, watched) {
