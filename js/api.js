@@ -18,7 +18,8 @@ async function fetchAllTmdbEpisodes(tmdbId) {
                         name: apiEp.name, 
                         airdate: apiEp.air_date, 
                         runtime: apiEp.runtime || 0, 
-                        rating: apiEp.vote_average || 0, 
+                        // Arrondi strict à 1 décimale (ex: 7.5)
+                        rating: Math.round((apiEp.vote_average || 0) * 10) / 10, 
                         summary: apiEp.overview || '', 
                         watched: false 
                     });
@@ -26,13 +27,10 @@ async function fetchAllTmdbEpisodes(tmdbId) {
             }
         });
 
-        // NOUVELLE LOGIQUE : Correction des notes par défaut
-        // 1. On cherche la note la plus basse parmi les épisodes qui ont une vraie note (> 0)
+        // LOGIQUE DE CORRECTION DES NOTES MANQUANTES
         const validRatings = episodes.map(e => e.rating).filter(r => r > 0);
         if (validRatings.length > 0) {
             const minRating = Math.min(...validRatings);
-            
-            // 2. On applique cette note minimale à tous les épisodes non notés
             episodes.forEach(ep => {
                 if (!ep.rating || ep.rating === 0) {
                     ep.rating = minRating;
@@ -51,7 +49,8 @@ async function enrichTmdbList(items) {
             if (res.ok) {
                 const m = await res.json();
                 if (m.overview) item.summary = m.overview;
-                if (m.vote_average) item.rating = m.vote_average;
+                // Arrondi strict à 1 décimale
+                if (m.vote_average) item.rating = Math.round((m.vote_average || 0) * 10) / 10;
                 if (m.networks?.length) item.network = m.networks[0].name;
             }
         } catch (e) {}
@@ -71,6 +70,9 @@ async function quickAdd(mediaId, watched) {
         episodes = apiEps.map(ep => ({ ...ep, watched: watched && (ep.airdate && ep.airdate <= todayString) }));
     }
     
+    // Arrondi de la note globale lors de l'ajout
+    media.rating = Math.round((media.rating || 0) * 10) / 10;
+
     const newItem = { 
         ...media, 
         episodes, 
