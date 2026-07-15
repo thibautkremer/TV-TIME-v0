@@ -1,4 +1,17 @@
 'use strict';
+
+// Remplace OMDB_API_KEY par ta clé OMDB si tu en as une (ou utilise une clé gratuite limitée)
+async function getImdbRating(imdbId) {
+    if (!imdbId) return null;
+    try {
+        const res = await fetch(`https://www.omdbapi.com/?apikey=TA_CLE_OMDB&i=${1e01c814}`);
+        const data = await res.json();
+        return data.imdbRating ? parseFloat(data.imdbRating) : null;
+    } catch (e) {
+        return null;
+    }
+}
+
 async function fetchAllTmdbEpisodes(tmdbId) {
     let episodes = [];
     try {
