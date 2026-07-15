@@ -10,12 +10,8 @@ function createSkeletonCard() {
     return div;
 }
 
-// Génère le bouton d'action selon si le média est présent ou non
+// Génère les boutons +Voir / ✓Vu pour les médias hors bibliothèque
 function buildCardActionsHTML(media) {
-    const libItem = isMediaInLibrary(media);
-    if (libItem) {
-        return `<button onclick="event.stopPropagation(); handleRemove('${libItem.id}')" class="w-full text-center text-[10px] bg-gray-900 hover:bg-gray-800 text-red-400 border border-red-900/50 py-1.5 rounded transition shadow-sm">✕ Retirer</button>`;
-    }
     return `<div class="flex gap-1.5 w-full">
         <button onclick="event.stopPropagation(); handleQuickAdd(this.parentElement.parentElement, '${media.id}', false)" class="flex-1 text-center text-[10px] bg-teal-600 hover:bg-teal-500 text-white font-bold py-1.5 rounded transition shadow-sm">+ Voir</button>
         <button onclick="event.stopPropagation(); handleQuickAdd(this.parentElement.parentElement, '${media.id}', true)" class="flex-1 text-center text-[10px] bg-emerald-700 hover:bg-emerald-600 text-white font-bold py-1.5 rounded transition shadow-sm">✓ Vu</button>
@@ -28,7 +24,7 @@ async function handleQuickAdd(container, mediaId, watched) {
     refreshGrids();
 }
 
-// 1. Suppression persistante avec Supabase
+// Suppression persistante avec Supabase
 async function handleRemove(mediaId) {
     if (supabaseClient) {
         await supabaseClient.from('user_library').delete().eq('user_id', localUserId).eq('media_id', mediaId);
@@ -38,6 +34,20 @@ async function handleRemove(mediaId) {
     saveLocalDB(); 
     refreshGrids(); 
     if (!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
+}
+
+// Logique spécifique Suivi : Mettre épisode suivant à Vu
+async function checkNextEp(mediaId) {
+    const item = libraryIndex.get(mediaId);
+    if (!item || item.type !== 'series') return;
+    const next = item.episodes.find(e => !e.watched && e.airdate && e.airdate <= todayString);
+    if (next) {
+        next.watched = true;
+        item.last_modified = Date.now();
+        await saveLocalDB(item);
+        refreshGrids();
+        if (!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
+    }
 }
 
 function createMediaCard(media, isLib = false) {
@@ -52,36 +62,42 @@ function createMediaCard(media, isLib = false) {
     div.className = `rounded-xl border border-gray-700 overflow-hidden cursor-pointer relative flex flex-col h-full ${colorClass}`;
     div.onclick = () => (isLib || libItem) ? openLibraryModal(m.id) : openPreviewModal(media);
     
-    // 2. Barre de progression (uniquement si en bibliothèque)
+    // Badge Match (Découverte uniquement)
+    const matchBadge = (!isLib && !libItem && media.matchPercent && window.location.hash === '#discover') ? 
+        `<div class="absolute bottom-1 left-1 bg-pink-900/90 text-pink-300 text-[9px] font-black px-1.5 py-0.5 rounded z-10 border border-pink-700">${media.matchPercent}% Match</div>` : '';
+
+    // Bouton "Vu" épisode (Page Suivi uniquement)
+    let quickAction = '';
+    if (isLib && libItem?.type === 'series') {
+        const next = libItem.episodes?.find(e => !e.watched && e.airdate && e.airdate <= todayString);
+        if (next) quickAction = `<button onclick="event.stopPropagation(); checkNextEp('${libItem.id}')" class="absolute bottom-1 right-1 bg-teal-600 text-white text-[9px] px-1.5 py-0.5 rounded font-black z-10">✔️ S${next.season}E${next.number}</button>`;
+    }
+
+    // Logique Boutons (Retirer sous titre OU +Voir/+Vu)
+    let actionArea = '';
+    if (libItem) {
+        actionArea = `<button onclick="event.stopPropagation(); handleRemove('${m.id}')" class="w-full mt-2 text-center text-[10px] bg-gray-900 text-red-400 border border-red-900/50 py-1.5 rounded">Retirer</button>`;
+    } else {
+        actionArea = buildCardActionsHTML(media);
+    }
+
+    // Barre de progression
     let progressBar = '';
     if (libItem) {
         progressBar = `<div class="w-full h-1 bg-black/30"><div class="h-full bg-teal-400" style="width: ${getProgress(libItem)}%"></div></div>`;
-    }
-    
-    // Note dorée (Haut gauche)
-    const calcRating = getCalculatedRating(m);
-    const ratingOverlay = calcRating > 0 ? `<div class="absolute top-1 left-1 bg-black/70 text-yellow-400 text-[10px] font-black px-1.5 py-0.5 rounded z-10 border border-gray-800">★ ${calcRating.toFixed(1)}</div>` : '';
-    
-    // Bouton Retirer (Haut droite)
-    const removeBtn = (libItem) ? `<button onclick="event.stopPropagation(); handleRemove('${m.id}')" class="absolute top-1 right-1 bg-black/70 text-red-500 text-[10px] font-black px-1.5 py-1 rounded z-10">✕</button>` : '';
-    
-    // 6. Bouton "Vu" épisode en cours (Bas droite format ✔️ SxE, uniquement en page Suivi)
-    let quickAction = '';
-    if (libItem && libItem.type === 'series' && isLib) {
-        const next = libItem.episodes?.find(e => !e.watched && e.airdate && e.airdate <= todayString);
-        if (next) quickAction = `<button onclick="event.stopPropagation(); checkNextEp('${libItem.id}')" class="absolute bottom-1 right-1 bg-teal-600 text-white text-[9px] px-1.5 py-0.5 rounded font-black z-10">✔️ S${next.season}E${next.number}</button>`;
     }
 
     div.innerHTML = `
         <div class="relative w-full">
             <img data-src="${getOptimizedImageUrl(m.image)}" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" class="media-poster lazy-image" />
-            ${ratingOverlay}${removeBtn}${quickAction}
+            ${matchBadge}${quickAction}
         </div>
         <div class="p-2 flex flex-col flex-1">
             ${progressBar}
             <h3 class="font-bold text-white text-[10px] truncate leading-tight mt-1" title="${m.title_fr || m.title}">${m.title_fr || m.title || 'Inconnu'}</h3>
-            ${!libItem ? `<div class="mt-auto pt-2">${buildCardActionsHTML(media)}</div>` : ''}
+            <div class="mt-auto">${actionArea}</div>
         </div>`;
+    
     return div;
 }
 
