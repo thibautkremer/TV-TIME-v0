@@ -48,6 +48,27 @@ function rebuildLibraryIndex() {
  * Vérifie la présence d'un média dans la bibliothèque via son ID unique.
  */
 function isMediaInLibrary(media) {
-    if (!media || !media.id) return undefined;
-    return libraryIndex.get(media.id);
+    if (!media) return undefined;
+    
+    // 1. Recherche par le nouvel ID strict (ex: 'series-123')
+    let found = libraryIndex.get(media.id);
+    if (found) return found;
+
+    // 2. Fallback API ID : Pour rattraper les anciens médias OMDB/TVMaze
+    if (media.apiId) {
+        found = library.find(i => String(i.apiId) === String(media.apiId) || String(i.id) === String(media.apiId));
+        if (found) return found;
+    }
+
+    // 3. Fallback Titre : Dernier rempart anti-doublon
+    if (media.title) {
+        found = libraryTitleIndex.get(`${media.type}|${media.title.toLowerCase()}`);
+        if (found) return found;
+    }
+    if (media.title_fr) {
+        found = libraryTitleIndex.get(`${media.type}|${media.title_fr.toLowerCase()}`);
+        if (found) return found;
+    }
+
+    return undefined;
 }
