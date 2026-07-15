@@ -84,8 +84,8 @@ function createMediaCard(media, context = 'library') {
 
     // Boutons rapides (Suivi uniquement)
     if (context === 'library') {
-        // Croix rouge en haut à droite (Suppression instantanée)
-        topRight = `<button onclick="event.stopPropagation(); handleRemove('${m.id}')" class="absolute top-1 right-1 bg-red-600 hover:bg-red-500 text-white w-6 h-6 rounded-full text-[10px] font-bold z-10 flex items-center justify-center shadow-lg transition">✕</button>`;
+        // Croix rouge en haut à droite (Suppression instantanée, plus léger)
+        topRight = `<button onclick="event.stopPropagation(); handleRemove('${m.id}')" class="absolute top-1 right-1 text-red-500 hover:text-red-400 text-lg font-black z-10 flex items-center justify-center transition drop-shadow-md">✕</button>`;
         
         // Bouton Vu épisode en cours en bas à droite
         if (m.type === 'series' && m.episodes) {
@@ -100,7 +100,7 @@ function createMediaCard(media, context = 'library') {
     let actionArea = '';
     if (context !== 'library') {
         if (libItem) {
-            actionArea = `<button onclick="event.stopPropagation(); handleRemove('${m.id}')" class="w-full mt-2 text-center text-[10px] bg-gray-900 text-red-400 border border-red-900/50 py-1.5 rounded transition">Retirer de la biblio</button>`;
+            actionArea = `<button onclick="event.stopPropagation(); handleRemove('${m.id}')" class="w-full mt-2 text-center text-[10px] bg-gray-900 text-red-400 border border-red-900/50 py-1.5 rounded transition">Retirer</button>`;
         } else {
             actionArea = buildCardActionsHTML(media);
         }
