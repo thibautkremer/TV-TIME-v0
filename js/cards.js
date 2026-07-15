@@ -1,4 +1,14 @@
 'use strict';
+// ============================================================
+// CARDS — Gestion unifiée des cartes (Display + Actions)
+// ============================================================
+
+function createSkeletonCard() {
+    const div = document.createElement('div');
+    div.className = 'bg-gray-800 rounded-xl border border-gray-700 overflow-hidden shadow-sm flex flex-col animate-pulse h-full';
+    div.innerHTML = `<div class="w-full bg-gray-700" style="aspect-ratio: 155.88 / 217.56;"></div><div class="p-2 flex flex-col gap-2"><div class="h-3 bg-gray-600 rounded w-3/4"></div></div>`;
+    return div;
+}
 
 function buildCardActionsHTML(media) {
     const libItem = isMediaInLibrary(media);
@@ -11,11 +21,25 @@ function buildCardActionsHTML(media) {
     </div>`;
 }
 
+async function handleQuickAdd(container, mediaId, watched) {
+    container.innerHTML = `<span class="text-[9px] text-teal-400 font-bold w-full text-center block">Ajout...</span>`;
+    await quickAdd(mediaId, watched); 
+    refreshGrids();
+}
+
+async function handleRemove(mediaId) {
+    library = library.filter(i => i.id !== mediaId);
+    rebuildLibraryIndex(); 
+    saveLocalDB(); 
+    refreshGrids(); 
+    if (!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
+}
+
 function createMediaCard(media, isLib = false) {
     const libItem = isMediaInLibrary(media);
     const m = libItem || media;
     
-    // Point 7 : Couleurs (Violet: Anime, Bleu: Série, Rouge: Film)
+    // Codes couleurs: Violet (Anime), Bleu (Série), Rouge (Film)
     const isAnime = m.genres?.includes('Anime') || m.genres?.includes('Animation');
     const colorClass = m.type === 'movie' ? 'bg-red-900/40' : (isAnime ? 'bg-purple-900/40' : 'bg-blue-900/40');
     
@@ -23,14 +47,22 @@ function createMediaCard(media, isLib = false) {
     div.className = `rounded-xl border border-gray-700 overflow-hidden cursor-pointer relative flex flex-col h-full ${colorClass}`;
     div.onclick = () => (isLib || libItem) ? openLibraryModal(m.id) : openPreviewModal(media);
     
-    // Points 3 & 8 : Badge Match (seulement si non en lib) et bouton action suivi
+    // Badge Match et Bouton Retirer
     let matchBadge = (!isLib && !libItem && media.matchPercent) ? `<div class="absolute bottom-1 left-1 bg-pink-900/90 text-pink-300 text-[9px] font-black px-1.5 py-0.5 rounded z-10 border border-pink-700">${media.matchPercent}% Match</div>` : '';
     let removeBtn = (isLib || libItem) ? `<button onclick="event.stopPropagation(); handleRemove('${m.id}')" class="absolute top-1 right-1 bg-black/70 text-red-500 text-[10px] font-black px-1.5 py-1 rounded z-10">✕</button>` : '';
     
+    // Bouton "Vu" épisode en cours
     let quickAction = '';
     if (libItem && libItem.type === 'series') {
         const next = libItem.episodes?.find(e => !e.watched && e.airdate && e.airdate <= todayString);
         if (next) quickAction = `<button onclick="event.stopPropagation(); checkNextEp('${libItem.id}')" class="absolute bottom-1 right-1 bg-teal-600 text-white text-[9px] px-1.5 py-0.5 rounded font-black z-10">✓ E${next.number}</button>`;
+    }
+    
+    // Barre de progression
+    let progressBar = '';
+    if (libItem) {
+        const prog = getProgress(libItem);
+        progressBar = `<div class="w-full h-1 bg-black/30"><div class="h-full bg-teal-400" style="width: ${prog}%"></div></div>`;
     }
 
     div.innerHTML = `
@@ -39,13 +71,24 @@ function createMediaCard(media, isLib = false) {
             ${matchBadge}${removeBtn}${quickAction}
         </div>
         <div class="p-2 flex flex-col flex-1">
-            <h3 class="font-bold text-white text-[10px] truncate" title="${m.title_fr || m.title}">${m.title_fr || m.title}</h3>
+            ${progressBar}
+            <h3 class="font-bold text-white text-[10px] truncate leading-tight mt-1" title="${m.title_fr || m.title || 'Inconnu'}">${m.title_fr || m.title || 'Inconnu'}</h3>
             ${!(isLib || libItem) ? `<div class="mt-auto pt-2">${buildCardActionsHTML(media)}</div>` : ''}
         </div>`;
     return div;
 }
 
-async function handleRemove(mediaId) {
-    library = library.filter(i => i.id !== mediaId);
-    rebuildLibraryIndex(); saveLocalDB(); refreshGrids();
+function refreshGrids() {
+    if (!document.getElementById('tab-search').classList.contains('hidden')) {
+        const container = document.getElementById('searchResults'); container.innerHTML = '';
+        const filtered = searchResults.filter(r => r.type === currentMediaType);
+        const frag = document.createDocumentFragment();
+        filtered.slice(0, searchPage * PAGE_SIZE).forEach(m => frag.appendChild(createMediaCard(m, false))); container.appendChild(frag);
+    }
+    if (!document.getElementById('tab-discover').classList.contains('hidden')) {
+        const container = document.getElementById('discoverGrid'); container.innerHTML = '';
+        const frag = document.createDocumentFragment();
+        discoverResults.slice(0, discoverPage * PAGE_SIZE).forEach(m => frag.appendChild(createMediaCard(m, false))); container.appendChild(frag);
+    }
+    observeLazyImages();
 }
