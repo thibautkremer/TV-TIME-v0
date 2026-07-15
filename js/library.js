@@ -42,7 +42,7 @@ function renderLibrary() {
     const container = document.getElementById('libraryGrid');
     container.innerHTML = '';
     const frag = document.createDocumentFragment();
-    filtered.forEach(m => frag.appendChild(createMediaCard(m, true)));
+    filtered.forEach(m => frag.appendChild(createMediaCard(m, 'library')));
     container.appendChild(frag);
     observeLazyImages();
 }
