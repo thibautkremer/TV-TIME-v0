@@ -31,7 +31,8 @@ async function triggerFuzzySearch(query) {
             genres: [], 
             premiered: s.first_air_date ? s.first_air_date.split('-')[0] : 'N/A', 
             runtime: 0, 
-            summary: s.overview || ''
+            summary: s.overview || '',
+            original_language: s.original_language
         })) : [];
 
         let tmdbMovieItems = tmdbMovieRes.results ? tmdbMovieRes.results.map(m => ({
@@ -45,7 +46,8 @@ async function triggerFuzzySearch(query) {
             genres: [], 
             premiered: m.release_date ? m.release_date.split('-')[0] : 'N/A', 
             runtime: 120, 
-            summary: m.overview || ''
+            summary: m.overview || '',
+            original_language: m.original_language
         })) : [];
 
         results = [...tmdbTvItems, ...tmdbMovieItems];
@@ -72,7 +74,7 @@ function renderSearchGrid(clear = false) {
     const slice = filtered.slice(start, limit); 
     const frag = document.createDocumentFragment();
     
-    slice.forEach(m => frag.appendChild(createMediaCard(m, false))); 
+    slice.forEach(m => frag.appendChild(createMediaCard(m, 'search'))); 
     container.appendChild(frag);
     
     observeLazyImages();
