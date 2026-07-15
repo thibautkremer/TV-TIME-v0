@@ -73,3 +73,4 @@ function appendSuggestions() {
         list.appendChild(div);
     });
 }
+
