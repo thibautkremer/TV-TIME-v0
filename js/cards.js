@@ -1,6 +1,6 @@
 'use strict';
 // ============================================================
-// CARDS — Gestion unifiée des cartes (Display + Actions)
+// CARDS — Rendu unifié des cartes médias et actions
 // ============================================================
 
 function createSkeletonCard() {
@@ -10,6 +10,7 @@ function createSkeletonCard() {
     return div;
 }
 
+// Génère le bouton d'action selon si le média est présent ou non
 function buildCardActionsHTML(media) {
     const libItem = isMediaInLibrary(media);
     if (libItem) {
@@ -47,48 +48,50 @@ function createMediaCard(media, isLib = false) {
     div.className = `rounded-xl border border-gray-700 overflow-hidden cursor-pointer relative flex flex-col h-full ${colorClass}`;
     div.onclick = () => (isLib || libItem) ? openLibraryModal(m.id) : openPreviewModal(media);
     
-    // Badge Match et Bouton Retirer
-    let matchBadge = (!isLib && !libItem && media.matchPercent) ? `<div class="absolute bottom-1 left-1 bg-pink-900/90 text-pink-300 text-[9px] font-black px-1.5 py-0.5 rounded z-10 border border-pink-700">${media.matchPercent}% Match</div>` : '';
-    let removeBtn = (isLib || libItem) ? `<button onclick="event.stopPropagation(); handleRemove('${m.id}')" class="absolute top-1 right-1 bg-black/70 text-red-500 text-[10px] font-black px-1.5 py-1 rounded z-10">✕</button>` : '';
+    // Note dorée (Haut gauche)
+    const calcRating = getCalculatedRating(m);
+    const ratingOverlay = calcRating > 0 ? `<div class="absolute top-1 left-1 bg-black/70 text-yellow-400 text-[10px] font-black px-1.5 py-0.5 rounded z-10 border border-gray-800">★ ${calcRating.toFixed(1)}</div>` : '';
     
-    // Bouton "Vu" épisode en cours
+    // Bouton Retirer (Haut droite)
+    const removeBtn = (libItem) ? `<button onclick="event.stopPropagation(); handleRemove('${m.id}')" class="absolute top-1 right-1 bg-black/70 text-red-500 text-[10px] font-black px-1.5 py-1 rounded z-10">✕</button>` : '';
+    
+    // Bouton "Vu" épisode en cours (Bas droite format ✔️ SxE)
     let quickAction = '';
     if (libItem && libItem.type === 'series') {
         const next = libItem.episodes?.find(e => !e.watched && e.airdate && e.airdate <= todayString);
-        if (next) quickAction = `<button onclick="event.stopPropagation(); checkNextEp('${libItem.id}')" class="absolute bottom-1 right-1 bg-teal-600 text-white text-[9px] px-1.5 py-0.5 rounded font-black z-10">✓ E${next.number}</button>`;
+        if (next) quickAction = `<button onclick="event.stopPropagation(); checkNextEp('${libItem.id}')" class="absolute bottom-1 right-1 bg-teal-600 text-white text-[9px] px-1.5 py-0.5 rounded font-black z-10">✔️ S${next.season}E${next.number}</button>`;
     }
     
-    // Barre de progression
-    let progressBar = '';
-    if (libItem) {
-        const prog = getProgress(libItem);
-        progressBar = `<div class="w-full h-1 bg-black/30"><div class="h-full bg-teal-400" style="width: ${prog}%"></div></div>`;
-    }
+    // Badge Match (si non en lib)
+    const matchBadge = (!libItem && media.matchPercent) ? `<div class="absolute bottom-1 left-1 bg-pink-900/90 text-pink-300 text-[9px] font-black px-1.5 py-0.5 rounded z-10 border border-pink-700">${media.matchPercent}% Match</div>` : '';
 
     div.innerHTML = `
         <div class="relative w-full">
             <img data-src="${getOptimizedImageUrl(m.image)}" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" class="media-poster lazy-image" />
-            ${matchBadge}${removeBtn}${quickAction}
+            ${ratingOverlay}${matchBadge}${removeBtn}${quickAction}
         </div>
         <div class="p-2 flex flex-col flex-1">
-            ${progressBar}
-            <h3 class="font-bold text-white text-[10px] truncate leading-tight mt-1" title="${m.title_fr || m.title || 'Inconnu'}">${m.title_fr || m.title || 'Inconnu'}</h3>
-            ${!(isLib || libItem) ? `<div class="mt-auto pt-2">${buildCardActionsHTML(media)}</div>` : ''}
+            <h3 class="font-bold text-white text-[10px] truncate leading-tight mt-1" title="${m.title_fr || m.title}">${m.title_fr || m.title || 'Inconnu'}</h3>
+            ${!libItem ? `<div class="mt-auto pt-2">${buildCardActionsHTML(media)}</div>` : ''}
         </div>`;
     return div;
 }
 
 function refreshGrids() {
-    if (!document.getElementById('tab-search').classList.contains('hidden')) {
-        const container = document.getElementById('searchResults'); container.innerHTML = '';
-        const filtered = searchResults.filter(r => r.type === currentMediaType);
-        const frag = document.createDocumentFragment();
-        filtered.slice(0, searchPage * PAGE_SIZE).forEach(m => frag.appendChild(createMediaCard(m, false))); container.appendChild(frag);
-    }
-    if (!document.getElementById('tab-discover').classList.contains('hidden')) {
-        const container = document.getElementById('discoverGrid'); container.innerHTML = '';
-        const frag = document.createDocumentFragment();
-        discoverResults.slice(0, discoverPage * PAGE_SIZE).forEach(m => frag.appendChild(createMediaCard(m, false))); container.appendChild(frag);
-    }
+    const grids = [
+        { id: 'searchResults', arr: searchResults, type: currentMediaType },
+        { id: 'discoverGrid', arr: discoverResults, type: discoverMediaType }
+    ];
+    
+    grids.forEach(g => {
+        const el = document.getElementById(g.id);
+        if (el && !el.parentElement.classList.contains('hidden')) {
+            el.innerHTML = '';
+            const filtered = g.arr.filter(r => r.type === g.type);
+            const frag = document.createDocumentFragment();
+            filtered.forEach(m => frag.appendChild(createMediaCard(m, false))); 
+            el.appendChild(frag);
+        }
+    });
     observeLazyImages();
 }
