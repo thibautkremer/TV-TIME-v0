@@ -10,7 +10,6 @@ function createSkeletonCard() {
     return div;
 }
 
-// Génère les boutons +Voir / ✓Vu pour les médias hors bibliothèque
 function buildCardActionsHTML(media) {
     return `<div class="flex gap-1.5 w-full">
         <button onclick="event.stopPropagation(); handleQuickAdd(this.parentElement.parentElement, '${media.id}', false)" class="flex-1 text-center text-[10px] bg-teal-600 hover:bg-teal-500 text-white font-bold py-1.5 rounded transition shadow-sm">+ Voir</button>
@@ -24,7 +23,6 @@ async function handleQuickAdd(container, mediaId, watched) {
     refreshGrids();
 }
 
-// Suppression persistante avec Supabase
 async function handleRemove(mediaId) {
     if (typeof supabaseClient !== 'undefined') {
         await supabaseClient.from('user_library').delete().eq('user_id', localUserId).eq('media_id', mediaId);
@@ -36,7 +34,6 @@ async function handleRemove(mediaId) {
     if (!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
 }
 
-// Logique spécifique Suivi : Mettre épisode suivant à Vu
 async function checkNextEp(mediaId) {
     const item = libraryIndex.get(mediaId);
     if (!item || item.type !== 'series') return;
@@ -54,7 +51,6 @@ function createMediaCard(media, context = 'library') {
     const libItem = isMediaInLibrary(media);
     const m = libItem || media;
     
-    // Fonds colorés appliqués partout
     const isAnime = (m.genres || []).includes('Anime') || (m.genres || []).includes('Animation') || m.original_language === 'ja';
     const colorClass = m.type === 'movie' ? 'bg-red-900/40' : (isAnime ? 'bg-purple-900/40' : 'bg-blue-900/40');
     
@@ -64,39 +60,37 @@ function createMediaCard(media, context = 'library') {
     
     let topLeft = '', topRight = '', bottomLeft = '', bottomRight = '';
     
-    // Note en haut à gauche (Toutes les pages)
     const rating = getCalculatedRating(m);
     if (rating > 0) {
         topLeft = `<div class="absolute top-1 left-1 bg-black/70 text-yellow-400 text-[9px] font-bold px-1.5 py-0.5 rounded z-10 border border-yellow-700/50 shadow">★ ${rating.toFixed(1)}</div>`;
     }
     
-    // Année en haut à droite (Recherche & Découvrir)
     if (['search', 'discover'].includes(context)) {
         if (m.premiered && m.premiered !== 'N/A') {
             topRight = `<div class="absolute top-1 right-1 bg-black/70 text-gray-300 text-[9px] font-bold px-1.5 py-0.5 rounded z-10 border border-gray-700/50 shadow">${m.premiered}</div>`;
         }
     }
 
-    // Match en bas à gauche (Découvrir uniquement)
     if (context === 'discover' && !libItem && media.matchPercent) {
         bottomLeft = `<div class="absolute bottom-1 left-1 bg-pink-900/90 text-pink-300 text-[9px] font-black px-1.5 py-0.5 rounded z-10 border border-pink-700 shadow">${media.matchPercent}%</div>`;
     }
 
-    // Boutons rapides (Suivi uniquement)
     if (context === 'library') {
-        // Croix rouge en haut à droite (Suppression instantanée, plus léger)
         topRight = `<button onclick="event.stopPropagation(); handleRemove('${m.id}')" class="absolute top-1 right-1 text-red-500 hover:text-red-400 text-lg font-black z-10 flex items-center justify-center transition drop-shadow-md">✕</button>`;
         
-        // Bouton Vu épisode en cours en bas à droite
-        if (m.type === 'series' && m.episodes) {
-            const next = m.episodes.find(e => !e.watched && e.airdate && e.airdate <= todayString);
+        if (m.type === 'series') {
+            const s = (m.status_production || '').toLowerCase();
+            if (s.includes('cancel') || s.includes('annulé') || s.includes('canceled')) {
+                bottomLeft = `<div class="absolute bottom-1 left-1 bg-red-900/90 text-red-300 text-[9px] font-black px-1.5 py-0.5 rounded z-10 border border-red-700 shadow">Annulée</div>`;
+            }
+            
+            const next = m.episodes && m.episodes.find(e => !e.watched && e.airdate && e.airdate <= todayString);
             if (next) {
                 bottomRight = `<button onclick="event.stopPropagation(); checkNextEp('${m.id}')" class="absolute bottom-1 right-1 bg-teal-600 hover:bg-teal-500 text-white text-[9px] px-1.5 py-0.5 rounded font-black z-10 shadow transition">✔️ S${next.season}E${next.number}</button>`;
             }
         }
     }
 
-    // Actions au bas de la carte (Boutons +Voir / Vu / Retirer)
     let actionArea = '';
     if (context !== 'library') {
         if (libItem) {
@@ -106,7 +100,6 @@ function createMediaCard(media, context = 'library') {
         }
     }
 
-    // Barre de progression
     let progressBar = '';
     if (libItem) {
         progressBar = `<div class="w-full h-1 bg-black/40 rounded-full overflow-hidden ${context === 'library' ? 'mb-1.5' : 'mb-0'}"><div class="h-full bg-teal-400" style="width: ${getProgress(libItem)}%"></div></div>`;
