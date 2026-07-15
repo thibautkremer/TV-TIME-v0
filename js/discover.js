@@ -55,7 +55,8 @@ async function renderDiscoverTab(force = false) {
             image: m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : '', 
             rating: m.vote_average || 0, 
             premiered: (m.release_date || m.first_air_date || 'N/A').split('-')[0],
-            network: m.networks?.[0]?.name || 'TMDB'
+            network: m.networks?.[0]?.name || 'TMDB',
+            original_language: m.original_language
         })).filter(v => !isMediaInLibrary(v));
 
         if (currentDiscoverMode === 'mix') {
@@ -92,7 +93,7 @@ function renderDiscoverGrid(clear = false) {
     if (clear) container.innerHTML = '';
     
     const frag = document.createDocumentFragment(); 
-    discoverResults.forEach(m => frag.appendChild(createMediaCard(m, false)));
+    discoverResults.forEach(m => frag.appendChild(createMediaCard(m, 'discover')));
     container.appendChild(frag); 
     
     observeLazyImages();
