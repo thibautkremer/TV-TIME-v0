@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tvr-cache-v3';
+const CACHE_NAME = 'tvr-cache-v4';
 const ASSETS_TO_CACHE = [
   './index.html',
   './manifest.json',
@@ -18,9 +18,7 @@ const ASSETS_TO_CACHE = [
   './js/suggestions.js',
   './js/profile.js',
   './js/admin.js',
-  './js/main.js',
-  'https://cdn.tailwindcss.com',
-  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'
+  './js/main.js'
 ];
 
 self.addEventListener('install', event => {
@@ -44,8 +42,8 @@ self.addEventListener('fetch', event => {
       return; 
   }
 
-  // Seules les API de TMDB, OMDB et Supabase sont gardées
-  if (event.request.url.includes('themoviedb.org') || event.request.url.includes('omdbapi.com') || event.request.url.includes('supabase.co')) {
+  // Seules les API de TMDB et OMDB sont gardées (Supabase et Tailwind CDN retirés pour éviter les erreurs CORS locales)
+  if (event.request.url.includes('themoviedb.org') || event.request.url.includes('omdbapi.com')) {
     event.respondWith(
       fetch(event.request).catch(async () => {
           const cachedResponse = await caches.match(event.request);
