@@ -18,7 +18,7 @@ function observeLazyImages() {
 }
 
 function getOptimizedImageUrl(url, width = 300) {
-    if (!url || url === 'N/A' || url === 'image_par_defaut.jpg') return 'https://placehold.co/150x220/1f2937/a1a1aa?text=No+Image';
+    if (!url || typeof url !== 'string' || url === 'N/A' || url === 'image_par_defaut.jpg') return 'https://placehold.co/150x220/1f2937/a1a1aa?text=No+Image';
     if (url.includes('tmdb.org')) return url;
     return `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=webp&w=${width}`;
 }
@@ -40,8 +40,13 @@ function computeAvgEpisodeRating(eps) {
 
 function getProgress(item) {
     if (!item.episodes || item.episodes.length === 0) return item.status === 'Watched' ? 100 : 0;
-    const watched = item.episodes.filter(e => e.watched).length;
-    return Math.round((watched / item.episodes.length) * 100);
+    
+    // Filtre pour ignorer les épisodes qui ne sont pas encore sortis
+    const airedEps = item.episodes.filter(e => !e.airdate || e.airdate <= todayString);
+    if (airedEps.length === 0) return 0;
+    
+    const watched = airedEps.filter(e => e.watched).length;
+    return Math.round((watched / airedEps.length) * 100);
 }
 
 function formatDurationProfile(totalMin) {
