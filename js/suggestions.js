@@ -62,7 +62,7 @@ function appendSuggestions() {
         const div = document.createElement('div');
         div.className = 'bg-gray-900 border border-gray-700 p-2 rounded-xl flex gap-3 items-center hover:border-teal-700 transition';
         
-        // Clic sur l'image ou le titre ouvre la fiche, le bouton action reste indépendant
+        // Utilise buildCardActionsHTML pour gérer l'affichage conditionnel (Retirer vs Voir/Vu)
         div.innerHTML = `
             <img src="${getOptimizedImageUrl(n.image, 100)}" class="w-10 h-14 object-cover rounded cursor-pointer" onclick="closeModal(); openPreviewModal(${JSON.stringify(n).replace(/"/g, '&quot;')})" />
             <div class="flex-1 min-w-0 cursor-pointer" onclick="closeModal(); openPreviewModal(${JSON.stringify(n).replace(/"/g, '&quot;')})">
