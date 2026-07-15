@@ -1,6 +1,6 @@
 'use strict';
 // ============================================================
-// SUGGESTIONS — Basé sur l'algorithme officiel de TMDB
+// SUGGESTIONS — Franchises et Recommandations (Cross-Media)
 // ============================================================
 
 if (typeof window.suggestionsObserver === 'undefined') {
@@ -13,34 +13,49 @@ if (typeof window.suggestionsObserver === 'undefined') {
 
 async function renderSuggestions(currentId) {
     const block = document.getElementById('modalSuggestionsBlock');
-    block.innerHTML = `<div id="modalSuggestionsList" class="space-y-2"><p class="text-xs text-teal-400 text-center py-4 animate-pulse">Chargement des recommandations...</p></div>`;
+    block.innerHTML = `<div id="modalSuggestionsList" class="space-y-2"><p class="text-xs text-teal-400 text-center py-4 animate-pulse">Recherche dans la franchise...</p></div>`;
     
     try {
         const baseMedia = libraryIndex.get(currentId) || searchResults.find(i => i.id === currentId) || discoverResults.find(i => i.id === currentId);
         if (!baseMedia) return;
 
-        const endpoint = `${TMDB_BASE}/${baseMedia.type === 'series' ? 'tv' : 'movie'}/${baseMedia.apiId}/recommendations?api_key=${TMDB_API_KEY}&language=fr-FR&page=1`;
-        const res = await fetch(endpoint);
-        const data = await res.json();
+        // 1. Recherche par titre (Franchise complète : films, anime, séries)
+        const cleanTitle = (baseMedia.title_fr || baseMedia.title).split(':')[0].trim();
+        const multiRes = await fetch(`${TMDB_BASE}/search/multi?api_key=${TMDB_API_KEY}&language=fr-FR&query=${encodeURIComponent(cleanTitle)}`);
+        const multiData = await multiRes.json();
         
-        let results = data.results || [];
-        if (results.length === 0) {
-            const similarRes = await fetch(`${TMDB_BASE}/${baseMedia.type === 'series' ? 'tv' : 'movie'}/${baseMedia.apiId}/similar?api_key=${TMDB_API_KEY}&language=fr-FR`);
-            const similarData = await similarRes.json();
-            results = similarData.results || [];
-        }
+        // 2. Suggestions basées sur l'algorithme TMDB
+        const recRes = await fetch(`${TMDB_BASE}/${baseMedia.type === 'series' ? 'tv' : 'movie'}/${baseMedia.apiId}/recommendations?api_key=${TMDB_API_KEY}&language=fr-FR&page=1`);
+        const recData = await recRes.json();
+        
+        // Fusion des résultats et nettoyage
+        const rawResults = [...(multiData.results || []), ...(recData.results || [])];
+        let resultsMap = new Map();
+        
+        rawResults.forEach(m => {
+            // Filtrer les personnes et exclure le média en cours
+            if ((m.media_type === 'tv' || m.media_type === 'movie' || (!m.media_type && m.title)) && String(m.id) !== String(baseMedia.apiId)) {
+                const type = m.media_type || (m.first_air_date ? 'tv' : 'movie');
+                resultsMap.set(`${type}-${m.id}`, { ...m, media_type: type });
+            }
+        });
+        
+        let results = Array.from(resultsMap.values());
 
-        modalSuggestionsPool = results.map(m => ({
-            id: baseMedia.type === 'series' ? `series-${m.id}` : `movie-${m.id}`,
-            apiId: m.id,
-            title: m.title || m.name,
-            title_fr: m.title || m.name,
-            type: baseMedia.type,
-            image: m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : '',
-            premiered: (m.release_date || m.first_air_date || 'N/A').split('-')[0],
-            rating: m.vote_average || 0,
-            original_language: m.original_language
-        }));
+        modalSuggestionsPool = results.map(m => {
+            const t = m.media_type === 'tv' ? 'series' : 'movie';
+            return {
+                id: `${t}-${m.id}`,
+                apiId: m.id,
+                title: m.title || m.name,
+                title_fr: m.title || m.name,
+                type: t,
+                image: m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : '',
+                premiered: (m.release_date || m.first_air_date || 'N/A').split('-')[0],
+                rating: m.vote_average || 0,
+                original_language: m.original_language
+            };
+        });
 
         modalSuggestionsPage = 1;
         appendSuggestions();
@@ -52,27 +67,28 @@ async function renderSuggestions(currentId) {
 
 function appendSuggestions() {
     const list = document.getElementById('modalSuggestionsList');
-    list.innerHTML = '';
+    if (modalSuggestionsPage === 1) list.innerHTML = '';
     
     if (modalSuggestionsPool.length === 0) { 
-        list.innerHTML = '<p class="text-xs text-gray-500 text-center py-4">Aucune suggestion trouvée.</p>'; return; 
+        list.innerHTML = '<p class="text-xs text-gray-500 text-center py-4">Aucune recommandation trouvée.</p>'; return; 
     }
     
-    modalSuggestionsPool.slice(0, 10).forEach(n => {
+    const start = (modalSuggestionsPage - 1) * 10;
+    const items = modalSuggestionsPool.slice(start, start + 10);
+
+    items.forEach(n => {
         const libItem = isMediaInLibrary(n);
         const div = document.createElement('div');
         
-        // Appliquer les couleurs de fonds
+        // Appliquer les couleurs de fonds et les styles croisés
         const isAnime = (n.genres || []).includes('Anime') || (n.genres || []).includes('Animation') || n.original_language === 'ja';
         const colorClass = n.type === 'movie' ? 'bg-red-900/30' : (isAnime ? 'bg-purple-900/30' : 'bg-blue-900/30');
         div.className = `border border-gray-700 p-2 rounded-xl flex gap-3 items-center hover:border-teal-700 transition ${colorClass}`;
         
         let actionsHTML = '';
         if (libItem) {
-            // Le média est déjà en base, on affiche Retirer
             actionsHTML = `<button onclick="event.stopPropagation(); handleRemove('${n.id}'); setTimeout(() => renderSuggestions(currentModalMediaId), 300)" class="w-full text-center text-[10px] bg-gray-900 text-red-400 border border-red-900/50 py-1.5 rounded transition">Retirer</button>`;
         } else {
-            // Pas en base, on affiche les boutons classiques
             actionsHTML = `<div class="flex gap-1.5 w-full">
                 <button onclick="event.stopPropagation(); handleQuickAdd(this.parentElement.parentElement, '${n.id}', false); setTimeout(() => renderSuggestions(currentModalMediaId), 300)" class="flex-1 text-center text-[10px] bg-teal-600 hover:bg-teal-500 text-white font-bold py-1.5 rounded shadow-sm">+ Voir</button>
                 <button onclick="event.stopPropagation(); handleQuickAdd(this.parentElement.parentElement, '${n.id}', true); setTimeout(() => renderSuggestions(currentModalMediaId), 300)" class="flex-1 text-center text-[10px] bg-emerald-700 hover:bg-emerald-600 text-white font-bold py-1.5 rounded shadow-sm">✓ Vu</button>
@@ -84,6 +100,7 @@ function appendSuggestions() {
             <div class="flex-1 min-w-0 cursor-pointer" onclick="closeModal(); openPreviewModal(${JSON.stringify(n).replace(/"/g, '&quot;')})">
                 <h4 class="text-[11px] font-bold text-white truncate">${n.title_fr || n.title || 'Inconnu'}</h4>
                 <div class="text-[9px] text-gray-400">★ ${n.rating.toFixed(1)}</div>
+                <div class="text-[8px] mt-0.5 text-gray-500 uppercase">${n.type === 'movie' ? 'Film' : 'Série'}</div>
             </div>
             <div class="w-24 shrink-0">${actionsHTML}</div>`;
         list.appendChild(div);
