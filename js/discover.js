@@ -9,7 +9,7 @@ function setDiscoverType(type) {
     document.getElementById('btn-disc-type-movie').className = type === 'movie' ? 'px-5 py-1.5 text-xs font-bold rounded shadow bg-teal-600 text-white transition' : 'px-5 py-1.5 text-xs font-bold rounded text-gray-400 hover:text-white transition';
     discoverResults = [];
     discoverPage = 1; 
-    renderDiscoverTab(true);
+    renderDiscoverTab(false);
 }
 
 function setDiscoverMode(mode) {
@@ -19,7 +19,7 @@ function setDiscoverMode(mode) {
     });
     discoverResults = [];
     discoverPage = 1; 
-    renderDiscoverTab(true);
+    renderDiscoverTab(false);
 }
 
 function displayLoadingSkeletons(containerId, count = 12) {
@@ -30,16 +30,25 @@ function displayLoadingSkeletons(containerId, count = 12) {
     container.appendChild(frag);
 }
 
-async function renderDiscoverTab(force = false) {
-    if (!force && discoverResults.length > 0) return;
+async function renderDiscoverTab(isAppend = false) {
+    // Évite le rechargement si on change juste d'onglet
+    if (!isAppend && discoverResults.length > 0) return;
 
-    displayLoadingSkeletons('discoverGrid', 12);
+    if (!isAppend) {
+        displayLoadingSkeletons('discoverGrid', 12);
+    }
 
     let apiUrl = '';
-    if (discoverMediaType === 'series') {
-        apiUrl = `${TMDB_BASE}/discover/tv?api_key=${TMDB_API_KEY}&language=fr-FR&sort_by=popularity.desc&page=${discoverPage}`;
+    const endpoint = discoverMediaType === 'series' ? 'tv' : 'movie';
+    
+    // Amélioration des paramètres de requêtes TMDB pour éviter les médias obscurs/poubelles
+    if (currentDiscoverMode === 'top') {
+        apiUrl = `${TMDB_BASE}/discover/${endpoint}?api_key=${TMDB_API_KEY}&language=fr-FR&sort_by=vote_average.desc&vote_count.gte=300&page=${discoverPage}`;
+    } else if (currentDiscoverMode === 'trending') {
+        apiUrl = `${TMDB_BASE}/trending/${endpoint}/week?api_key=${TMDB_API_KEY}&language=fr-FR&page=${discoverPage}`;
     } else {
-        apiUrl = `${TMDB_BASE}/discover/movie?api_key=${TMDB_API_KEY}&language=fr-FR&sort_by=popularity.desc&page=${discoverPage}`;
+        // 'mix' ou par défaut
+        apiUrl = `${TMDB_BASE}/discover/${endpoint}?api_key=${TMDB_API_KEY}&language=fr-FR&sort_by=popularity.desc&vote_count.gte=100&page=${discoverPage}`;
     }
 
     try {
@@ -59,48 +68,57 @@ async function renderDiscoverTab(force = false) {
             original_language: m.original_language
         })).filter(v => !isMediaInLibrary(v));
 
+        let scoredPool = pool;
+
         if (currentDiscoverMode === 'mix') {
             const gc = {}; 
             library.forEach(i => (i.genres || []).forEach(g => gc[g] = (gc[g] || 0) + 1));
 
-            if (Object.keys(gc).length === 0) {
-                discoverResults = pool.sort((a, b) => b.rating - a.rating);
-            } else {
+            if (Object.keys(gc).length > 0) {
                 const topGenres = Object.entries(gc).sort((a, b) => b[1] - a[1]).slice(0, 5).map(e => e[0]);
-                let scoredPool = pool.map(m => {
+                scoredPool = pool.map(m => {
                     let score = 0; 
                     if (m.genres) m.genres.forEach(g => { if (topGenres.includes(g)) score += 20; });
                     if (preferredPlatforms.includes(m.network)) score += 20; 
-                    score += (m.rating * 2.5); // Poids plus élevé pour la note
+                    score += (m.rating * 2.5);
                     return { ...m, matchPercent: Math.min(99, Math.max(10, Math.round(score))) };
                 });
-                discoverResults = scoredPool.sort((a, b) => b.matchPercent - a.matchPercent);
+                scoredPool.sort((a, b) => b.matchPercent - a.matchPercent);
             }
         } else if (currentDiscoverMode === 'top') {
-            discoverResults = pool.sort((a, b) => b.rating - a.rating);
+            scoredPool.sort((a, b) => b.rating - a.rating);
         } else {
-            discoverResults = pool.sort(() => 0.5 - Math.random());
+            scoredPool.sort(() => 0.5 - Math.random());
         }
 
-        renderDiscoverGrid(true);
+        if (isAppend) {
+            discoverResults = [...discoverResults, ...scoredPool];
+            renderDiscoverGrid(false, scoredPool); // Ajoute seulement les nouveaux
+        } else {
+            discoverResults = scoredPool;
+            renderDiscoverGrid(true, discoverResults); // Écrase tout
+        }
+        
     } catch (e) {
-        document.getElementById('discoverGrid').innerHTML = '<p class="text-center text-gray-500">Erreur de chargement.</p>';
+        if (!isAppend) {
+            document.getElementById('discoverGrid').innerHTML = '<p class="text-center text-gray-500">Erreur de chargement.</p>';
+        }
     }
 }
 
-function renderDiscoverGrid(clear = false) {
+function renderDiscoverGrid(clear = false, itemsToRender = []) {
     const container = document.getElementById('discoverGrid'); 
     if (clear) container.innerHTML = '';
     
     const frag = document.createDocumentFragment(); 
-    discoverResults.forEach(m => frag.appendChild(createMediaCard(m, 'discover')));
+    itemsToRender.forEach(m => frag.appendChild(createMediaCard(m, 'discover')));
     container.appendChild(frag); 
     
     observeLazyImages();
 }
 
 const discoverObserver = new IntersectionObserver(entries => { 
-    if (entries[0].isIntersecting) { 
+    if (entries[0].isIntersecting && discoverResults.length > 0) { 
         discoverPage++; 
         renderDiscoverTab(true); 
     } 
