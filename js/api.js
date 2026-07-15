@@ -7,13 +7,39 @@ async function fetchAllTmdbEpisodes(tmdbId) {
         const showData = await showRes.json();
         const seasons = showData.seasons.filter(s => s.season_number > 0);
         const seasonsData = await Promise.all(seasons.map(s => fetch(`${TMDB_BASE}/tv/${tmdbId}/season/${s.season_number}?api_key=${TMDB_API_KEY}&language=fr-FR`).then(r => r.json()).catch(() => ({}))));
+        
         seasonsData.forEach(seasonData => {
             if (seasonData.episodes) {
                 seasonData.episodes.forEach(apiEp => {
-                    episodes.push({ id: apiEp.id, season: apiEp.season_number, number: apiEp.episode_number, name: apiEp.name, airdate: apiEp.air_date, runtime: apiEp.runtime || 0, rating: apiEp.vote_average || 0, summary: apiEp.overview || '', watched: false });
+                    episodes.push({ 
+                        id: apiEp.id, 
+                        season: apiEp.season_number, 
+                        number: apiEp.episode_number, 
+                        name: apiEp.name, 
+                        airdate: apiEp.air_date, 
+                        runtime: apiEp.runtime || 0, 
+                        rating: apiEp.vote_average || 0, 
+                        summary: apiEp.overview || '', 
+                        watched: false 
+                    });
                 });
             }
         });
+
+        // NOUVELLE LOGIQUE : Correction des notes par défaut
+        // 1. On cherche la note la plus basse parmi les épisodes qui ont une vraie note (> 0)
+        const validRatings = episodes.map(e => e.rating).filter(r => r > 0);
+        if (validRatings.length > 0) {
+            const minRating = Math.min(...validRatings);
+            
+            // 2. On applique cette note minimale à tous les épisodes non notés
+            episodes.forEach(ep => {
+                if (!ep.rating || ep.rating === 0) {
+                    ep.rating = minRating;
+                }
+            });
+        }
+
     } catch (e) { console.error("Erreur:", e); }
     return episodes;
 }
@@ -38,11 +64,22 @@ async function quickAdd(mediaId, watched) {
          || discoverResults.find(r => r.id === mediaId) 
          || (typeof modalSuggestionsPool !== 'undefined' ? modalSuggestionsPool.find(r => r.id === mediaId) : null);
     if (!media || isMediaInLibrary(media)) return;
+    
     let episodes = [];
     if (media.type === 'series') {
         const apiEps = await fetchAllTmdbEpisodes(media.apiId);
         episodes = apiEps.map(ep => ({ ...ep, watched: watched && (ep.airdate && ep.airdate <= todayString) }));
     }
-    const newItem = { ...media, episodes, status: watched ? 'Watched' : 'In Progress', addedAt: Date.now(), last_modified: Date.now() };
-    library.push(newItem); rebuildLibraryIndex(); saveLocalDB(newItem);
+    
+    const newItem = { 
+        ...media, 
+        episodes, 
+        status: watched ? 'Watched' : 'In Progress', 
+        addedAt: Date.now(), 
+        last_modified: Date.now() 
+    };
+    
+    library.push(newItem); 
+    rebuildLibraryIndex(); 
+    saveLocalDB(newItem);
 }
