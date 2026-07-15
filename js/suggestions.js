@@ -61,11 +61,12 @@ function appendSuggestions() {
     modalSuggestionsPool.slice(0, 10).forEach(n => {
         const div = document.createElement('div');
         div.className = 'bg-gray-900 border border-gray-700 p-2 rounded-xl flex gap-3 items-center hover:border-teal-700 transition';
-        // Utilisation de la structure cohérente avec click sur fiche et actions
+        
+        // Clic sur l'image ou le titre ouvre la fiche, le bouton action reste indépendant
         div.innerHTML = `
             <img src="${getOptimizedImageUrl(n.image, 100)}" class="w-10 h-14 object-cover rounded cursor-pointer" onclick="closeModal(); openPreviewModal(${JSON.stringify(n).replace(/"/g, '&quot;')})" />
             <div class="flex-1 min-w-0 cursor-pointer" onclick="closeModal(); openPreviewModal(${JSON.stringify(n).replace(/"/g, '&quot;')})">
-                <h4 class="text-[11px] font-bold text-white truncate">${n.title_fr}</h4>
+                <h4 class="text-[11px] font-bold text-white truncate">${n.title_fr || n.title || 'Inconnu'}</h4>
                 <div class="text-[9px] text-gray-400">★ ${n.rating.toFixed(1)}</div>
             </div>
             <div class="w-24">${buildCardActionsHTML(n)}</div>`;
