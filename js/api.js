@@ -34,7 +34,9 @@ async function enrichTmdbList(items) {
 }
 
 async function quickAdd(mediaId, watched) {
-    let media = searchResults.find(r => r.id === mediaId) || discoverResults.find(r => r.id === mediaId); 
+    let media = searchResults.find(r => r.id === mediaId) 
+         || discoverResults.find(r => r.id === mediaId) 
+         || (typeof modalSuggestionsPool !== 'undefined' ? modalSuggestionsPool.find(r => r.id === mediaId) : null);
     if (!media || isMediaInLibrary(media)) return;
     let episodes = [];
     if (media.type === 'series') {
