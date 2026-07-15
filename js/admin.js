@@ -53,16 +53,36 @@ async function massUpdateLibrary(type, silent = false) {
                 changed = true; 
             }
 
-            // 3. Mise à jour Notes épisodes (Série uniquement)
+            // 3. Mise à jour Notes de TOUS les épisodes (Série uniquement)
             if (type === 'series' && item.episodes) {
                 const allEps = await fetchAllTmdbEpisodes(item.apiId);
-                item.episodes.forEach(ep => {
-                    const fresh = allEps.find(e => e.season === ep.season && e.number === ep.number);
-                    if (fresh && fresh.rating !== ep.rating) { 
-                        ep.rating = fresh.rating; 
-                        changed = true; 
+                if (allEps.length > 0) {
+                    item.episodes.forEach(ep => {
+                        const fresh = allEps.find(e => e.season === ep.season && e.number === ep.number);
+                        if (fresh) {
+                            if (fresh.rating !== ep.rating) { 
+                                ep.rating = fresh.rating; 
+                                changed = true; 
+                            }
+                            if (fresh.summary !== ep.summary) {
+                                ep.summary = fresh.summary;
+                                changed = true;
+                            }
+                        }
+                    });
+                    
+                    // Recalcul de la note moyenne globale de la série
+                    const newAvg = computeAvgEpisodeRating(item.episodes);
+                    if (item.rating !== newAvg) {
+                        item.rating = newAvg;
+                        changed = true;
                     }
-                });
+                }
+            } else if (type === 'movie' && data.vote_average) {
+                if (item.rating !== data.vote_average) {
+                    item.rating = data.vote_average;
+                    changed = true;
+                }
             }
 
             if (changed) {
