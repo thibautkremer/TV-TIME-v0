@@ -10,7 +10,6 @@ function createSkeletonCard() {
     return div;
 }
 
-// Génère les boutons +Voir / ✓Vu pour les médias hors bibliothèque
 function buildCardActionsHTML(media) {
     return `<div class="flex gap-1.5 w-full">
         <button onclick="event.stopPropagation(); handleQuickAdd(this.parentElement.parentElement, '${media.id}', false)" class="flex-1 text-center text-[10px] bg-teal-600 hover:bg-teal-500 text-white font-bold py-1.5 rounded transition shadow-sm">+ Voir</button>
@@ -21,11 +20,10 @@ function buildCardActionsHTML(media) {
 async function handleQuickAdd(container, mediaId, watched) {
     container.innerHTML = `<span class="text-[9px] text-teal-400 font-bold w-full text-center block">Ajout...</span>`;
     await quickAdd(mediaId, watched); 
-    if (typeof processSyncQueue === 'function') processSyncQueue(); // Forcer la synchro cloud visuelle
+    if (typeof processSyncQueue === 'function') processSyncQueue(); 
     refreshGrids();
 }
 
-// Suppression persistante avec Supabase
 async function handleRemove(mediaId) {
     if (typeof supabaseClient !== 'undefined') {
         await supabaseClient.from('user_library').delete().eq('user_id', localUserId).eq('media_id', mediaId);
@@ -37,7 +35,6 @@ async function handleRemove(mediaId) {
     if (!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
 }
 
-// Logique spécifique Suivi : Mettre épisode suivant à Vu + CASCADE
 async function checkNextEp(mediaId) {
     const item = libraryIndex.get(mediaId);
     if (!item || item.type !== 'series' || !item.episodes) return;
@@ -45,20 +42,16 @@ async function checkNextEp(mediaId) {
     const nextIndex = item.episodes.findIndex(e => !e.watched && e.airdate && e.airdate <= todayString);
     
     if (nextIndex !== -1) {
-        // CASCADE : on met à Vu l'épisode cliqué ET tous les épisodes précédents
         for (let i = 0; i <= nextIndex; i++) {
             item.episodes[i].watched = true;
         }
         
-        // Mise à jour du statut global du média
         const allAiredWatched = item.episodes.every(e => e.watched || (!e.airdate || e.airdate > todayString));
         item.status = allAiredWatched ? 'Watched' : 'In Progress';
         item.last_modified = Date.now();
         
-        // Sauvegarde locale + Envoi immédiat à Supabase
         await saveLocalDB(item);
         
-        // Force l'indicateur visuel de synchronisation Cloud
         if (typeof processSyncQueue === 'function') processSyncQueue(); 
         
         refreshGrids();
@@ -70,7 +63,7 @@ function createMediaCard(media, context = 'library') {
     const libItem = isMediaInLibrary(media);
     const m = libItem || media;
     
-    // Fonds colorés appliqués partout
+    // 4. Utilisation de la nouvelle logique Anime globale
     const isAnime = (m.genres || []).includes('Anime') || (m.genres || []).includes('Animation') || m.original_language === 'ja';
     const colorClass = m.type === 'movie' ? 'bg-red-900/40' : (isAnime ? 'bg-purple-900/40' : 'bg-blue-900/40');
     
@@ -80,37 +73,38 @@ function createMediaCard(media, context = 'library') {
     
     let topLeft = '', topRight = '', bottomLeft = '', bottomRight = '';
     
-    // Note en haut à gauche (Toutes les pages)
     const rating = getCalculatedRating(m);
     if (rating > 0) {
         topLeft = `<div class="absolute top-1 left-1 bg-black/70 text-yellow-400 text-[9px] font-bold px-1.5 py-0.5 rounded z-10 border border-yellow-700/50 shadow">★ ${rating.toFixed(1)}</div>`;
     }
     
-    // Année en haut à droite (Recherche & Découvrir)
+    // 1. Affichage de l'année uniquement
+    let displayYear = 'N/A';
+    if (m.releaseDate) {
+        displayYear = m.releaseDate.substring(0,4);
+    } else if (m.premiered && m.premiered !== 'N/A') {
+         displayYear = m.premiered.substring(0,4);
+    }
+
     if (['search', 'discover'].includes(context)) {
-        if (m.premiered && m.premiered !== 'N/A') {
-            topRight = `<div class="absolute top-1 right-1 bg-black/70 text-gray-300 text-[9px] font-bold px-1.5 py-0.5 rounded z-10 border border-gray-700/50 shadow">${m.premiered}</div>`;
+        if (displayYear !== 'N/A') {
+            topRight = `<div class="absolute top-1 right-1 bg-black/70 text-gray-300 text-[9px] font-bold px-1.5 py-0.5 rounded z-10 border border-gray-700/50 shadow">${displayYear}</div>`;
         }
     }
 
-    // Match en bas à gauche (Découvrir uniquement)
     if (context === 'discover' && !libItem && media.matchPercent) {
         bottomLeft = `<div class="absolute bottom-1 left-1 bg-pink-900/90 text-pink-300 text-[9px] font-black px-1.5 py-0.5 rounded z-10 border border-pink-700 shadow">${media.matchPercent}%</div>`;
     }
 
-    // Boutons rapides (Suivi uniquement)
     if (context === 'library') {
-        // Croix rouge en haut à droite (Suppression instantanée, plus léger)
         topRight = `<button onclick="event.stopPropagation(); handleRemove('${m.id}')" class="absolute top-1 right-1 text-red-500 hover:text-red-400 text-lg font-black z-10 flex items-center justify-center transition drop-shadow-md">✕</button>`;
         
         if (m.type === 'series') {
-            // Badge d'annulation
             const s = (m.status_production || '').toLowerCase();
             if (s.includes('cancel') || s.includes('annulé') || s.includes('canceled')) {
                 bottomLeft = `<div class="absolute bottom-1 left-1 bg-red-900/90 text-red-300 text-[9px] font-black px-1.5 py-0.5 rounded z-10 border border-red-700 shadow">Annulée</div>`;
             }
             
-            // Bouton Vu épisode en cours en bas à droite
             const next = m.episodes && m.episodes.find(e => !e.watched && e.airdate && e.airdate <= todayString);
             if (next) {
                 bottomRight = `<button onclick="event.stopPropagation(); checkNextEp('${m.id}')" class="absolute bottom-1 right-1 bg-teal-600 hover:bg-teal-500 text-white text-[9px] px-1.5 py-0.5 rounded font-black z-10 shadow transition">✔️ S${next.season}E${next.number}</button>`;
@@ -118,7 +112,6 @@ function createMediaCard(media, context = 'library') {
         }
     }
 
-    // Actions au bas de la carte (Boutons +Voir / Vu / Retirer)
     let actionArea = '';
     if (context !== 'library') {
         if (libItem) {
@@ -128,7 +121,6 @@ function createMediaCard(media, context = 'library') {
         }
     }
 
-    // Barre de progression
     let progressBar = '';
     if (libItem) {
         progressBar = `<div class="w-full h-1 bg-black/40 rounded-full overflow-hidden ${context === 'library' ? 'mb-1.5' : 'mb-0'}"><div class="h-full bg-teal-400" style="width: ${getProgress(libItem)}%"></div></div>`;
