@@ -9,12 +9,14 @@ function getCalendarEntries() {
         if (item.status === 'Abandoned') return;
         if (item.type === 'series') {
             (item.episodes || []).forEach(ep => {
-                if (!ep.watched && ep.airdate) {
+                // Seulement les épisodes non vus avec une date >= aujourd'hui
+                if (!ep.watched && ep.airdate && ep.airdate >= todayString) {
                     entries.push({ date: ep.airdate, type: 'episode', mediaId: item.id, title: item.title_fr || item.title, subtitle: `S${ep.season}E${ep.number}${ep.name ? ' – ' + ep.name : ''}`, image: item.image, original_language: item.original_language, genres: item.genres });
                 }
             });
         } else if (item.type === 'movie') {
-            if (item.releaseDate && item.status !== 'Watched') {
+            // 1. Seulement les films non vus avec une date de sortie complète >= aujourd'hui
+            if (item.releaseDate && item.releaseDate >= todayString && item.status !== 'Watched') {
                 entries.push({ date: item.releaseDate, type: 'movie', mediaId: item.id, title: item.title_fr || item.title, subtitle: 'Sortie film', image: item.image, original_language: item.original_language, genres: item.genres });
             }
         }
@@ -48,10 +50,8 @@ function renderCalendar() {
         const monthLater = new Date(now); monthLater.setMonth(monthLater.getMonth() + 1);
         entries = entries.filter(e => e.date >= todayString && new Date(e.date + 'T00:00:00') <= monthLater);
     } else {
-        // 'all' : on garde les 7 derniers jours + tout le futur, pour éviter un historique infini
-        const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
-        const weekAgoStr = weekAgo.toISOString().split('T')[0];
-        entries = entries.filter(e => e.date >= weekAgoStr);
+        // 'all' : on n'affiche plus que ce qui est >= aujourd'hui, plus l'historique
+        entries = entries.filter(e => e.date >= todayString);
     }
 
     if (entries.length === 0) { container.innerHTML = '<p class="text-center text-gray-500 text-sm py-10">Aucune sortie à afficher.</p>'; return; }
@@ -64,7 +64,7 @@ function renderCalendar() {
         const dayWrap = document.createElement('div');
         const isToday = date === todayString;
         const dateObj = new Date(date + 'T00:00:00');
-        const label = isToday ? "Aujourd'hui" : dateObj.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+        const label = isToday ? "Aujourd'hui" : dateObj.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
         dayWrap.innerHTML = `<h3 class="text-xs font-bold ${isToday ? 'text-teal-400' : 'text-gray-400'} uppercase tracking-wider mb-1.5 mt-3">${label}</h3>`;
         const list = document.createElement('div'); list.className = 'space-y-1.5';
         grouped[date].forEach(e => {
