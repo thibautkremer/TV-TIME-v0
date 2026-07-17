@@ -11,29 +11,37 @@ if (typeof window.suggestionsObserver === 'undefined') {
     });
 }
 
+async function getSmartSuggestions(mediaId, mediaType) {
+    try {
+        const res = await fetch(`${TMDB_BASE}/${mediaType}/${mediaId}/recommendations?api_key=${TMDB_API_KEY}&language=fr-FR`);
+        const data = await res.json();
+        
+        if (!data.results || data.results.length === 0) {
+            const fallback = await fetch(`${TMDB_BASE}/${mediaType}/${mediaId}/similar?api_key=${TMDB_API_KEY}&language=fr-FR`);
+            const fallbackData = await fallback.json();
+            return fallbackData.results ? fallbackData.results.slice(0, 15) : [];
+        }
+        return data.results.slice(0, 15);
+    } catch (error) {
+        console.error("Erreur sur les suggestions :", error);
+        return [];
+    }
+}
+
 async function renderSuggestions(currentId) {
     const block = document.getElementById('modalSuggestionsBlock');
-    block.innerHTML = `<div id="modalSuggestionsList" class="space-y-2"><p class="text-xs text-teal-400 text-center py-4 animate-pulse">Recherche dans la franchise...</p></div>`;
+    block.innerHTML = `<div id="modalSuggestionsList" class="space-y-2"><p class="text-xs text-teal-400 text-center py-4 animate-pulse">Recherche de recommandations...</p></div>`;
     
     try {
         const baseMedia = libraryIndex.get(currentId) || searchResults.find(i => i.id === currentId) || discoverResults.find(i => i.id === currentId);
         if (!baseMedia) return;
 
-        // 1. Recherche par titre (Franchise complète : films, anime, séries)
-        const cleanTitle = (baseMedia.title_fr || baseMedia.title).split(':')[0].trim();
-        const multiRes = await fetch(`${TMDB_BASE}/search/multi?api_key=${TMDB_API_KEY}&language=fr-FR&query=${encodeURIComponent(cleanTitle)}`);
-        const multiData = await multiRes.json();
+        // 3. Amélioration des suggestions avec getSmartSuggestions
+        const smartResults = await getSmartSuggestions(baseMedia.apiId, baseMedia.type === 'series' ? 'tv' : 'movie');
         
-        // 2. Suggestions basées sur l'algorithme TMDB
-        const recRes = await fetch(`${TMDB_BASE}/${baseMedia.type === 'series' ? 'tv' : 'movie'}/${baseMedia.apiId}/recommendations?api_key=${TMDB_API_KEY}&language=fr-FR&page=1`);
-        const recData = await recRes.json();
-        
-        // Fusion des résultats et nettoyage
-        const rawResults = [...(multiData.results || []), ...(recData.results || [])];
         let resultsMap = new Map();
         
-        rawResults.forEach(m => {
-            // Filtrer les personnes et exclure le média en cours
+        smartResults.forEach(m => {
             if ((m.media_type === 'tv' || m.media_type === 'movie' || (!m.media_type && m.title)) && String(m.id) !== String(baseMedia.apiId)) {
                 const type = m.media_type || (m.first_air_date ? 'tv' : 'movie');
                 resultsMap.set(`${type}-${m.id}`, { ...m, media_type: type });
@@ -80,7 +88,6 @@ function appendSuggestions() {
         const libItem = isMediaInLibrary(n);
         const div = document.createElement('div');
         
-        // Appliquer les couleurs de fonds et les styles croisés
         const isAnime = (n.genres || []).includes('Anime') || (n.genres || []).includes('Animation') || n.original_language === 'ja';
         const colorClass = n.type === 'movie' ? 'bg-red-900/30' : (isAnime ? 'bg-purple-900/30' : 'bg-blue-900/30');
         div.className = `border border-gray-700 p-2 rounded-xl flex gap-3 items-center hover:border-teal-700 transition ${colorClass}`;
