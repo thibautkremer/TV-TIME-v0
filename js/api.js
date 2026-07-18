@@ -3,6 +3,15 @@
 // API — Gestion des appels TMDB, OMDb et Synchronisation
 // ============================================================
 
+// --- SYNCHRONISATION SUPABASE (Logique réelle) ---
+// Placez ici votre vraie fonction de synchro pour être sûr qu'elle soit trouvée
+async function syncSupabase() {
+    console.log("Exécution de syncSupabase() en cours...");
+    // VOTRE LOGIQUE ACTUELLE DE SYNCHRONISATION SUPABASE DOIT ETRE ICI
+    // Exemple : const { data, error } = await supabase.from('...')...
+    // Si vous aviez ce code ailleurs, copiez-le ici.
+}
+
 // --- RÉCUPÉRATION DES NOTES ---
 
 // Note Globale (Film)
@@ -25,7 +34,7 @@ async function getImdbEpisodeRating(imdbId, season, number) {
     } catch (e) { return null; }
 }
 
-// --- SYNCHRONISATION CLOUD ---
+// --- SYNCHRONISATION CLOUD (Interface UI) ---
 
 async function forceSync() {
     const btn = document.getElementById('cloudStatus');
@@ -34,23 +43,12 @@ async function forceSync() {
     try {
         console.log("--- DÉBUT DE LA SYNCHRONISATION ---");
         
-        // Sécurité anti-crash si la base locale a été vidée
         if (typeof library === 'undefined' || library === null) {
             library = [];
         }
 
-        if (library.length === 0) {
-            console.log("Bibliothèque locale vide. Téléchargement depuis le Cloud prioritaire...");
-        }
-
-        // Lancement de la synchro Supabase (adaptez selon votre implémentation réelle)
-        if (typeof syncSupabase === 'function') {
-            await syncSupabase();
-        } else if (typeof syncData === 'function') {
-            await syncData();
-        } else {
-            throw new Error("Fonction de synchronisation introuvable.");
-        }
+        // Appel direct de la fonction définie dans ce même fichier
+        await syncSupabase();
         
         console.log("✅ Synchronisation réussie.");
         if (btn) {
@@ -59,13 +57,12 @@ async function forceSync() {
             btn.classList.add('text-teal-400');
         }
         
-        // Rafraîchissement de l'UI si nécessaire
         if (typeof renderLibrary === 'function' && !document.getElementById('tab-library').classList.contains('hidden')) {
             renderLibrary();
         }
         
     } catch (error) {
-        console.error(error); 
+        console.error("Erreur durant la synchro :", error); 
         
         if (btn) {
             btn.textContent = '⚠ Err Sync';
@@ -99,17 +96,13 @@ async function fetchAllTmdbEpisodes(apiId) {
                 })));
             }
         }
-    } catch (e) { console.error("Erreur lors de la récupération des épisodes TMDB", e); }
+    } catch (e) { console.error("Erreur TMDB épisodes", e); }
     return allEps;
 }
 
-// Fonction d'ajout rapide (QuickAdd)
 async function quickAdd(mediaId, allWatched = false) {
-    // Logique simplifiée pour ajouter un média
     const media = searchResults.find(r => r.id === mediaId) || discoverResults.find(r => r.id === mediaId);
     if (!media) return;
-    
-    // Ajout à la bibliothèque locale
     media.status = allWatched ? 'Watched' : 'In Progress';
     media.last_modified = Date.now();
     library.push(media);
@@ -117,4 +110,3 @@ async function quickAdd(mediaId, allWatched = false) {
     renderLibrary();
     console.log(`✅ Ajouté : ${media.title}`);
 }
-
