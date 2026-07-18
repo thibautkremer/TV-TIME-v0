@@ -3,11 +3,57 @@
 // ADMIN — MAJ de masse API (Metadata + Épisodes + Notes)
 // ============================================================
 
+// 1. Surcharge de la console pour afficher les logs dans l'UI Admin
+const _originalLog = console.log;
+const _originalWarn = console.warn;
+const _originalError = console.error;
+
+function addLogToUI(args, type='log') {
+    const consoleEl = document.getElementById('adminConsoleBox');
+    if (!consoleEl) return;
+    
+    const msg = Array.from(args).map(a => {
+        if (typeof a === 'object') {
+            try { return JSON.stringify(a); } catch(e) { return '[Object]'; }
+        }
+        return a;
+    }).join(' ');
+
+    const div = document.createElement('div');
+    div.className = `text-[10px] mb-1 pb-1 border-b border-gray-700/50 font-mono ${type === 'error' ? 'text-red-400' : type === 'warn' ? 'text-yellow-400' : 'text-gray-300'}`;
+    
+    const time = new Date().toLocaleTimeString('fr-FR', { hour12: false });
+    div.textContent = `[${time}] ${msg}`;
+    consoleEl.appendChild(div);
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+}
+
+console.log = function(...args) { _originalLog.apply(console, args); addLogToUI(args, 'log'); };
+console.warn = function(...args) { _originalWarn.apply(console, args); addLogToUI(args, 'warn'); };
+console.error = function(...args) { _originalError.apply(console, args); addLogToUI(args, 'error'); };
+
+// 2. Normalisation intelligente des plateformes
+function normalizePlatform(name) {
+    if (!name) return name;
+    const lower = name.toLowerCase();
+    if (lower.includes('disney')) return 'Disney+';
+    if (lower.includes('prime') || lower.includes('amazon')) return 'Prime Video';
+    if (lower.includes('apple')) return 'Apple TV+';
+    if (lower.includes('netflix')) return 'Netflix';
+    if (lower.includes('hbo') || lower === 'max') return 'Max';
+    if (lower.includes('paramount')) return 'Paramount+';
+    if (lower.includes('crunchyroll') || lower.includes('wakanim')) return 'Crunchyroll';
+    if (lower.includes('adn') || lower.includes('animation digital network')) return 'ADN';
+    if (lower.includes('hulu')) return 'Hulu';
+    if (lower.includes('peacock')) return 'Peacock';
+    return name; // Retourne le nom d'origine si aucun filtre ne correspond
+}
+
+// 3. Mise à jour de masse
 async function massUpdateLibrary(type, silent = false) {
     const btn = document.getElementById(type === 'series' ? 'btn-mass-update-series' : 'btn-mass-update-movie');
     const originalContent = btn ? btn.innerHTML : '';
     
-    // Conversion vitale de "series" vers "tv" pour l'API TMDB
     const tmdbType = (type === 'series') ? 'tv' : 'movie';
     
     const itemsToProcess = library.filter(i => i.type === type);
@@ -39,7 +85,6 @@ async function massUpdateLibrary(type, silent = false) {
         console.log(`[${i + 1}/${total}] Traitement : ${item.title_fr || item.title} (ID: ${item.apiId})`);
 
         try {
-            // Utilisation stricte de tmdbType
             const url = `${TMDB_BASE}/${tmdbType}/${item.apiId}?api_key=${TMDB_API_KEY}&language=fr-FR&append_to_response=watch/providers`;
             const res = await fetch(url);
             
@@ -53,7 +98,6 @@ async function massUpdateLibrary(type, silent = false) {
             
             let changes = [];
 
-            // 2. Mise à jour Métadonnées (Résumé, Image, Plateforme)
             if (data.overview && item.summary !== data.overview) { 
                 changes.push("Résumé mis à jour"); 
                 item.summary = data.overview; 
@@ -65,21 +109,33 @@ async function massUpdateLibrary(type, silent = false) {
                 item.image = newImage; 
             }
 
-            if (type === 'movie' && data['watch/providers']?.results?.FR?.flatrate?.[0]?.provider_name) {
-                const prov = data['watch/providers'].results.FR.flatrate[0].provider_name;
-                if (item.network !== prov) { 
-                    changes.push(`Plateforme (${item.network} -> ${prov})`);
-                    item.network = prov; 
+            // Normalisation des plateformes pour Films et Séries
+            let newNetwork = item.network;
+            
+            // Priorité 1: Recherche dans les providers FR
+            if (data['watch/providers']?.results?.FR?.flatrate?.[0]?.provider_name) {
+                newNetwork = data['watch/providers'].results.FR.flatrate[0].provider_name;
+            } 
+            // Priorité 2: Networks natifs de TMDB (très utile pour les séries)
+            else if (type === 'series' && data.networks && data.networks.length > 0) {
+                newNetwork = data.networks[0].name;
+            }
+
+            // Application intelligente de la plateforme
+            if (newNetwork) {
+                newNetwork = normalizePlatform(newNetwork);
+                if (item.network !== newNetwork) {
+                    changes.push(`Plateforme (${item.network} -> ${newNetwork})`);
+                    item.network = newNetwork;
                 }
             }
             
-            // Sauvegarder la date complète pour les films
+            // Sauvegarder la date complète
             if (type === 'movie' && data.release_date && item.releaseDate !== data.release_date) {
                 changes.push(`Date de sortie (${item.releaseDate} -> ${data.release_date})`);
                 item.releaseDate = data.release_date;
             }
 
-            // 3. Mise à jour Profonde (Séries uniquement : Épisodes, Structure, Notes)
             if (type === 'series') {
                 const freshEpisodes = await fetchAllTmdbEpisodes(item.apiId);
                 
@@ -117,7 +173,6 @@ async function massUpdateLibrary(type, silent = false) {
                 }
             }
 
-            // 4. Sauvegarde
             if (changes.length > 0) {
                 item.last_modified = Date.now();
                 await saveLocalDB(item);
