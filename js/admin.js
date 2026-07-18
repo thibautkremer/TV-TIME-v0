@@ -14,13 +14,22 @@ function addLogToUI(args, type='log') {
     
     const msg = Array.from(args).map(a => {
         if (typeof a === 'object') {
-            try { return JSON.stringify(a); } catch(e) { return '[Object]'; }
+            try { return JSON.stringify(a, null, 2); } catch(e) { return '[Objet]'; }
         }
         return a;
     }).join(' ');
 
     const div = document.createElement('div');
-    div.className = `text-[10px] mb-1 pb-1 border-b border-gray-700/50 font-mono ${type === 'error' ? 'text-red-400' : type === 'warn' ? 'text-yellow-400' : 'text-gray-300'}`;
+    
+    // Code couleur automatique selon le contenu
+    let colorClass = 'text-gray-300';
+    if (type === 'error') colorClass = 'text-red-400 font-bold';
+    else if (type === 'warn') colorClass = 'text-yellow-400';
+    else if (msg.includes('✅')) colorClass = 'text-emerald-400';
+    else if (msg.includes('➖')) colorClass = 'text-gray-500';
+    else if (msg.includes('---')) colorClass = 'text-teal-400 font-bold';
+
+    div.className = `text-[10px] mb-1 pb-1 border-b border-gray-700/50 font-mono whitespace-pre-wrap break-words ${colorClass}`;
     
     const time = new Date().toLocaleTimeString('fr-FR', { hour12: false });
     div.textContent = `[${time}] ${msg}`;
@@ -46,7 +55,7 @@ function normalizePlatform(name) {
     if (lower.includes('adn') || lower.includes('animation digital network')) return 'ADN';
     if (lower.includes('hulu')) return 'Hulu';
     if (lower.includes('peacock')) return 'Peacock';
-    return name; // Retourne le nom d'origine si aucun filtre ne correspond
+    return name;
 }
 
 // 3. Mise à jour de masse
@@ -73,7 +82,7 @@ async function massUpdateLibrary(type, silent = false) {
     let errorCount = 0;
     let noChangeCount = 0;
 
-    console.log(`--- DÉBUT DE LA MISE À JOUR COMPLETE (${type}) : ${total} médias ---`);
+    console.log(`--- DÉBUT DE LA MISE À JOUR COMPLETE (${type.toUpperCase()}) : ${total} médias ---`);
 
     for (let i = 0; i < total; i++) {
         let item = itemsToProcess[i];
@@ -109,19 +118,15 @@ async function massUpdateLibrary(type, silent = false) {
                 item.image = newImage; 
             }
 
-            // Normalisation des plateformes pour Films et Séries
             let newNetwork = item.network;
             
-            // Priorité 1: Recherche dans les providers FR
             if (data['watch/providers']?.results?.FR?.flatrate?.[0]?.provider_name) {
                 newNetwork = data['watch/providers'].results.FR.flatrate[0].provider_name;
             } 
-            // Priorité 2: Networks natifs de TMDB (très utile pour les séries)
             else if (type === 'series' && data.networks && data.networks.length > 0) {
                 newNetwork = data.networks[0].name;
             }
 
-            // Application intelligente de la plateforme
             if (newNetwork) {
                 newNetwork = normalizePlatform(newNetwork);
                 if (item.network !== newNetwork) {
@@ -130,7 +135,6 @@ async function massUpdateLibrary(type, silent = false) {
                 }
             }
             
-            // Sauvegarder la date complète
             if (type === 'movie' && data.release_date && item.releaseDate !== data.release_date) {
                 changes.push(`Date de sortie (${item.releaseDate} -> ${data.release_date})`);
                 item.releaseDate = data.release_date;
@@ -151,11 +155,10 @@ async function massUpdateLibrary(type, silent = false) {
                         
                         const oldEp = (item.episodes || []).find(e => e.season === ep.season && e.number === ep.number);
                         if (oldEp && oldEp.rating !== ep.rating) {
-                            changes.push(`Note Ep S${ep.season}E${ep.number} (${oldEp.rating} -> ${ep.rating})`);
+                            changes.push(`Note S${ep.season}E${ep.number} (${oldEp.rating} -> ${ep.rating})`);
                         }
                     });
 
-                    // OMDb Fallback Note globale série
                     const newAvg = await getEnhancedRating(item.apiId, 'tv', data.vote_average, data.vote_count);
                     
                     if (item.rating !== newAvg) { 
@@ -165,10 +168,9 @@ async function massUpdateLibrary(type, silent = false) {
                     item.episodes = freshEpisodes;
                 }
             } else if (type === 'movie' && data.vote_average !== undefined) {
-                 // OMDb Fallback Note globale film
                 const roundedNew = await getEnhancedRating(item.apiId, 'movie', data.vote_average, data.vote_count);
                 if (item.rating !== roundedNew) { 
-                    changes.push(`Note (${item.rating} -> ${roundedNew})`);
+                    changes.push(`Note Globale (${item.rating} -> ${roundedNew})`);
                     item.rating = roundedNew; 
                 }
             }
@@ -177,20 +179,21 @@ async function massUpdateLibrary(type, silent = false) {
                 item.last_modified = Date.now();
                 await saveLocalDB(item);
                 updatedCount++;
-                console.log(`✅ ${item.title_fr || item.title} :`, changes);
+                // Le `.join(' | ')` permet un affichage très propre et lisible dans la console UI
+                console.log(`✅ ${item.title_fr || item.title} : ${changes.join(' | ')}`);
             } else {
                 noChangeCount++;
                 console.log(`➖ Inchangé : ${item.title_fr || item.title}`);
             }
         } catch (e) { 
             errorCount++;
-            console.error(`❌ Erreur sur ${item.title_fr || item.title}:`, e); 
+            console.error(`❌ Erreur sur ${item.title_fr || item.title} : ${e.message}`); 
         }
         
         await new Promise(r => setTimeout(r, 400));
     }
 
-    console.log(`--- FIN : ${updatedCount} mis à jour, ${noChangeCount} inchangés, ${errorCount} erreurs ---`);
+    console.log(`--- FIN DE LA MISE À JOUR : ${updatedCount} mis à jour, ${noChangeCount} inchangés, ${errorCount} erreurs ---`);
     if (!silent) {
         if (btn) btn.innerHTML = originalContent;
         document.getElementById('btn-mass-update-series').disabled = false;
