@@ -147,3 +147,4 @@ function toggleEpCascade(epId, seasonStr) {
     const prog = getProgress(item); document.getElementById('modalProgressText').textContent = `${prog}%`; document.getElementById('modalProgressBar').style.width = `${prog}%`;
     renderEpisodes(item.episodes.filter(e => e.season === parseInt(seasonStr)), true); if (!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
 }
+ 
