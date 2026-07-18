@@ -3,6 +3,7 @@
 // ADMIN — MAJ de masse API (Metadata + Épisodes + Notes)
 // ============================================================
 
+// Surcharge de la console pour afficher les logs dans l'UI Admin
 const _originalLog = console.log;
 const _originalWarn = console.warn;
 const _originalError = console.error;
@@ -19,7 +20,6 @@ function addLogToUI(args, type='log') {
     }).join(' ');
 
     const div = document.createElement('div');
-    
     let colorClass = 'text-gray-300';
     if (type === 'error') colorClass = 'text-red-400 font-bold';
     else if (type === 'warn') colorClass = 'text-yellow-400';
@@ -55,26 +55,60 @@ function normalizePlatform(name) {
     return name;
 }
 
-// Cœur de la logique de MAJ pour réutilisation (Single & Mass Update)
+// Fonction unifiée de synchro (utilisée par Single et Mass Update)
 async function syncSingleMediaData(item) {
     const tmdbType = item.type === 'series' ? 'tv' : 'movie';
     const url = `${TMDB_BASE}/${tmdbType}/${item.apiId}?api_key=${TMDB_API_KEY}&language=fr-FR&append_to_response=watch/providers`;
     const res = await fetch(url);
-    if (!res.ok) throw new Error(`Erreur ${res.status}`);
+    if (!res.ok) throw new Error(`Erreur TMDB ${res.status}`);
     const data = await res.json();
     
     let changes = [];
     
-    if (data.overview && item.summary !== data.overview) { 
-        changes.push("Résumé"); 
-        item.summary = data.overview; 
+    // 1. Logique de comparaison TMDB vs OMDb (Prendre la meilleure)
+    let bestRating = Math.round((data.vote_average || 0) * 10) / 10;
+    try {
+        const idsRes = await fetch(`${TMDB_BASE}/${tmdbType}/${item.apiId}/external_ids?api_key=${TMDB_API_KEY}`);
+        const externalIds = await idsRes.json();
+        if (externalIds.imdb_id) {
+            const omdbRating = await getImdbRating(externalIds.imdb_id);
+            if (omdbRating && omdbRating > bestRating) {
+                bestRating = omdbRating;
+            }
+        }
+    } catch (e) {
+        console.warn("Note OMDb indisponible.");
+    }
+
+    if (item.rating !== bestRating) {
+        changes.push(`Note Globale (${item.rating} -> ${bestRating})`);
+        item.rating = bestRating;
+    }
+
+    // 2. Traitement série/animé (Épisodes et statut)
+    if (item.type === 'series') {
+        const freshEpisodes = await fetchAllTmdbEpisodes(item.apiId);
+        if (freshEpisodes.length > 0) {
+            freshEpisodes.forEach(ep => {
+                const oldEp = (item.episodes || []).find(e => e.season === ep.season && e.number === ep.number);
+                if (oldEp && oldEp.rating !== ep.rating) {
+                    if (!changes.includes("Notes Ep.")) changes.push("Notes Ep.");
+                }
+            });
+            const allAiredWatched = freshEpisodes.every(e => e.watched || (!e.airdate || e.airdate > todayString));
+            const correctStatus = allAiredWatched ? 'Watched' : 'In Progress';
+            if (item.status !== correctStatus && item.status !== 'Abandoned') {
+                changes.push(`Statut (${correctStatus})`);
+                item.status = correctStatus;
+            }
+            item.episodes = freshEpisodes;
+        }
     }
     
+    // 3. Mise à jour Métadonnées
+    if (data.overview && item.summary !== data.overview) { changes.push("Résumé"); item.summary = data.overview; }
     const newImage = `https://image.tmdb.org/t/p/w500${data.poster_path}`;
-    if (data.poster_path && item.image !== newImage) { 
-        changes.push("Image"); 
-        item.image = newImage; 
-    }
+    if (data.poster_path && item.image !== newImage) { changes.push("Image"); item.image = newImage; }
 
     let newNetwork = item.network;
     if (data['watch/providers']?.results?.FR?.flatrate?.[0]?.provider_name) {
@@ -95,64 +129,20 @@ async function syncSingleMediaData(item) {
         changes.push(`Date`);
         item.releaseDate = data.release_date;
     }
-
-    if (item.type === 'series') {
-        const freshEpisodes = await fetchAllTmdbEpisodes(item.apiId);
-        
-        if (freshEpisodes.length > 0) {
-            const oldWatchedIds = new Set((item.episodes || []).filter(e => e.watched).map(e => String(e.id)));
-            const oldWatchedCount = (item.episodes || []).filter(e => e.watched).length;
-            const strictMatchPossible = freshEpisodes.some(e => oldWatchedIds.has(String(e.id)));
-            
-            freshEpisodes.forEach((ep, idx) => {
-                if (strictMatchPossible) ep.watched = oldWatchedIds.has(String(ep.id));
-                else ep.watched = idx < oldWatchedCount; 
-                
-                const oldEp = (item.episodes || []).find(e => e.season === ep.season && e.number === ep.number);
-                if (oldEp && oldEp.rating !== ep.rating) {
-                    if (!changes.includes("Notes Ep.")) changes.push("Notes Ep.");
-                }
-            });
-
-            const allAiredWatched = freshEpisodes.every(e => e.watched || (!e.airdate || e.airdate > todayString));
-            const correctStatus = allAiredWatched ? 'Watched' : 'In Progress';
-            
-            if (item.status !== correctStatus && item.status !== 'Abandoned') {
-                changes.push(`Statut (${correctStatus})`);
-                item.status = correctStatus;
-            }
-
-            const newAvg = await getEnhancedRating(item.apiId, 'tv', data.vote_average, data.vote_count);
-            if (item.rating !== newAvg) { 
-                changes.push(`Note Globale (${newAvg})`);
-                item.rating = newAvg; 
-            }
-            item.episodes = freshEpisodes;
-        }
-    } else if (item.type === 'movie' && data.vote_average !== undefined) {
-        const roundedNew = await getEnhancedRating(item.apiId, 'movie', data.vote_average, data.vote_count);
-        if (item.rating !== roundedNew) { 
-            changes.push(`Note Globale (${roundedNew})`);
-            item.rating = roundedNew; 
-        }
-    }
     
     return changes;
 }
 
-// Fonction de mise à jour Ciblée (Modale)
+// Single Update (déclenché par la modale)
 async function singleUpdateMedia(mediaId) {
     const item = libraryIndex.get(mediaId);
     if (!item) return;
-    
     const btn = document.getElementById('modalSingleUpdateBtn');
     if (btn) { btn.disabled = true; btn.innerHTML = '⏳...'; }
     
     console.log(`--- SINGLE UPDATE : ${item.title_fr || item.title} ---`);
-    
     try {
         const changes = await syncSingleMediaData(item);
-        
         if (changes.length > 0) {
             item.last_modified = Date.now();
             await saveLocalDB(item);
@@ -161,65 +151,38 @@ async function singleUpdateMedia(mediaId) {
             console.log(`➖ Inchangé : ${item.title_fr || item.title}`);
         }
         
-        // Rafraîchissement direct de l'interface de la modale en cours
         populateModalBase(item); 
         if (item.type === 'series' && item.episodes) {
             currentSeriesAvgRating = computeAvgEpisodeRating(item.episodes); 
             buildSeasonTabs(item.episodes, true); 
-            renderGlobalGraph(item.episodes);
         }
-        
-        // Rafraîchissement en arrière plan de la liste Suivi
         if (!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
         
-        if (btn) { 
-            btn.innerHTML = '✅ OK'; 
-            setTimeout(() => { btn.innerHTML = '🔄 MAJ'; btn.disabled = false; }, 2000); 
-        }
-        
+        if (btn) { btn.innerHTML = '✅ OK'; setTimeout(() => { btn.innerHTML = '🔄 MAJ'; btn.disabled = false; }, 2000); }
     } catch (e) {
         console.error(`❌ Erreur Single Update : ${e.message}`);
-        if (btn) { 
-            btn.innerHTML = '❌ Err'; 
-            setTimeout(() => { btn.innerHTML = '🔄 MAJ'; btn.disabled = false; }, 2000); 
-        }
+        if (btn) { btn.innerHTML = '❌ Err'; setTimeout(() => { btn.innerHTML = '🔄 MAJ'; btn.disabled = false; }, 2000); }
     }
 }
 
-// Fonction de mise à jour de Masse (Panneau Admin)
+// Mass Update
 async function massUpdateLibrary(type, silent = false) {
     const btn = document.getElementById(type === 'series' ? 'btn-mass-update-series' : 'btn-mass-update-movie');
     const originalContent = btn ? btn.innerHTML : '';
-    
     const itemsToProcess = library.filter(i => i.type === type);
     const total = itemsToProcess.length;
 
-    if (total === 0) {
-        alert("Aucun média à mettre à jour.");
-        return;
-    }
+    if (total === 0) { alert("Aucun média."); return; }
+    if (!silent && btn) { document.getElementById('btn-mass-update-series').disabled = true; document.getElementById('btn-mass-update-movie').disabled = true; }
 
-    if (!silent && btn) {
-        document.getElementById('btn-mass-update-series').disabled = true;
-        document.getElementById('btn-mass-update-movie').disabled = true;
-    }
-
-    let updatedCount = 0;
-    let errorCount = 0;
-    let noChangeCount = 0;
-
-    console.log(`--- DÉBUT DE LA MISE À JOUR COMPLETE (${type.toUpperCase()}) : ${total} médias ---`);
+    let updatedCount = 0, errorCount = 0, noChangeCount = 0;
+    console.log(`--- DÉBUT DE LA MAJ COMPLETE (${type.toUpperCase()}) : ${total} ---`);
 
     for (let i = 0; i < total; i++) {
         let item = itemsToProcess[i];
-        
-        if (!silent && btn) {
-            btn.innerHTML = `⏳ [${i + 1}/${total}] ${item.title_fr || item.title}`;
-        }
-        
+        if (!silent && btn) btn.innerHTML = `⏳ [${i + 1}/${total}]`;
         try {
             const changes = await syncSingleMediaData(item);
-
             if (changes.length > 0) {
                 item.last_modified = Date.now();
                 await saveLocalDB(item);
@@ -233,16 +196,11 @@ async function massUpdateLibrary(type, silent = false) {
             errorCount++;
             console.error(`❌ Erreur sur ${item.title_fr || item.title} : ${e.message}`); 
         }
-        
         await new Promise(r => setTimeout(r, 400));
     }
-
-    console.log(`--- FIN DE LA MISE À JOUR : ${updatedCount} mis à jour, ${noChangeCount} inchangés, ${errorCount} erreurs ---`);
+    console.log(`--- FIN : ${updatedCount} mis à jour, ${noChangeCount} inchangés, ${errorCount} erreurs ---`);
     if (!silent) {
         if (btn) btn.innerHTML = originalContent;
-        document.getElementById('btn-mass-update-series').disabled = false;
-        document.getElementById('btn-mass-update-movie').disabled = false;
-        alert(`Mise à jour terminée.\nMis à jour : ${updatedCount}\nInchangés : ${noChangeCount}\nErreurs : ${errorCount}`);
         location.reload();
     }
 }
