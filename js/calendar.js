@@ -15,7 +15,7 @@ function getCalendarEntries() {
                 }
             });
         } else if (item.type === 'movie') {
-            // 1. Seulement les films non vus avec une date de sortie complète >= aujourd'hui
+            // Seulement les films non vus avec une date de sortie complète >= aujourd'hui
             if (item.releaseDate && item.releaseDate >= todayString && item.status !== 'Watched') {
                 entries.push({ date: item.releaseDate, type: 'movie', mediaId: item.id, title: item.title_fr || item.title, subtitle: 'Sortie film', image: item.image, original_language: item.original_language, genres: item.genres });
             }
@@ -50,7 +50,7 @@ function renderCalendar() {
         const monthLater = new Date(now); monthLater.setMonth(monthLater.getMonth() + 1);
         entries = entries.filter(e => e.date >= todayString && new Date(e.date + 'T00:00:00') <= monthLater);
     } else {
-        // 'all' : on n'affiche plus que ce qui est >= aujourd'hui, plus l'historique
+        // 'all' : on n'affiche plus que ce qui est >= aujourd'hui
         entries = entries.filter(e => e.date >= todayString);
     }
 
