@@ -80,9 +80,9 @@ function createMediaCard(media, context = 'library') {
     
     // Affichage de l'année uniquement
     let displayYear = 'N/A';
-    if (m.releaseDate) {
+    if (m.releaseDate && typeof m.releaseDate === 'string') {
         displayYear = m.releaseDate.substring(0,4);
-    } else if (m.premiered && m.premiered !== 'N/A') {
+    } else if (m.premiered && m.premiered !== 'N/A' && typeof m.premiered === 'string') {
          displayYear = m.premiered.substring(0,4);
     }
 
