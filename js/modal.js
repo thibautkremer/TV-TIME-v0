@@ -5,6 +5,11 @@
 
 function populateModalBase(media) {
     currentModalMediaId = media.id; 
+    
+    // CORRECTIONS : Sécurisation de l'API ID (pour Movix) et de l'objet (pour l'ajout)
+    window.currentModalApiId = media.apiId; 
+    window.currentModalMediaObj = media;
+
     document.getElementById('modalTitle').textContent = media.title_fr || media.title;
     
     const posterEl = document.getElementById('modalPoster'); 
@@ -34,16 +39,14 @@ function populateModalBase(media) {
     document.getElementById('modalSuggestionsBlock').classList.add('hidden'); 
     document.getElementById('modalMovieActions').classList.add('hidden');
     
-    // Dissimulation du bouton MAJ individuelle par défaut
     document.getElementById('modalSingleUpdateBtn').classList.add('hidden');
-    
     document.getElementById('modalScrollable').scrollTop = 0;
 
     const btnMovix = document.getElementById('btnMovixRedirect');
     btnMovix.onclick = (e) => {
         e.preventDefault();
         const path = media.type === 'series' ? 'tv' : 'movie';
-        window.open(`https://movix.date/${path}/${media.apiId}`, '_blank');
+        window.open(`https://movix.date/${path}/${window.currentModalApiId}`, '_blank');
     };
 
     if (media.type === 'movie') {
@@ -74,7 +77,6 @@ function openLibraryModal(id) {
     modalMode = 'library'; activeModalMediaIndex = library.findIndex(i => i.id === id); const item = library[activeModalMediaIndex]; if (!item) return;
     populateModalBase(item);
     
-    // Affichage et activation du bouton MAJ individuelle seulement pour la bibliothèque
     const singleUpdateBtn = document.getElementById('modalSingleUpdateBtn');
     singleUpdateBtn.classList.remove('hidden');
     singleUpdateBtn.onclick = () => singleUpdateMedia(item.id);
@@ -116,8 +118,9 @@ function renderEpisodes(eps, isLib) {
     const list = document.getElementById('modalEpisodesList'); 
     renderSeasonGraph(eps);
     
-    const item = library[activeModalMediaIndex] || { apiId: currentModalMediaId }; 
-    const targetId = item.apiId; 
+    // CORRECTION : S'assurer d'utiliser le vrai API ID
+    const item = library[activeModalMediaIndex]; 
+    const targetId = (item && item.apiId) ? item.apiId : window.currentModalApiId; 
 
     list.innerHTML = eps.map(ep => {
         const isFuture = !ep.airdate || ep.airdate > todayString; 
@@ -147,4 +150,3 @@ function toggleEpCascade(epId, seasonStr) {
     const prog = getProgress(item); document.getElementById('modalProgressText').textContent = `${prog}%`; document.getElementById('modalProgressBar').style.width = `${prog}%`;
     renderEpisodes(item.episodes.filter(e => e.season === parseInt(seasonStr)), true); if (!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
 }
- 
