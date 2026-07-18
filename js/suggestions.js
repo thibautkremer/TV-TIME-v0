@@ -36,8 +36,9 @@ async function renderSuggestions(currentId) {
         const baseMedia = libraryIndex.get(currentId) || searchResults.find(i => i.id === currentId) || discoverResults.find(i => i.id === currentId);
         if (!baseMedia) return;
 
-        // 3. Amélioration des suggestions avec getSmartSuggestions
-        const smartResults = await getSmartSuggestions(baseMedia.apiId, baseMedia.type === 'series' ? 'tv' : 'movie');
+        // Amélioration des suggestions avec getSmartSuggestions
+        const tmdbType = baseMedia.type === 'series' ? 'tv' : 'movie';
+        const smartResults = await getSmartSuggestions(baseMedia.apiId, tmdbType);
         
         let resultsMap = new Map();
         
