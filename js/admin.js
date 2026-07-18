@@ -56,6 +56,7 @@ function normalizePlatform(name) {
 }
 
 // Fonction unifiée de synchro (utilisée par Single et Mass Update)
+// Fonction unifiée de synchro (utilisée par Single et Mass Update)
 async function syncSingleMediaData(item) {
     const tmdbType = item.type === 'series' ? 'tv' : 'movie';
     const url = `${TMDB_BASE}/${tmdbType}/${item.apiId}?api_key=${TMDB_API_KEY}&language=fr-FR&append_to_response=watch/providers`;
@@ -65,28 +66,29 @@ async function syncSingleMediaData(item) {
     
     let changes = [];
     
-    // 1. Logique de comparaison TMDB vs OMDb (Prendre la meilleure)
-    let bestRating = Math.round((data.vote_average || 0) * 10) / 10;
-    try {
-        const idsRes = await fetch(`${TMDB_BASE}/${tmdbType}/${item.apiId}/external_ids?api_key=${TMDB_API_KEY}`);
-        const externalIds = await idsRes.json();
-        if (externalIds.imdb_id) {
-            const omdbRating = await getImdbRating(externalIds.imdb_id);
-            if (omdbRating && omdbRating > bestRating) {
-                bestRating = omdbRating;
+    // 1. Logique de note selon le type de média
+    if (item.type === 'movie') {
+        // Comparaison TMDB vs OMDb (Prendre la meilleure) pour les Films
+        let bestRating = Math.round((data.vote_average || 0) * 10) / 10;
+        try {
+            const idsRes = await fetch(`${TMDB_BASE}/${tmdbType}/${item.apiId}/external_ids?api_key=${TMDB_API_KEY}`);
+            const externalIds = await idsRes.json();
+            if (externalIds.imdb_id) {
+                const omdbRating = await getImdbRating(externalIds.imdb_id);
+                if (omdbRating && omdbRating > bestRating) {
+                    bestRating = omdbRating;
+                }
             }
+        } catch (e) {
+            console.warn("Note OMDb indisponible.");
         }
-    } catch (e) {
-        console.warn("Note OMDb indisponible.");
-    }
 
-    if (item.rating !== bestRating) {
-        changes.push(`Note Globale (${item.rating} -> ${bestRating})`);
-        item.rating = bestRating;
-    }
-
-    // 2. Traitement série/animé (Épisodes et statut)
-    if (item.type === 'series') {
+        if (item.rating !== bestRating) {
+            changes.push(`Note Globale (${item.rating} -> ${bestRating})`);
+            item.rating = bestRating;
+        }
+    } else if (item.type === 'series') {
+        // Recalcul strict de la moyenne basée sur les épisodes pour Séries/Animés
         const freshEpisodes = await fetchAllTmdbEpisodes(item.apiId);
         if (freshEpisodes.length > 0) {
             freshEpisodes.forEach(ep => {
@@ -95,6 +97,13 @@ async function syncSingleMediaData(item) {
                     if (!changes.includes("Notes Ep.")) changes.push("Notes Ep.");
                 }
             });
+            
+            const newAvg = computeAvgEpisodeRating(freshEpisodes);
+            if (item.rating !== newAvg) {
+                changes.push(`Note Globale (${item.rating} -> ${newAvg})`);
+                item.rating = newAvg;
+            }
+
             const allAiredWatched = freshEpisodes.every(e => e.watched || (!e.airdate || e.airdate > todayString));
             const correctStatus = allAiredWatched ? 'Watched' : 'In Progress';
             if (item.status !== correctStatus && item.status !== 'Abandoned') {
@@ -105,10 +114,17 @@ async function syncSingleMediaData(item) {
         }
     }
     
-    // 3. Mise à jour Métadonnées
-    if (data.overview && item.summary !== data.overview) { changes.push("Résumé"); item.summary = data.overview; }
+    // 2. Mise à jour Métadonnées (Résumé, Image, Plateforme)
+    if (data.overview && item.summary !== data.overview) { 
+        changes.push("Résumé"); 
+        item.summary = data.overview; 
+    }
+    
     const newImage = `https://image.tmdb.org/t/p/w500${data.poster_path}`;
-    if (data.poster_path && item.image !== newImage) { changes.push("Image"); item.image = newImage; }
+    if (data.poster_path && item.image !== newImage) { 
+        changes.push("Image"); 
+        item.image = newImage; 
+    }
 
     let newNetwork = item.network;
     if (data['watch/providers']?.results?.FR?.flatrate?.[0]?.provider_name) {
@@ -132,6 +148,7 @@ async function syncSingleMediaData(item) {
     
     return changes;
 }
+
 
 // Single Update (déclenché par la modale)
 async function singleUpdateMedia(mediaId) {
