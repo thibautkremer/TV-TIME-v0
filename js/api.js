@@ -15,6 +15,55 @@ async function getImdbRating(imdbId) {
     }
 }
 
+async function forceSync() {
+    const btn = document.getElementById('cloudStatus');
+    if (btn) btn.textContent = 'Sync...';
+    
+    try {
+        console.log("--- DÉBUT DE LA SYNCHRONISATION ---");
+        
+        // 1. Sécurité anti-crash si la base locale a été vidée manuellement
+        if (!library) {
+            library = [];
+        }
+
+        if (library.length === 0) {
+            console.log("Bibliothèque locale vide. Téléchargement depuis le Cloud en cours...");
+        }
+
+        // 2. Lancement de votre synchronisation normale (Supabase)
+        // Vérifiez le nom exact de votre fonction de synchro habituelle
+        if (typeof syncSupabase === 'function') {
+            await syncSupabase();
+        } else if (typeof syncData === 'function') {
+            await syncData();
+        } else {
+            throw new Error("Fonction de synchronisation introuvable dans le code.");
+        }
+        
+        console.log("✅ Synchronisation réussie.");
+        if (btn) {
+            btn.textContent = '○ Cloud OK';
+            btn.classList.remove('text-gray-400');
+            btn.classList.add('text-teal-400');
+        }
+        
+        // Rafraîchir l'interface
+        if (typeof renderLibrary === 'function' && !document.getElementById('tab-library').classList.contains('hidden')) {
+            renderLibrary();
+        }
+        
+    } catch (error) {
+        console.error(error); 
+        
+        if (btn) {
+            btn.textContent = '⚠ Err Sync';
+            btn.classList.remove('text-gray-400', 'text-teal-400');
+            btn.classList.add('text-red-400');
+        }
+    }
+}
+
 async function getEnhancedRating(tmdbId, mediaType, tmdbVoteAverage, tmdbVoteCount) {
     const MIN_VOTES_REQUIRED = 50; 
     if (tmdbVoteCount >= MIN_VOTES_REQUIRED && tmdbVoteAverage > 0) {
