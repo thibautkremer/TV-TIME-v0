@@ -8,7 +8,6 @@
     <link rel="manifest" href="manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- ARCHITECTURE : Ajout de LocalForage pour IndexedDB (Stockage illimité) -->
     <script src="https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js"></script>
     <link rel="stylesheet" href="css/style.css">
 </head>
@@ -190,37 +189,64 @@
         <!-- ADMINISTRATION -->
         <div class="bg-gray-800 p-3 rounded-xl border border-gray-700 shadow-md">
             <button onclick="document.getElementById('adminPanel').classList.toggle('hidden')" class="w-full text-center text-[11px] uppercase tracking-wider font-bold text-gray-400 hover:text-white py-1">⚙️ Administration ▾</button>
-            <div id="adminPanel" class="hidden grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-gray-700">
-                <button id="btn-mass-update-series" onclick="massUpdateLibrary('series')" class="bg-purple-800 hover:bg-purple-700 border border-purple-600 text-purple-100 text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition flex justify-center items-center px-2 overflow-hidden">
-                    <span class="truncate">🔄 MAJ API (Séries)</span>
-                </button>
-                <button id="btn-mass-update-movie" onclick="massUpdateLibrary('movie')" class="bg-amber-800 hover:bg-amber-700 border border-amber-600 text-amber-100 text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition flex justify-center items-center px-2 overflow-hidden">
-                    <span class="truncate">🔄 MAJ API (Films)</span>
-                </button>
+            <div id="adminPanel" class="hidden mt-4 pt-3 border-t border-gray-700 space-y-4">
                 
-                <label class="bg-teal-600 hover:bg-teal-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition flex justify-center items-center gap-2 cursor-pointer shadow">
-                    <span>📂 Import JSON</span><input type="file" multiple onchange="importLibrary(event)" class="hidden" accept=".json,.csv" />
-                </label>
-                <button onclick="exportLibrary()" class="bg-blue-600 hover:bg-blue-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow flex justify-center items-center gap-2">
-                    <span>💾 Export JSON</span>
-                </button>
-                
-                <button onclick="clearAll()" class="col-span-2 bg-gray-800 hover:bg-red-950 border border-red-900/40 text-red-400 text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow flex justify-center items-center gap-2">
-                    <span>🗑 Vider Cache Local</span>
-                </button>
-                <button onclick="rebuildAllSeries()" class="col-span-2 bg-indigo-900 hover:bg-indigo-800 border border-indigo-700 text-indigo-100 text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition flex justify-center items-center gap-2 mt-2">
-                    <span>🛠️ Forcer la réparation des Épisodes & Notes</span>
-                </button>
+                <!-- Section MAJ API -->
+                <div class="space-y-2">
+                    <h4 class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Mises à jour API</h4>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button id="btn-mass-update-series" onclick="massUpdateLibrary('series')" class="bg-purple-800 hover:bg-purple-700 border border-purple-600 text-purple-100 text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition flex justify-center items-center px-2 overflow-hidden">
+                            <span class="truncate">🔄 MAJ API (Séries)</span>
+                        </button>
+                        <button id="btn-mass-update-movie" onclick="massUpdateLibrary('movie')" class="bg-amber-800 hover:bg-amber-700 border border-amber-600 text-amber-100 text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition flex justify-center items-center px-2 overflow-hidden">
+                            <span class="truncate">🔄 MAJ API (Films)</span>
+                        </button>
+                    </div>
+                </div>
 
-                <div class="col-span-2 bg-gray-900 p-3 rounded-xl border border-gray-700 mt-2">
-                    <h4 class="text-xs font-bold text-teal-400 mb-2">⭐ Plateformes préférées (Boost recherche)</h4>
+                <!-- Section Données Locales -->
+                <div class="space-y-2">
+                    <h4 class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Données & Sauvegardes</h4>
+                    <div class="grid grid-cols-2 gap-2">
+                        <label class="bg-teal-600 hover:bg-teal-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition flex justify-center items-center gap-2 cursor-pointer shadow">
+                            <span>📂 Import JSON</span><input type="file" multiple onchange="importLibrary(event)" class="hidden" accept=".json,.csv" />
+                        </label>
+                        <button onclick="exportLibrary()" class="bg-blue-600 hover:bg-blue-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow flex justify-center items-center gap-2">
+                            <span>💾 Export JSON</span>
+                        </button>
+                        <button onclick="clearAll()" class="col-span-2 bg-gray-800 hover:bg-red-950 border border-red-900/40 text-red-400 text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow flex justify-center items-center gap-2">
+                            <span>🗑 Vider Cache Local</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Section Outils -->
+                <div class="space-y-2">
+                    <h4 class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Outils & Notifications</h4>
+                    <button onclick="rebuildAllSeries()" class="w-full bg-indigo-900 hover:bg-indigo-800 border border-indigo-700 text-indigo-100 text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition flex justify-center items-center gap-2">
+                        <span>🛠️ Forcer la réparation des Épisodes & Notes</span>
+                    </button>
+                    <button onclick="requestNotificationPermission()" class="w-full bg-yellow-600 hover:bg-yellow-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition flex justify-center items-center gap-2">
+                        <span>🔔 Activer Notifications de Sortie</span>
+                    </button>
+                </div>
+
+                <!-- Section Préférences -->
+                <div class="bg-gray-900 p-3 rounded-xl border border-gray-700">
+                    <h4 class="text-[10px] font-bold text-teal-400 mb-2 uppercase tracking-wider">⭐ Plateformes (Boost Recherche)</h4>
                     <div id="adminPlatformList" class="flex flex-wrap gap-2"></div>
                     <button onclick="savePlatformPrefs()" class="w-full mt-3 bg-teal-600 hover:bg-teal-500 text-white text-[10px] font-bold py-2 rounded-lg transition">💾 Enregistrer & Sync</button>
                 </div>
 
-                <button onclick="requestNotificationPermission()" class="col-span-2 bg-yellow-600 hover:bg-yellow-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition flex justify-center items-center gap-2">
-                    <span>🔔 Activer Notifications de Sortie</span>
-                </button>
+                <!-- Section Console -->
+                <div class="bg-black/50 p-3 rounded-xl border border-gray-700">
+                    <div class="flex justify-between items-center mb-2">
+                        <h4 class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Console Logs</h4>
+                        <button onclick="document.getElementById('adminConsoleBox').innerHTML=''" class="text-[9px] text-gray-400 hover:text-white px-2 py-1 bg-gray-800 rounded">Effacer</button>
+                    </div>
+                    <div id="adminConsoleBox" class="h-32 overflow-y-auto bg-black p-2 rounded border border-gray-800 hide-scroll break-all"></div>
+                </div>
+
             </div>
         </div>
     </div>
@@ -323,7 +349,6 @@
     <button onclick="switchTab('profile')" id="nav-profile" class="flex flex-col items-center text-xs text-gray-400 flex-1 transition-colors"><span class="text-lg">📊</span><span class="text-[10px]">Profil</span></button>
 </nav>
 
-<!-- Modules JS chargés en tags <script> classiques -->
 <script src="js/config.js"></script>
 <script src="js/state.js"></script>
 <script src="js/utils.js"></script>
