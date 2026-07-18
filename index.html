@@ -220,7 +220,7 @@
                     </div>
                 </div>
 
-                <!-- Section Outils (Bouton de réparation retiré) -->
+                <!-- Section Outils -->
                 <div class="space-y-2">
                     <h4 class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Outils & Notifications</h4>
                     <button onclick="requestNotificationPermission()" class="w-full bg-yellow-600 hover:bg-yellow-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition flex justify-center items-center gap-2">
@@ -231,7 +231,7 @@
                 <!-- Section Préférences -->
                 <div class="bg-gray-900 p-3 rounded-xl border border-gray-700">
                     <h4 class="text-[10px] font-bold text-teal-400 mb-2 uppercase tracking-wider">⭐ Plateformes (Boost Recherche)</h4>
-                    <div id="adminPlatformList" class="flex flex-wrap gap-2"></div>
+                    <div id="adminPlatformList" class="flex flex-wrap gap-2 max-h-36 overflow-y-auto hide-scroll pr-1"></div>
                     <button onclick="savePlatformPrefs()" class="w-full mt-3 bg-teal-600 hover:bg-teal-500 text-white text-[10px] font-bold py-2 rounded-lg transition">💾 Enregistrer & Sync</button>
                 </div>
 
@@ -264,10 +264,14 @@
                     <span id="modalNetwork" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-900 text-blue-300"></span>
                     <span id="modalPremiereDate" class="text-[10px] text-gray-400 border border-gray-600 px-1.5 py-0.5 rounded">Date</span>
                     <span id="modalRuntime" class="text-[10px] text-gray-400 border border-gray-600 px-1.5 py-0.5 rounded">-- min</span>
-                    <div class="flex items-center gap-1.5 bg-yellow-900/20 px-2 py-1 rounded border border-yellow-700/30 ml-auto">
-                        <span id="modalGlobalRatingText" class="text-[10px] font-black text-yellow-400">N/A</span>
-                        <div class="w-12 h-1.5 bg-gray-800 rounded-full overflow-hidden border border-gray-700">
-                            <div id="modalGlobalRatingBar" class="h-full bg-yellow-400 transition-all" style="width: 0%"></div>
+                    
+                    <div class="flex items-center gap-2 ml-auto">
+                        <button id="modalSingleUpdateBtn" class="hidden text-[10px] font-bold bg-purple-700 hover:bg-purple-600 text-white px-2 py-1 rounded shadow transition">🔄 MAJ</button>
+                        <div class="flex items-center gap-1.5 bg-yellow-900/20 px-2 py-1 rounded border border-yellow-700/30">
+                            <span id="modalGlobalRatingText" class="text-[10px] font-black text-yellow-400">N/A</span>
+                            <div class="w-12 h-1.5 bg-gray-800 rounded-full overflow-hidden border border-gray-700">
+                                <div id="modalGlobalRatingBar" class="h-full bg-yellow-400 transition-all" style="width: 0%"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
