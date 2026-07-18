@@ -33,6 +33,10 @@ function populateModalBase(media) {
     document.getElementById('modalEpisodesBlock').classList.add('hidden'); 
     document.getElementById('modalSuggestionsBlock').classList.add('hidden'); 
     document.getElementById('modalMovieActions').classList.add('hidden');
+    
+    // Dissimulation du bouton MAJ individuelle par défaut
+    document.getElementById('modalSingleUpdateBtn').classList.add('hidden');
+    
     document.getElementById('modalScrollable').scrollTop = 0;
 
     const btnMovix = document.getElementById('btnMovixRedirect');
@@ -69,6 +73,12 @@ async function openPreviewModal(media) {
 function openLibraryModal(id) {
     modalMode = 'library'; activeModalMediaIndex = library.findIndex(i => i.id === id); const item = library[activeModalMediaIndex]; if (!item) return;
     populateModalBase(item);
+    
+    // Affichage et activation du bouton MAJ individuelle seulement pour la bibliothèque
+    const singleUpdateBtn = document.getElementById('modalSingleUpdateBtn');
+    singleUpdateBtn.classList.remove('hidden');
+    singleUpdateBtn.onclick = () => singleUpdateMedia(item.id);
+    
     const fBtn = document.getElementById('modalActionFollowBtn'); const wBtn = document.getElementById('modalActionAllWatchedBtn');
     fBtn.textContent = '✕ Retirer'; fBtn.className = "w-full py-3 bg-gray-900 text-red-400 border border-red-900/50 font-bold rounded-xl text-xs"; fBtn.onclick = async () => { await handleRemove(item.id); closeModal(); };
 
