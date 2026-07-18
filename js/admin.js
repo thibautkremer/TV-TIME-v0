@@ -7,6 +7,7 @@ async function massUpdateLibrary(type, silent = false) {
     const btn = document.getElementById(type === 'series' ? 'btn-mass-update-series' : 'btn-mass-update-movie');
     const originalContent = btn ? btn.innerHTML : '';
     
+    // Conversion vitale de "series" vers "tv" pour l'API TMDB
     const tmdbType = (type === 'series') ? 'tv' : 'movie';
     
     const itemsToProcess = library.filter(i => i.type === type);
@@ -38,6 +39,7 @@ async function massUpdateLibrary(type, silent = false) {
         console.log(`[${i + 1}/${total}] Traitement : ${item.title_fr || item.title} (ID: ${item.apiId})`);
 
         try {
+            // Utilisation stricte de tmdbType
             const url = `${TMDB_BASE}/${tmdbType}/${item.apiId}?api_key=${TMDB_API_KEY}&language=fr-FR&append_to_response=watch/providers`;
             const res = await fetch(url);
             
@@ -51,6 +53,7 @@ async function massUpdateLibrary(type, silent = false) {
             
             let changes = [];
 
+            // 2. Mise à jour Métadonnées (Résumé, Image, Plateforme)
             if (data.overview && item.summary !== data.overview) { 
                 changes.push("Résumé mis à jour"); 
                 item.summary = data.overview; 
@@ -70,12 +73,13 @@ async function massUpdateLibrary(type, silent = false) {
                 }
             }
             
-            // 1. Sauvegarder la date complète
+            // Sauvegarder la date complète pour les films
             if (type === 'movie' && data.release_date && item.releaseDate !== data.release_date) {
                 changes.push(`Date de sortie (${item.releaseDate} -> ${data.release_date})`);
                 item.releaseDate = data.release_date;
             }
 
+            // 3. Mise à jour Profonde (Séries uniquement : Épisodes, Structure, Notes)
             if (type === 'series') {
                 const freshEpisodes = await fetchAllTmdbEpisodes(item.apiId);
                 
@@ -95,7 +99,7 @@ async function massUpdateLibrary(type, silent = false) {
                         }
                     });
 
-                    // 2. OMDb Fallback Note globale série
+                    // OMDb Fallback Note globale série
                     const newAvg = await getEnhancedRating(item.apiId, 'tv', data.vote_average, data.vote_count);
                     
                     if (item.rating !== newAvg) { 
@@ -105,7 +109,7 @@ async function massUpdateLibrary(type, silent = false) {
                     item.episodes = freshEpisodes;
                 }
             } else if (type === 'movie' && data.vote_average !== undefined) {
-                 // 2. OMDb Fallback Note globale film
+                 // OMDb Fallback Note globale film
                 const roundedNew = await getEnhancedRating(item.apiId, 'movie', data.vote_average, data.vote_count);
                 if (item.rating !== roundedNew) { 
                     changes.push(`Note (${item.rating} -> ${roundedNew})`);
@@ -113,6 +117,7 @@ async function massUpdateLibrary(type, silent = false) {
                 }
             }
 
+            // 4. Sauvegarde
             if (changes.length > 0) {
                 item.last_modified = Date.now();
                 await saveLocalDB(item);
