@@ -159,6 +159,16 @@ async function massUpdateLibrary(type, silent = false) {
                         }
                     });
 
+                    // 1. Correction intelligente du statut
+                    const allAiredWatched = freshEpisodes.every(e => e.watched || (!e.airdate || e.airdate > todayString));
+                    const correctStatus = allAiredWatched ? 'Watched' : 'In Progress';
+                    
+                    if (item.status !== correctStatus && item.status !== 'Abandoned') {
+                        changes.push(`Statut (${item.status} -> ${correctStatus})`);
+                        item.status = correctStatus;
+                    }
+
+                    // 2. OMDb Fallback Note globale série
                     const newAvg = await getEnhancedRating(item.apiId, 'tv', data.vote_average, data.vote_count);
                     
                     if (item.rating !== newAvg) { 
@@ -179,7 +189,6 @@ async function massUpdateLibrary(type, silent = false) {
                 item.last_modified = Date.now();
                 await saveLocalDB(item);
                 updatedCount++;
-                // Le `.join(' | ')` permet un affichage très propre et lisible dans la console UI
                 console.log(`✅ ${item.title_fr || item.title} : ${changes.join(' | ')}`);
             } else {
                 noChangeCount++;
