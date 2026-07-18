@@ -3,9 +3,22 @@
 // LIBRARY — Affichage, filtrage et tri des médias suivis
 // ============================================================
 
+function ensureAnimeFilterExists() {
+    const select = document.getElementById('libraryTypeFilter');
+    if (select && !Array.from(select.options).some(o => o.value === 'anime')) {
+        const opt = document.createElement('option');
+        opt.value = 'anime';
+        opt.textContent = 'Animes';
+        select.appendChild(opt);
+    }
+}
+
 function renderLibrary() {
     const grid = document.getElementById('libraryGrid');
     if (!grid) return;
+
+    // Ajout dynamique du filtre Anime s'il n'existe pas
+    ensureAnimeFilterExists();
 
     // 1. Récupération de tous les filtres actifs
     const query = (document.getElementById('librarySearch')?.value || '').toLowerCase().trim();
@@ -19,14 +32,23 @@ function renderLibrary() {
     // 2. Le filtrage "Pare-balles"
     let filtered = library.filter(item => {
         
+        // --- Recherche Texte ---
         if (query) {
             const titleFr = (item.title_fr || '').toLowerCase();
             const titleVo = (item.title || '').toLowerCase();
             if (!titleFr.includes(query) && !titleVo.includes(query)) return false;
         }
 
-        if (typeFilter !== 'all' && item.type !== typeFilter) return false;
+        // --- Filtres Type avec séparation Series/Animes ---
+        const isAnime = (item.genres || []).includes('Anime') || (item.genres || []).includes('Animation') || item.original_language === 'ja';
+
+        if (typeFilter !== 'all') {
+            if (typeFilter === 'anime' && !isAnime) return false;
+            if (typeFilter === 'series' && (item.type !== 'series' || isAnime)) return false;
+            if (typeFilter === 'movie' && item.type !== 'movie') return false;
+        }
         
+        // --- Filtres Standards ---
         if (statusFilter !== 'all') {
             if (statusFilter === 'not_finished' && item.status !== 'In Progress') return false;
             if (statusFilter === 'watched' && item.status !== 'Watched') return false;
@@ -77,12 +99,8 @@ function renderLibrary() {
         }
     });
 
-    // 4. Mise à jour de l'UI (Compteur)
-    const countEl = document.getElementById('libCount');
-    if (countEl) {
-        countEl.textContent = filtered.length;
-        countEl.classList.remove('hidden');
-    }
+    // 4. Force l'affichage du TOTAL en haut à droite, peu importe les filtres
+    if (typeof updateHeaderCount === 'function') updateHeaderCount();
 
     // 5. Rendu HTML
     grid.innerHTML = '';
@@ -99,7 +117,6 @@ function renderLibrary() {
     });
     grid.appendChild(frag);
 
-    // CORRECTION 1 : Relancer le Lazy Load pour afficher les posters !
     if (typeof observeLazyImages === 'function') observeLazyImages();
 }
 
@@ -144,10 +161,8 @@ function setGlobalFilter(type, value, label) {
     renderLibrary();
 }
 
-// CORRECTION 2 : Pont pour la page Profil vers la page Suivi
 window.applyGlobalFilter = function(type, value) {
     let parsedValue = value;
-    // Si c'est une note, on la transforme en fourchette (ex: '7.5' devient [7.5, 8.0])
     if (type === 'rating') {
         if (value === '< 5') parsedValue = [0, 5];
         else parsedValue = [parseFloat(value), parseFloat(value) + 0.5];
