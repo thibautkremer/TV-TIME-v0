@@ -6,7 +6,7 @@
 // --- SYNCHRONISATION SUPABASE (Logique réelle) ---
 async function syncSupabase() {
     console.log("Exécution de syncSupabase() en cours...");
-    // N'oubliez pas de remettre votre code Supabase ici !
+    // VOTRE LOGIQUE ACTUELLE DE SYNCHRONISATION SUPABASE DOIT ETRE ICI
 }
 
 // --- RÉCUPÉRATION DES NOTES ---
@@ -35,16 +35,32 @@ async function forceSync() {
     
     try {
         console.log("--- DÉBUT DE LA SYNCHRONISATION ---");
-        if (typeof library === 'undefined' || library === null) { library = []; }
+        
+        if (typeof library === 'undefined' || library === null) {
+            library = [];
+        }
+
         await syncSupabase();
         
         console.log("✅ Synchronisation réussie.");
-        if (btn) { btn.textContent = '○ Cloud OK'; btn.classList.remove('text-gray-400', 'text-red-400'); btn.classList.add('text-teal-400'); }
-        if (typeof renderLibrary === 'function' && !document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
+        if (btn) {
+            btn.textContent = '○ Cloud OK';
+            btn.classList.remove('text-gray-400', 'text-red-400');
+            btn.classList.add('text-teal-400');
+        }
+        
+        if (typeof renderLibrary === 'function' && !document.getElementById('tab-library').classList.contains('hidden')) {
+            renderLibrary();
+        }
         
     } catch (error) {
         console.error("Erreur durant la synchro :", error); 
-        if (btn) { btn.textContent = '⚠ Err Sync'; btn.classList.remove('text-gray-400', 'text-teal-400'); btn.classList.add('text-red-400'); }
+        
+        if (btn) {
+            btn.textContent = '⚠ Err Sync';
+            btn.classList.remove('text-gray-400', 'text-teal-400');
+            btn.classList.add('text-red-400');
+        }
     }
 }
 
@@ -60,9 +76,14 @@ async function fetchAllTmdbEpisodes(apiId) {
             const epData = await epRes.json();
             if (epData.episodes) {
                 allEps.push(...epData.episodes.map(e => ({
-                    id: e.id, season: e.season_number, number: e.episode_number,
-                    name: e.name, summary: e.overview, airdate: e.air_date,
-                    rating: e.vote_average || 0, watched: false
+                    id: e.id,
+                    season: e.season_number,
+                    number: e.episode_number,
+                    name: e.name,
+                    summary: e.overview,
+                    airdate: e.air_date,
+                    rating: e.vote_average || 0,
+                    watched: false
                 })));
             }
         }
@@ -70,14 +91,14 @@ async function fetchAllTmdbEpisodes(apiId) {
     return allEps;
 }
 
-// CORRECTION 4, 5, 6 : quickAdd robuste qui cherche PARTOUT !
+// CORRECTION MAJEURE: Ajout robuste de médias depuis toutes les sources
 async function quickAdd(mediaId, allWatched = false) {
     // 1. Cherche dans toutes les listes possibles
     let media = searchResults.find(r => r.id === mediaId) || 
                 discoverResults.find(r => r.id === mediaId) || 
                 (typeof modalSuggestionsPool !== 'undefined' ? modalSuggestionsPool.find(r => r.id === mediaId) : null);
     
-    // 2. Si introuvable, c'est peut-être la modale ouverte depuis le calendrier
+    // 2. Si introuvable, regarde dans la modale active
     if (!media && typeof window.currentModalMediaObj !== 'undefined' && window.currentModalMediaObj && window.currentModalMediaObj.id === mediaId) {
         media = window.currentModalMediaObj;
     }
@@ -87,18 +108,19 @@ async function quickAdd(mediaId, allWatched = false) {
         return;
     }
     
-    // Créer une copie propre de l'objet pour la base de données
+    // Créer une copie propre de l'objet
     const newItem = JSON.parse(JSON.stringify(media));
     newItem.status = allWatched ? 'Watched' : 'In Progress';
     newItem.last_modified = Date.now();
     
-    if (typeof window.library === 'undefined' || window.library === null) window.library = [];
-    window.library.push(newItem);
+    // Suppression du "window." fautif : on utilise la vraie variable library
+    if (typeof library === 'undefined' || library === null) library = [];
+    library.push(newItem);
     
-    // Réindexer impérativement pour éviter les bugs
     if (typeof rebuildLibraryIndex === 'function') rebuildLibraryIndex();
     if (typeof saveLocalDB === 'function') await saveLocalDB(newItem);
+    if (typeof updateHeaderCount === 'function') updateHeaderCount(); // Force la MAJ du compteur en haut
     if (typeof renderLibrary === 'function') renderLibrary();
     
-    console.log(`✅ Ajouté avec succès : ${newItem.title}`);
+    console.log(`✅ Ajouté : ${newItem.title}`);
 }
