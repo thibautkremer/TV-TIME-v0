@@ -3,7 +3,6 @@
 // ADMIN — MAJ de masse API (Metadata + Épisodes + Notes)
 // ============================================================
 
-// 1. Surcharge de la console pour afficher les logs dans l'UI Admin
 const _originalLog = console.log;
 const _originalWarn = console.warn;
 const _originalError = console.error;
@@ -21,7 +20,6 @@ function addLogToUI(args, type='log') {
 
     const div = document.createElement('div');
     
-    // Code couleur automatique selon le contenu
     let colorClass = 'text-gray-300';
     if (type === 'error') colorClass = 'text-red-400 font-bold';
     else if (type === 'warn') colorClass = 'text-yellow-400';
@@ -41,7 +39,6 @@ console.log = function(...args) { _originalLog.apply(console, args); addLogToUI(
 console.warn = function(...args) { _originalWarn.apply(console, args); addLogToUI(args, 'warn'); };
 console.error = function(...args) { _originalError.apply(console, args); addLogToUI(args, 'error'); };
 
-// 2. Normalisation intelligente des plateformes
 function normalizePlatform(name) {
     if (!name) return name;
     const lower = name.toLowerCase();
@@ -58,12 +55,141 @@ function normalizePlatform(name) {
     return name;
 }
 
-// 3. Mise à jour de masse
+// Cœur de la logique de MAJ pour réutilisation (Single & Mass Update)
+async function syncSingleMediaData(item) {
+    const tmdbType = item.type === 'series' ? 'tv' : 'movie';
+    const url = `${TMDB_BASE}/${tmdbType}/${item.apiId}?api_key=${TMDB_API_KEY}&language=fr-FR&append_to_response=watch/providers`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Erreur ${res.status}`);
+    const data = await res.json();
+    
+    let changes = [];
+    
+    if (data.overview && item.summary !== data.overview) { 
+        changes.push("Résumé"); 
+        item.summary = data.overview; 
+    }
+    
+    const newImage = `https://image.tmdb.org/t/p/w500${data.poster_path}`;
+    if (data.poster_path && item.image !== newImage) { 
+        changes.push("Image"); 
+        item.image = newImage; 
+    }
+
+    let newNetwork = item.network;
+    if (data['watch/providers']?.results?.FR?.flatrate?.[0]?.provider_name) {
+        newNetwork = data['watch/providers'].results.FR.flatrate[0].provider_name;
+    } else if (item.type === 'series' && data.networks && data.networks.length > 0) {
+        newNetwork = data.networks[0].name;
+    }
+
+    if (newNetwork) {
+        newNetwork = normalizePlatform(newNetwork);
+        if (item.network !== newNetwork) {
+            changes.push(`Plateforme (${newNetwork})`);
+            item.network = newNetwork;
+        }
+    }
+    
+    if (item.type === 'movie' && data.release_date && item.releaseDate !== data.release_date) {
+        changes.push(`Date`);
+        item.releaseDate = data.release_date;
+    }
+
+    if (item.type === 'series') {
+        const freshEpisodes = await fetchAllTmdbEpisodes(item.apiId);
+        
+        if (freshEpisodes.length > 0) {
+            const oldWatchedIds = new Set((item.episodes || []).filter(e => e.watched).map(e => String(e.id)));
+            const oldWatchedCount = (item.episodes || []).filter(e => e.watched).length;
+            const strictMatchPossible = freshEpisodes.some(e => oldWatchedIds.has(String(e.id)));
+            
+            freshEpisodes.forEach((ep, idx) => {
+                if (strictMatchPossible) ep.watched = oldWatchedIds.has(String(ep.id));
+                else ep.watched = idx < oldWatchedCount; 
+                
+                const oldEp = (item.episodes || []).find(e => e.season === ep.season && e.number === ep.number);
+                if (oldEp && oldEp.rating !== ep.rating) {
+                    if (!changes.includes("Notes Ep.")) changes.push("Notes Ep.");
+                }
+            });
+
+            const allAiredWatched = freshEpisodes.every(e => e.watched || (!e.airdate || e.airdate > todayString));
+            const correctStatus = allAiredWatched ? 'Watched' : 'In Progress';
+            
+            if (item.status !== correctStatus && item.status !== 'Abandoned') {
+                changes.push(`Statut (${correctStatus})`);
+                item.status = correctStatus;
+            }
+
+            const newAvg = await getEnhancedRating(item.apiId, 'tv', data.vote_average, data.vote_count);
+            if (item.rating !== newAvg) { 
+                changes.push(`Note Globale (${newAvg})`);
+                item.rating = newAvg; 
+            }
+            item.episodes = freshEpisodes;
+        }
+    } else if (item.type === 'movie' && data.vote_average !== undefined) {
+        const roundedNew = await getEnhancedRating(item.apiId, 'movie', data.vote_average, data.vote_count);
+        if (item.rating !== roundedNew) { 
+            changes.push(`Note Globale (${roundedNew})`);
+            item.rating = roundedNew; 
+        }
+    }
+    
+    return changes;
+}
+
+// Fonction de mise à jour Ciblée (Modale)
+async function singleUpdateMedia(mediaId) {
+    const item = libraryIndex.get(mediaId);
+    if (!item) return;
+    
+    const btn = document.getElementById('modalSingleUpdateBtn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '⏳...'; }
+    
+    console.log(`--- SINGLE UPDATE : ${item.title_fr || item.title} ---`);
+    
+    try {
+        const changes = await syncSingleMediaData(item);
+        
+        if (changes.length > 0) {
+            item.last_modified = Date.now();
+            await saveLocalDB(item);
+            console.log(`✅ ${item.title_fr || item.title} : ${changes.join(' | ')}`);
+        } else {
+            console.log(`➖ Inchangé : ${item.title_fr || item.title}`);
+        }
+        
+        // Rafraîchissement direct de l'interface de la modale en cours
+        populateModalBase(item); 
+        if (item.type === 'series' && item.episodes) {
+            currentSeriesAvgRating = computeAvgEpisodeRating(item.episodes); 
+            buildSeasonTabs(item.episodes, true); 
+            renderGlobalGraph(item.episodes);
+        }
+        
+        // Rafraîchissement en arrière plan de la liste Suivi
+        if (!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
+        
+        if (btn) { 
+            btn.innerHTML = '✅ OK'; 
+            setTimeout(() => { btn.innerHTML = '🔄 MAJ'; btn.disabled = false; }, 2000); 
+        }
+        
+    } catch (e) {
+        console.error(`❌ Erreur Single Update : ${e.message}`);
+        if (btn) { 
+            btn.innerHTML = '❌ Err'; 
+            setTimeout(() => { btn.innerHTML = '🔄 MAJ'; btn.disabled = false; }, 2000); 
+        }
+    }
+}
+
+// Fonction de mise à jour de Masse (Panneau Admin)
 async function massUpdateLibrary(type, silent = false) {
     const btn = document.getElementById(type === 'series' ? 'btn-mass-update-series' : 'btn-mass-update-movie');
     const originalContent = btn ? btn.innerHTML : '';
-    
-    const tmdbType = (type === 'series') ? 'tv' : 'movie';
     
     const itemsToProcess = library.filter(i => i.type === type);
     const total = itemsToProcess.length;
@@ -91,99 +217,8 @@ async function massUpdateLibrary(type, silent = false) {
             btn.innerHTML = `⏳ [${i + 1}/${total}] ${item.title_fr || item.title}`;
         }
         
-        console.log(`[${i + 1}/${total}] Traitement : ${item.title_fr || item.title} (ID: ${item.apiId})`);
-
         try {
-            const url = `${TMDB_BASE}/${tmdbType}/${item.apiId}?api_key=${TMDB_API_KEY}&language=fr-FR&append_to_response=watch/providers`;
-            const res = await fetch(url);
-            
-            if (res.status === 404) {
-                console.warn(`⚠️ Introuvable sur TMDB : ${item.title_fr || item.title}.`);
-                errorCount++;
-                continue; 
-            }
-            if (!res.ok) throw new Error(`Erreur ${res.status}`);
-            const data = await res.json();
-            
-            let changes = [];
-
-            if (data.overview && item.summary !== data.overview) { 
-                changes.push("Résumé mis à jour"); 
-                item.summary = data.overview; 
-            }
-            
-            const newImage = `https://image.tmdb.org/t/p/w500${data.poster_path}`;
-            if (data.poster_path && item.image !== newImage) { 
-                changes.push("Image mise à jour"); 
-                item.image = newImage; 
-            }
-
-            let newNetwork = item.network;
-            
-            if (data['watch/providers']?.results?.FR?.flatrate?.[0]?.provider_name) {
-                newNetwork = data['watch/providers'].results.FR.flatrate[0].provider_name;
-            } 
-            else if (type === 'series' && data.networks && data.networks.length > 0) {
-                newNetwork = data.networks[0].name;
-            }
-
-            if (newNetwork) {
-                newNetwork = normalizePlatform(newNetwork);
-                if (item.network !== newNetwork) {
-                    changes.push(`Plateforme (${item.network} -> ${newNetwork})`);
-                    item.network = newNetwork;
-                }
-            }
-            
-            if (type === 'movie' && data.release_date && item.releaseDate !== data.release_date) {
-                changes.push(`Date de sortie (${item.releaseDate} -> ${data.release_date})`);
-                item.releaseDate = data.release_date;
-            }
-
-            if (type === 'series') {
-                const freshEpisodes = await fetchAllTmdbEpisodes(item.apiId);
-                
-                if (freshEpisodes.length > 0) {
-                    const oldWatchedIds = new Set((item.episodes || []).filter(e => e.watched).map(e => String(e.id)));
-                    const oldWatchedCount = (item.episodes || []).filter(e => e.watched).length;
-
-                    const strictMatchPossible = freshEpisodes.some(e => oldWatchedIds.has(String(e.id)));
-                    
-                    freshEpisodes.forEach((ep, idx) => {
-                        if (strictMatchPossible) ep.watched = oldWatchedIds.has(String(ep.id));
-                        else ep.watched = idx < oldWatchedCount; 
-                        
-                        const oldEp = (item.episodes || []).find(e => e.season === ep.season && e.number === ep.number);
-                        if (oldEp && oldEp.rating !== ep.rating) {
-                            changes.push(`Note S${ep.season}E${ep.number} (${oldEp.rating} -> ${ep.rating})`);
-                        }
-                    });
-
-                    // 1. Correction intelligente du statut
-                    const allAiredWatched = freshEpisodes.every(e => e.watched || (!e.airdate || e.airdate > todayString));
-                    const correctStatus = allAiredWatched ? 'Watched' : 'In Progress';
-                    
-                    if (item.status !== correctStatus && item.status !== 'Abandoned') {
-                        changes.push(`Statut (${item.status} -> ${correctStatus})`);
-                        item.status = correctStatus;
-                    }
-
-                    // 2. OMDb Fallback Note globale série
-                    const newAvg = await getEnhancedRating(item.apiId, 'tv', data.vote_average, data.vote_count);
-                    
-                    if (item.rating !== newAvg) { 
-                        changes.push(`Note Globale (${item.rating} -> ${newAvg})`);
-                        item.rating = newAvg; 
-                    }
-                    item.episodes = freshEpisodes;
-                }
-            } else if (type === 'movie' && data.vote_average !== undefined) {
-                const roundedNew = await getEnhancedRating(item.apiId, 'movie', data.vote_average, data.vote_count);
-                if (item.rating !== roundedNew) { 
-                    changes.push(`Note Globale (${item.rating} -> ${roundedNew})`);
-                    item.rating = roundedNew; 
-                }
-            }
+            const changes = await syncSingleMediaData(item);
 
             if (changes.length > 0) {
                 item.last_modified = Date.now();
