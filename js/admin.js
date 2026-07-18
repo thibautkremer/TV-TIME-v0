@@ -56,7 +56,6 @@ function normalizePlatform(name) {
 }
 
 // Fonction unifiée de synchro (utilisée par Single et Mass Update)
-// Fonction unifiée de synchro (utilisée par Single et Mass Update)
 async function syncSingleMediaData(item) {
     const tmdbType = item.type === 'series' ? 'tv' : 'movie';
     const url = `${TMDB_BASE}/${tmdbType}/${item.apiId}?api_key=${TMDB_API_KEY}&language=fr-FR&append_to_response=watch/providers`;
@@ -88,22 +87,36 @@ async function syncSingleMediaData(item) {
             item.rating = bestRating;
         }
     } else if (item.type === 'series') {
-        // Recalcul strict de la moyenne basée sur les épisodes pour Séries/Animés
+        // Traitement des épisodes pour Séries/Animés
         const freshEpisodes = await fetchAllTmdbEpisodes(item.apiId);
         if (freshEpisodes.length > 0) {
+            
+            // --- FUSION DES ÉPISODES VUS ---
+            const watchedMap = new Map();
+            (item.episodes || []).forEach(ep => {
+                if (ep.watched) watchedMap.set(`${ep.season}-${ep.number}`, true);
+            });
+
             freshEpisodes.forEach(ep => {
+                // Restauration du statut "Vu" si existant localement
+                if (watchedMap.has(`${ep.season}-${ep.number}`)) {
+                    ep.watched = true;
+                }
+                
                 const oldEp = (item.episodes || []).find(e => e.season === ep.season && e.number === ep.number);
                 if (oldEp && oldEp.rating !== ep.rating) {
                     if (!changes.includes("Notes Ep.")) changes.push("Notes Ep.");
                 }
             });
             
+            // Recalcul strict de la moyenne basée sur les épisodes frais
             const newAvg = computeAvgEpisodeRating(freshEpisodes);
             if (item.rating !== newAvg) {
                 changes.push(`Note Globale (${item.rating} -> ${newAvg})`);
                 item.rating = newAvg;
             }
 
+            // Mise à jour du statut
             const allAiredWatched = freshEpisodes.every(e => e.watched || (!e.airdate || e.airdate > todayString));
             const correctStatus = allAiredWatched ? 'Watched' : 'In Progress';
             if (item.status !== correctStatus && item.status !== 'Abandoned') {
@@ -148,7 +161,6 @@ async function syncSingleMediaData(item) {
     
     return changes;
 }
-
 
 // Single Update (déclenché par la modale)
 async function singleUpdateMedia(mediaId) {
