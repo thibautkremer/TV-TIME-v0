@@ -19,14 +19,12 @@ function renderLibrary() {
     // 2. Le filtrage "Pare-balles"
     let filtered = library.filter(item => {
         
-        // --- Recherche Texte ---
         if (query) {
             const titleFr = (item.title_fr || '').toLowerCase();
             const titleVo = (item.title || '').toLowerCase();
             if (!titleFr.includes(query) && !titleVo.includes(query)) return false;
         }
 
-        // --- Filtres Déroulants Standards ---
         if (typeFilter !== 'all' && item.type !== typeFilter) return false;
         
         if (statusFilter !== 'all') {
@@ -61,31 +59,21 @@ function renderLibrary() {
             }
         }
 
-        // Si l'élément a passé TOUS les tests sans déclencher de "return false", on le garde !
         return true; 
     });
 
     // 3. Tri des résultats
     filtered.sort((a, b) => {
         switch (sortFilter) {
-            case 'date_desc': 
-                return (b.last_modified || 0) - (a.last_modified || 0);
-            case 'date_asc': 
-                return (a.last_modified || 0) - (b.last_modified || 0);
-            case 'title_asc': 
-                return (a.title_fr || a.title || '').localeCompare(b.title_fr || b.title || '');
-            case 'title_desc': 
-                return (b.title_fr || b.title || '').localeCompare(a.title_fr || a.title || '');
-            case 'rating_desc': 
-                return (b.rating || 0) - (a.rating || 0);
-            case 'rating_asc': 
-                return (a.rating || 0) - (b.rating || 0);
-            case 'prog_desc': 
-                return (getProgress(b) || 0) - (getProgress(a) || 0);
-            case 'prog_asc': 
-                return (getProgress(a) || 0) - (getProgress(b) || 0);
-            default: 
-                return 0;
+            case 'date_desc': return (b.last_modified || 0) - (a.last_modified || 0);
+            case 'date_asc': return (a.last_modified || 0) - (b.last_modified || 0);
+            case 'title_asc': return (a.title_fr || a.title || '').localeCompare(b.title_fr || b.title || '');
+            case 'title_desc': return (b.title_fr || b.title || '').localeCompare(a.title_fr || a.title || '');
+            case 'rating_desc': return (b.rating || 0) - (a.rating || 0);
+            case 'rating_asc': return (a.rating || 0) - (b.rating || 0);
+            case 'prog_desc': return (getProgress(b) || 0) - (getProgress(a) || 0);
+            case 'prog_asc': return (getProgress(a) || 0) - (getProgress(b) || 0);
+            default: return 0;
         }
     });
 
@@ -110,6 +98,9 @@ function renderLibrary() {
         }
     });
     grid.appendChild(frag);
+
+    // CORRECTION 1 : Relancer le Lazy Load pour afficher les posters !
+    if (typeof observeLazyImages === 'function') observeLazyImages();
 }
 
 // ============================================================
@@ -117,12 +108,11 @@ function renderLibrary() {
 // ============================================================
 
 function resetLibFilters() {
-    // Réinitialisation de tous les champs aux valeurs par défaut
     const searchInput = document.getElementById('librarySearch');
     if (searchInput) searchInput.value = '';
     
     document.getElementById('libraryTypeFilter').value = 'all';
-    document.getElementById('libraryStatusFilter').value = 'all'; // Forcé à 'all' pour éviter les disparitions
+    document.getElementById('libraryStatusFilter').value = 'all'; 
     document.getElementById('libraryDiffusionFilter').value = 'all';
     document.getElementById('librarySortFilter').value = 'date_desc';
     document.getElementById('smartGenreFilter').value = 'all';
@@ -131,7 +121,7 @@ function resetLibFilters() {
     const clearBtn = document.getElementById('clearLibSearchBtn');
     if (clearBtn) clearBtn.classList.add('hidden');
     
-    clearGlobalFilter(); // Cette fonction appellera renderLibrary() automatiquement
+    clearGlobalFilter(); 
 }
 
 function clearGlobalFilter() {
@@ -153,3 +143,14 @@ function setGlobalFilter(type, value, label) {
     if (typeof switchTab === 'function') switchTab('library');
     renderLibrary();
 }
+
+// CORRECTION 2 : Pont pour la page Profil vers la page Suivi
+window.applyGlobalFilter = function(type, value) {
+    let parsedValue = value;
+    // Si c'est une note, on la transforme en fourchette (ex: '7.5' devient [7.5, 8.0])
+    if (type === 'rating') {
+        if (value === '< 5') parsedValue = [0, 5];
+        else parsedValue = [parseFloat(value), parseFloat(value) + 0.5];
+    }
+    setGlobalFilter(type, parsedValue, value);
+};
