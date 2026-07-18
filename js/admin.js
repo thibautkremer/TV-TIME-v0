@@ -13,7 +13,11 @@ function addLogToUI(args, type='log') {
     if (!consoleEl) return;
     
     const msg = Array.from(args).map(a => {
-        if (typeof a === 'object') {
+        // CORRECTION : Détection spécifique des erreurs Javascript
+        if (a instanceof Error) {
+            return `${a.name}: ${a.message}`; 
+        }
+        if (typeof a === 'object' && a !== null) {
             try { return JSON.stringify(a, null, 2); } catch(e) { return '[Objet]'; }
         }
         return a;
@@ -223,7 +227,7 @@ async function massUpdateLibrary(type, silent = false) {
             }
         } catch (e) { 
             errorCount++;
-            console.error(`❌ Erreur sur ${item.title_fr || item.title} : ${e.message}`); 
+            console.error(e); // Sera correctement affiché grâce au nouveau addLogToUI
         }
         await new Promise(r => setTimeout(r, 400));
     }
@@ -232,4 +236,68 @@ async function massUpdateLibrary(type, silent = false) {
         if (btn) btn.innerHTML = originalContent;
         location.reload();
     }
+}
+
+// Import de Progression Uniquement
+async function importProgressionOnly(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        try {
+            const importedData = JSON.parse(e.target.result);
+            if (!Array.isArray(importedData)) throw new Error("Format de fichier invalide.");
+
+            let updatedCount = 0;
+            console.log(`--- DÉBUT DE L'IMPORT DE PROGRESSION (MINI-IMPORT) ---`);
+
+            for (let localItem of library) {
+                const backupItem = importedData.find(i => i.id === localItem.id || i.apiId === localItem.apiId);
+                
+                if (backupItem) {
+                    let changed = false;
+
+                    if (localItem.status !== backupItem.status) {
+                        localItem.status = backupItem.status;
+                        changed = true;
+                    }
+
+                    if (localItem.type === 'series' && localItem.episodes && backupItem.episodes) {
+                        const backupWatchedMap = new Map();
+                        backupItem.episodes.forEach(ep => {
+                            if (ep.watched) backupWatchedMap.set(`${ep.season}-${ep.number}`, true);
+                        });
+
+                        localItem.episodes.forEach(localEp => {
+                            const wasWatched = backupWatchedMap.has(`${localEp.season}-${localEp.number}`);
+                            if (localEp.watched !== wasWatched) {
+                                localEp.watched = wasWatched;
+                                changed = true;
+                            }
+                        });
+                    }
+
+                    if (changed) {
+                        localItem.last_modified = Date.now();
+                        await saveLocalDB(localItem);
+                        updatedCount++;
+                        console.log(`✅ Progression restaurée : ${localItem.title_fr || localItem.title}`);
+                    }
+                }
+            }
+
+            console.log(`--- FIN : ${updatedCount} médias restaurés ---`);
+            alert(`Mini-Import terminé.\n${updatedCount} médias ont récupéré leur progression !`);
+            
+            if (typeof renderLibrary === 'function' && !document.getElementById('tab-library').classList.contains('hidden')) {
+                renderLibrary();
+            }
+
+        } catch (error) {
+            console.error(error);
+            alert("Erreur lors de la lecture du fichier de sauvegarde JSON.");
+        }
+    };
+    reader.readAsText(file);
 }
