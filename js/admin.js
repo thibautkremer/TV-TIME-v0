@@ -1,9 +1,9 @@
 'use strict';
 // ============================================================
-// ADMIN — MAJ de masse API (Metadata + Épisodes + Notes)
+// ADMIN — MAJ de masse API (Metadata + Épisodes + Notes Hybrides)
 // ============================================================
 
-// Surcharge de la console pour afficher les logs dans l'UI Admin
+// Surcharge console pour UI Admin
 const _originalLog = console.log;
 const _originalWarn = console.warn;
 const _originalError = console.error;
@@ -11,12 +11,8 @@ const _originalError = console.error;
 function addLogToUI(args, type='log') {
     const consoleEl = document.getElementById('adminConsoleBox');
     if (!consoleEl) return;
-    
     const msg = Array.from(args).map(a => {
-        // CORRECTION : Détection spécifique des erreurs Javascript
-        if (a instanceof Error) {
-            return `${a.name}: ${a.message}`; 
-        }
+        if (a instanceof Error) return `${a.name}: ${a.message}`; 
         if (typeof a === 'object' && a !== null) {
             try { return JSON.stringify(a, null, 2); } catch(e) { return '[Objet]'; }
         }
@@ -24,17 +20,13 @@ function addLogToUI(args, type='log') {
     }).join(' ');
 
     const div = document.createElement('div');
-    let colorClass = 'text-gray-300';
-    if (type === 'error') colorClass = 'text-red-400 font-bold';
-    else if (type === 'warn') colorClass = 'text-yellow-400';
-    else if (msg.includes('✅')) colorClass = 'text-emerald-400';
-    else if (msg.includes('➖')) colorClass = 'text-gray-500';
+    let colorClass = type === 'error' ? 'text-red-400 font-bold' : (type === 'warn' ? 'text-yellow-400' : 'text-gray-300');
+    if (msg.includes('✅')) colorClass = 'text-emerald-400';
     else if (msg.includes('---')) colorClass = 'text-teal-400 font-bold';
+    else if (msg.includes('➖')) colorClass = 'text-gray-500';
 
     div.className = `text-[10px] mb-1 pb-1 border-b border-gray-700/50 font-mono whitespace-pre-wrap break-words ${colorClass}`;
-    
-    const time = new Date().toLocaleTimeString('fr-FR', { hour12: false });
-    div.textContent = `[${time}] ${msg}`;
+    div.textContent = `[${new Date().toLocaleTimeString('fr-FR', { hour12: false })}] ${msg}`;
     consoleEl.appendChild(div);
     consoleEl.scrollTop = consoleEl.scrollHeight;
 }
@@ -53,13 +45,11 @@ function normalizePlatform(name) {
     if (lower.includes('hbo') || lower === 'max') return 'Max';
     if (lower.includes('paramount')) return 'Paramount+';
     if (lower.includes('crunchyroll') || lower.includes('wakanim')) return 'Crunchyroll';
-    if (lower.includes('adn') || lower.includes('animation digital network')) return 'ADN';
-    if (lower.includes('hulu')) return 'Hulu';
-    if (lower.includes('peacock')) return 'Peacock';
+    if (lower.includes('adn')) return 'ADN';
     return name;
 }
 
-// Fonction unifiée de synchro (utilisée par Single et Mass Update)
+// Fonction unifiée de synchro
 async function syncSingleMediaData(item) {
     const tmdbType = item.type === 'series' ? 'tv' : 'movie';
     const url = `${TMDB_BASE}/${tmdbType}/${item.apiId}?api_key=${TMDB_API_KEY}&language=fr-FR&append_to_response=watch/providers`;
@@ -69,104 +59,65 @@ async function syncSingleMediaData(item) {
     
     let changes = [];
     
-    // 1. Logique de note selon le type de média
-    if (item.type === 'movie') {
-        // Comparaison TMDB vs OMDb (Prendre la meilleure) pour les Films
-        let bestRating = Math.round((data.vote_average || 0) * 10) / 10;
-        try {
-            const idsRes = await fetch(`${TMDB_BASE}/${tmdbType}/${item.apiId}/external_ids?api_key=${TMDB_API_KEY}`);
-            const externalIds = await idsRes.json();
-            if (externalIds.imdb_id) {
-                const omdbRating = await getImdbRating(externalIds.imdb_id);
-                if (omdbRating && omdbRating > bestRating) {
-                    bestRating = omdbRating;
-                }
-            }
-        } catch (e) {
-            console.warn("Note OMDb indisponible.");
-        }
+    // Récupération ID IMDB pour le système hybride
+    let imdbId = null;
+    try {
+        const idsRes = await fetch(`${TMDB_BASE}/${tmdbType}/${item.apiId}/external_ids?api_key=${TMDB_API_KEY}`);
+        const idsData = await idsRes.json();
+        imdbId = idsData.imdb_id;
+    } catch (e) { console.warn("ID IMDB introuvable."); }
 
+    // Traitement Hybride
+    if (item.type === 'movie') {
+        let bestRating = Math.round((data.vote_average || 0) * 10) / 10;
+        if (imdbId) {
+            const omdbRating = await getImdbRating(imdbId);
+            if (omdbRating && omdbRating > bestRating) bestRating = omdbRating;
+        }
         if (item.rating !== bestRating) {
             changes.push(`Note Globale (${item.rating} -> ${bestRating})`);
             item.rating = bestRating;
         }
     } else if (item.type === 'series') {
-        // Traitement des épisodes pour Séries/Animés
         const freshEpisodes = await fetchAllTmdbEpisodes(item.apiId);
-        if (freshEpisodes.length > 0) {
-            
-            // --- FUSION DES ÉPISODES VUS ---
-            const watchedMap = new Map();
-            (item.episodes || []).forEach(ep => {
-                if (ep.watched) watchedMap.set(`${ep.season}-${ep.number}`, true);
-            });
+        const watchedMap = new Map();
+        (item.episodes || []).forEach(ep => { if (ep.watched) watchedMap.set(`${ep.season}-${ep.number}`, true); });
 
-            freshEpisodes.forEach(ep => {
-                // Restauration du statut "Vu" si existant localement
-                if (watchedMap.has(`${ep.season}-${ep.number}`)) {
-                    ep.watched = true;
-                }
-                
-                const oldEp = (item.episodes || []).find(e => e.season === ep.season && e.number === ep.number);
-                if (oldEp && oldEp.rating !== ep.rating) {
-                    if (!changes.includes("Notes Ep.")) changes.push("Notes Ep.");
-                }
-            });
+        for (let ep of freshEpisodes) {
+            // Restauration du statut "Vu"
+            if (watchedMap.has(`${ep.season}-${ep.number}`)) ep.watched = true;
             
-            // Recalcul strict de la moyenne basée sur les épisodes frais
-            const newAvg = computeAvgEpisodeRating(freshEpisodes);
-            if (item.rating !== newAvg) {
-                changes.push(`Note Globale (${item.rating} -> ${newAvg})`);
-                item.rating = newAvg;
+            // Comparaison hybride par épisode
+            if (imdbId) {
+                const omdbEpRating = await getImdbEpisodeRating(imdbId, ep.season, ep.number);
+                if (omdbEpRating && omdbEpRating > ep.rating) ep.rating = omdbEpRating;
             }
-
-            // Mise à jour du statut
-            const allAiredWatched = freshEpisodes.every(e => e.watched || (!e.airdate || e.airdate > todayString));
-            const correctStatus = allAiredWatched ? 'Watched' : 'In Progress';
-            if (item.status !== correctStatus && item.status !== 'Abandoned') {
-                changes.push(`Statut (${correctStatus})`);
-                item.status = correctStatus;
-            }
-            item.episodes = freshEpisodes;
         }
+        
+        const newAvg = computeAvgEpisodeRating(freshEpisodes);
+        if (item.rating !== newAvg) { changes.push(`Note Globale (${item.rating} -> ${newAvg})`); item.rating = newAvg; }
+        
+        const allAiredWatched = freshEpisodes.every(e => e.watched || (!e.airdate || e.airdate > todayString));
+        if (item.status !== (allAiredWatched ? 'Watched' : 'In Progress') && item.status !== 'Abandoned') {
+            item.status = allAiredWatched ? 'Watched' : 'In Progress';
+            changes.push(`Statut (${item.status})`);
+        }
+        item.episodes = freshEpisodes;
     }
     
-    // 2. Mise à jour Métadonnées (Résumé, Image, Plateforme)
-    if (data.overview && item.summary !== data.overview) { 
-        changes.push("Résumé"); 
-        item.summary = data.overview; 
-    }
-    
+    // Mise à jour Métadonnées
+    if (data.overview && item.summary !== data.overview) { changes.push("Résumé"); item.summary = data.overview; }
     const newImage = `https://image.tmdb.org/t/p/w500${data.poster_path}`;
-    if (data.poster_path && item.image !== newImage) { 
-        changes.push("Image"); 
-        item.image = newImage; 
-    }
-
-    let newNetwork = item.network;
-    if (data['watch/providers']?.results?.FR?.flatrate?.[0]?.provider_name) {
-        newNetwork = data['watch/providers'].results.FR.flatrate[0].provider_name;
-    } else if (item.type === 'series' && data.networks && data.networks.length > 0) {
-        newNetwork = data.networks[0].name;
-    }
-
-    if (newNetwork) {
-        newNetwork = normalizePlatform(newNetwork);
-        if (item.network !== newNetwork) {
-            changes.push(`Plateforme (${newNetwork})`);
-            item.network = newNetwork;
-        }
-    }
+    if (data.poster_path && item.image !== newImage) { changes.push("Image"); item.image = newImage; }
     
-    if (item.type === 'movie' && data.release_date && item.releaseDate !== data.release_date) {
-        changes.push(`Date`);
-        item.releaseDate = data.release_date;
-    }
+    let newNetwork = item.network;
+    if (data['watch/providers']?.results?.FR?.flatrate?.[0]?.provider_name) newNetwork = normalizePlatform(data['watch/providers'].results.FR.flatrate[0].provider_name);
+    if (item.network !== newNetwork) { changes.push(`Plateforme (${newNetwork})`); item.network = newNetwork; }
     
     return changes;
 }
 
-// Single Update (déclenché par la modale)
+// Single Update
 async function singleUpdateMedia(mediaId) {
     const item = libraryIndex.get(mediaId);
     if (!item) return;
@@ -193,7 +144,7 @@ async function singleUpdateMedia(mediaId) {
         
         if (btn) { btn.innerHTML = '✅ OK'; setTimeout(() => { btn.innerHTML = '🔄 MAJ'; btn.disabled = false; }, 2000); }
     } catch (e) {
-        console.error(`❌ Erreur Single Update : ${e.message}`);
+        console.error(e);
         if (btn) { btn.innerHTML = '❌ Err'; setTimeout(() => { btn.innerHTML = '🔄 MAJ'; btn.disabled = false; }, 2000); }
     }
 }
@@ -201,103 +152,50 @@ async function singleUpdateMedia(mediaId) {
 // Mass Update
 async function massUpdateLibrary(type, silent = false) {
     const btn = document.getElementById(type === 'series' ? 'btn-mass-update-series' : 'btn-mass-update-movie');
-    const originalContent = btn ? btn.innerHTML : '';
     const itemsToProcess = library.filter(i => i.type === type);
-    const total = itemsToProcess.length;
+    if (itemsToProcess.length === 0) { alert("Aucun média."); return; }
 
-    if (total === 0) { alert("Aucun média."); return; }
-    if (!silent && btn) { document.getElementById('btn-mass-update-series').disabled = true; document.getElementById('btn-mass-update-movie').disabled = true; }
-
-    let updatedCount = 0, errorCount = 0, noChangeCount = 0;
-    console.log(`--- DÉBUT DE LA MAJ COMPLETE (${type.toUpperCase()}) : ${total} ---`);
-
-    for (let i = 0; i < total; i++) {
-        let item = itemsToProcess[i];
-        if (!silent && btn) btn.innerHTML = `⏳ [${i + 1}/${total}]`;
+    console.log(`--- DÉBUT MAJ COMPLETE (${type.toUpperCase()}) ---`);
+    for (let i = 0; i < itemsToProcess.length; i++) {
         try {
-            const changes = await syncSingleMediaData(item);
+            const changes = await syncSingleMediaData(itemsToProcess[i]);
             if (changes.length > 0) {
-                item.last_modified = Date.now();
-                await saveLocalDB(item);
-                updatedCount++;
-                console.log(`✅ ${item.title_fr || item.title} : ${changes.join(' | ')}`);
-            } else {
-                noChangeCount++;
-                console.log(`➖ Inchangé : ${item.title_fr || item.title}`);
+                itemsToProcess[i].last_modified = Date.now();
+                await saveLocalDB(itemsToProcess[i]);
+                console.log(`✅ ${itemsToProcess[i].title_fr || itemsToProcess[i].title} : ${changes.join(' | ')}`);
             }
-        } catch (e) { 
-            errorCount++;
-            console.error(e); // Sera correctement affiché grâce au nouveau addLogToUI
-        }
-        await new Promise(r => setTimeout(r, 400));
+        } catch (e) { console.error(e); }
+        await new Promise(r => setTimeout(r, 500));
     }
-    console.log(`--- FIN : ${updatedCount} mis à jour, ${noChangeCount} inchangés, ${errorCount} erreurs ---`);
-    if (!silent) {
-        if (btn) btn.innerHTML = originalContent;
-        location.reload();
-    }
+    console.log(`--- FIN MAJ COMPLETE ---`);
+    if (!silent) location.reload();
 }
 
-// Import de Progression Uniquement
+// Mini-Import Progression
 async function importProgressionOnly(event) {
     const file = event.target.files[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = async (e) => {
         try {
             const importedData = JSON.parse(e.target.result);
-            if (!Array.isArray(importedData)) throw new Error("Format de fichier invalide.");
-
             let updatedCount = 0;
-            console.log(`--- DÉBUT DE L'IMPORT DE PROGRESSION (MINI-IMPORT) ---`);
-
             for (let localItem of library) {
                 const backupItem = importedData.find(i => i.id === localItem.id || i.apiId === localItem.apiId);
-                
                 if (backupItem) {
                     let changed = false;
-
-                    if (localItem.status !== backupItem.status) {
-                        localItem.status = backupItem.status;
-                        changed = true;
-                    }
-
+                    if (localItem.status !== backupItem.status) { localItem.status = backupItem.status; changed = true; }
                     if (localItem.type === 'series' && localItem.episodes && backupItem.episodes) {
-                        const backupWatchedMap = new Map();
-                        backupItem.episodes.forEach(ep => {
-                            if (ep.watched) backupWatchedMap.set(`${ep.season}-${ep.number}`, true);
-                        });
-
-                        localItem.episodes.forEach(localEp => {
-                            const wasWatched = backupWatchedMap.has(`${localEp.season}-${localEp.number}`);
-                            if (localEp.watched !== wasWatched) {
-                                localEp.watched = wasWatched;
-                                changed = true;
-                            }
+                        const bMap = new Map(backupItem.episodes.filter(ep => ep.watched).map(ep => [`${ep.season}-${ep.number}`, true]));
+                        localItem.episodes.forEach(le => {
+                            if (le.watched !== bMap.has(`${le.season}-${le.number}`)) { le.watched = bMap.has(`${le.season}-${le.number}`); changed = true; }
                         });
                     }
-
-                    if (changed) {
-                        localItem.last_modified = Date.now();
-                        await saveLocalDB(localItem);
-                        updatedCount++;
-                        console.log(`✅ Progression restaurée : ${localItem.title_fr || localItem.title}`);
-                    }
+                    if (changed) { await saveLocalDB(localItem); updatedCount++; }
                 }
             }
-
-            console.log(`--- FIN : ${updatedCount} médias restaurés ---`);
-            alert(`Mini-Import terminé.\n${updatedCount} médias ont récupéré leur progression !`);
-            
-            if (typeof renderLibrary === 'function' && !document.getElementById('tab-library').classList.contains('hidden')) {
-                renderLibrary();
-            }
-
-        } catch (error) {
-            console.error(error);
-            alert("Erreur lors de la lecture du fichier de sauvegarde JSON.");
-        }
+            alert(`Mini-Import terminé : ${updatedCount} médias restaurés.`);
+        } catch (e) { console.error(e); alert("Erreur import JSON."); }
     };
     reader.readAsText(file);
 }
