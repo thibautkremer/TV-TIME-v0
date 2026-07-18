@@ -1,6 +1,9 @@
 'use strict';
 
-// 2. Amélioration du système de note (Fallback OMDb)
+// ============================================================
+// API — requêtes TMDB, fallback OMDb et formatage des données
+// ============================================================
+
 async function getImdbRating(imdbId) {
     if (!imdbId) return null;
     try {
@@ -61,6 +64,7 @@ async function fetchAllTmdbEpisodes(tmdbId) {
             }
         });
 
+        // LOGIQUE DE CORRECTION DES NOTES MANQUANTES
         const validRatings = episodes.map(e => e.rating).filter(r => r > 0);
         if (validRatings.length > 0) {
             const minRating = Math.min(...validRatings);
@@ -78,21 +82,26 @@ async function fetchAllTmdbEpisodes(tmdbId) {
 async function enrichTmdbList(items) {
     await Promise.all(items.map(async item => {
         try {
-            const res = await fetch(`${TMDB_BASE}/${item.type}/${item.apiId}?api_key=${TMDB_API_KEY}&language=fr-FR`);
+            // Conversion vitale de "series" vers "tv" pour l'API TMDB
+            const tmdbType = item.type === 'series' ? 'tv' : 'movie';
+            const res = await fetch(`${TMDB_BASE}/${tmdbType}/${item.apiId}?api_key=${TMDB_API_KEY}&language=fr-FR`);
+            
             if (res.ok) {
                 const m = await res.json();
                 if (m.overview) item.summary = m.overview;
                 // Intégration de getEnhancedRating
                 if (m.vote_average !== undefined) {
-                     item.rating = await getEnhancedRating(item.apiId, item.type === 'series' ? 'tv' : 'movie', m.vote_average, m.vote_count);
+                     item.rating = await getEnhancedRating(item.apiId, tmdbType, m.vote_average, m.vote_count);
                 }
                 if (m.networks?.length) item.network = m.networks[0].name;
-                // 1. Enregistrement de la date de sortie complète pour les films
+                // Enregistrement de la date de sortie complète pour les films
                 if (item.type === 'movie' && m.release_date) {
                     item.releaseDate = m.release_date;
                 }
             }
-        } catch (e) {}
+        } catch (e) {
+            console.error("Erreur lors de l'enrichissement :", e);
+        }
     }));
     return items;
 }
