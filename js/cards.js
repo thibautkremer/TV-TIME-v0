@@ -63,7 +63,7 @@ function createMediaCard(media, context = 'library') {
     const libItem = isMediaInLibrary(media);
     const m = libItem || media;
     
-    // 4. Utilisation de la nouvelle logique Anime globale
+    // Utilisation de la nouvelle logique Anime globale
     const isAnime = (m.genres || []).includes('Anime') || (m.genres || []).includes('Animation') || m.original_language === 'ja';
     const colorClass = m.type === 'movie' ? 'bg-red-900/40' : (isAnime ? 'bg-purple-900/40' : 'bg-blue-900/40');
     
@@ -78,7 +78,7 @@ function createMediaCard(media, context = 'library') {
         topLeft = `<div class="absolute top-1 left-1 bg-black/70 text-yellow-400 text-[9px] font-bold px-1.5 py-0.5 rounded z-10 border border-yellow-700/50 shadow">★ ${rating.toFixed(1)}</div>`;
     }
     
-    // 1. Affichage de l'année uniquement
+    // Affichage de l'année uniquement
     let displayYear = 'N/A';
     if (m.releaseDate) {
         displayYear = m.releaseDate.substring(0,4);
