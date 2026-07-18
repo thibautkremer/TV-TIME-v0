@@ -1,145 +1,155 @@
 'use strict';
 // ============================================================
-// LIBRARY — onglet "Suivis" (filtres, tri, rendu)
+// LIBRARY — Affichage, filtrage et tri des médias suivis
 // ============================================================
 
-function setupFiltersUI() {
-    const typeSelect = document.getElementById('libraryTypeFilter');
-    if (typeSelect && !typeSelect.querySelector('option[value="anime"]')) {
-        const opt = document.createElement('option');
-        opt.value = 'anime'; opt.textContent = 'Animes';
-        typeSelect.insertBefore(opt, typeSelect.options[2]);
-    }
-    
-    const sortSelect = document.getElementById('librarySortFilter');
-    if (sortSelect && !sortSelect.querySelector('option[value="smart"]')) {
-        const opt = document.createElement('option');
-        opt.value = 'smart'; opt.textContent = 'Ordre Intelligent (Défaut)';
-        sortSelect.insertBefore(opt, sortSelect.firstChild);
-        if (!sortSelect.hasAttribute('data-initialized')) {
-            sortSelect.value = 'smart';
-            sortSelect.setAttribute('data-initialized', 'true');
-        }
-    }
-}
-
-function getSortTier(item) {
-    if (item.status === 'Abandoned') return -1;
-    const p = getProgress(item);
-    if (p > 0 && p < 100) return 2; // En cours
-    if (p === 0) return 1;          // Non commencé
-    return 0;                       // Terminé
-}
-
 function renderLibrary() {
-    setupFiltersUI();
-    
-    const typeFilter = document.getElementById('libraryTypeFilter').value;
-    const statusFilter = document.getElementById('libraryStatusFilter').value;
-    const diffusionFilter = document.getElementById('libraryDiffusionFilter').value;
-    let sortVal = document.getElementById('librarySortFilter').value;
-    if (!sortVal) sortVal = 'smart';
-    const searchVal = document.getElementById('librarySearch').value.toLowerCase();
-    const genreFilter = document.getElementById('smartGenreFilter').value;
-    const netFilter = document.getElementById('smartNetworkFilter').value;
+    const grid = document.getElementById('libraryGrid');
+    if (!grid) return;
 
-    let filtered = library.filter(i => {
-        const isAnime = (i.genres || []).includes('Anime') || (i.genres || []).includes('Animation') || i.original_language === 'ja';
+    // 1. Récupération de tous les filtres actifs
+    const query = (document.getElementById('librarySearch')?.value || '').toLowerCase().trim();
+    const typeFilter = document.getElementById('libraryTypeFilter')?.value || 'all';
+    const statusFilter = document.getElementById('libraryStatusFilter')?.value || 'all';
+    const diffusionFilter = document.getElementById('libraryDiffusionFilter')?.value || 'all';
+    const sortFilter = document.getElementById('librarySortFilter')?.value || 'date_desc';
+    const genreFilter = document.getElementById('smartGenreFilter')?.value || 'all';
+    const networkFilter = document.getElementById('smartNetworkFilter')?.value || 'all';
+
+    // 2. Le filtrage "Pare-balles"
+    let filtered = library.filter(item => {
         
-        if (typeFilter !== 'all') {
-            if (typeFilter === 'anime' && !isAnime) return false;
-            if (typeFilter === 'series' && (i.type !== 'series' || isAnime)) return false;
-            if (typeFilter === 'movie' && i.type !== 'movie') return false;
+        // --- Recherche Texte ---
+        if (query) {
+            const titleFr = (item.title_fr || '').toLowerCase();
+            const titleVo = (item.title || '').toLowerCase();
+            if (!titleFr.includes(query) && !titleVo.includes(query)) return false;
         }
 
+        // --- Filtres Déroulants Standards ---
+        if (typeFilter !== 'all' && item.type !== typeFilter) return false;
+        
         if (statusFilter !== 'all') {
-            if (statusFilter === 'not_finished' && (i.status === 'Watched' || i.status === 'Abandoned')) return false;
-            if (statusFilter === 'watched' && i.status !== 'Watched') return false;
-            if (statusFilter === 'abandoned' && i.status !== 'Abandoned') return false;
+            if (statusFilter === 'not_finished' && item.status !== 'In Progress') return false;
+            if (statusFilter === 'watched' && item.status !== 'Watched') return false;
+            if (statusFilter === 'abandoned' && item.status !== 'Abandoned') return false;
         }
-        
-        if (diffusionFilter !== 'all' && i.status_production?.toLowerCase() !== diffusionFilter.toLowerCase()) return false;
-        if (genreFilter !== 'all' && !(i.genres || []).includes(genreFilter)) return false;
-        if (netFilter !== 'all' && (i.network || 'Inconnu') !== netFilter) return false;
-        if (searchVal && !(i.title?.toLowerCase().includes(searchVal) || i.title_fr?.toLowerCase().includes(searchVal))) return false;
-        
-        // Filtrage spécifique depuis le graphique de la page Profil
-        if (window.activeGlobalFilter && window.activeGlobalFilter.type === 'rating') {
-            const targetRating = window.activeGlobalFilter.value;
-            const r = getCalculatedRating(i);
-            if (r === 0) return false; // On ignore ceux qui n'ont pas de note
-            if (targetRating === '< 5') {
-                if (r >= 5) return false;
-            } else {
-                let rounded = Math.round(r * 2) / 2;
-                let key = rounded.toFixed(1).replace('.0', '');
-                if (key !== targetRating) return false;
+
+        if (diffusionFilter !== 'all') {
+            const prodStatus = (item.status_production || '').toLowerCase();
+            if (diffusionFilter === 'running' && !prodStatus.includes('running')) return false;
+            if (diffusionFilter === 'ended' && !prodStatus.includes('ended')) return false;
+            if (diffusionFilter === 'canceled' && !prodStatus.includes('cancel')) return false;
+        }
+
+        if (genreFilter !== 'all') {
+            if (!item.genres || !item.genres.includes(genreFilter)) return false;
+        }
+
+        if (networkFilter !== 'all') {
+            if (!item.network || !item.network.includes(networkFilter)) return false;
+        }
+
+        // --- Filtre Global (depuis la page Profil) ---
+        if (window.activeGlobalFilter) {
+            if (window.activeGlobalFilter.type === 'genre' && (!item.genres || !item.genres.includes(window.activeGlobalFilter.value))) return false;
+            if (window.activeGlobalFilter.type === 'network' && item.network !== window.activeGlobalFilter.value) return false;
+            if (window.activeGlobalFilter.type === 'rating') {
+                const rate = item.rating || 0;
+                const [min, max] = window.activeGlobalFilter.value;
+                if (rate < min || rate >= max) return false;
             }
         }
-        
-        return true;
+
+        // Si l'élément a passé TOUS les tests sans déclencher de "return false", on le garde !
+        return true; 
     });
 
+    // 3. Tri des résultats
     filtered.sort((a, b) => {
-        if (sortVal === 'smart') {
-            const typeA = a.type === 'movie' ? 1 : 0;
-            const typeB = b.type === 'movie' ? 1 : 0;
-            if (typeA !== typeB) return typeA - typeB; // Séries/Anime d'abord
-            
-            const tierA = getSortTier(a);
-            const tierB = getSortTier(b);
-            if (tierA !== tierB) return tierB - tierA; // Commencés > Non Commencés > Finis
-            
-            return (b.last_modified || 0) - (a.last_modified || 0); // Dernière activité
+        switch (sortFilter) {
+            case 'date_desc': 
+                return (b.last_modified || 0) - (a.last_modified || 0);
+            case 'date_asc': 
+                return (a.last_modified || 0) - (b.last_modified || 0);
+            case 'title_asc': 
+                return (a.title_fr || a.title || '').localeCompare(b.title_fr || b.title || '');
+            case 'title_desc': 
+                return (b.title_fr || b.title || '').localeCompare(a.title_fr || a.title || '');
+            case 'rating_desc': 
+                return (b.rating || 0) - (a.rating || 0);
+            case 'rating_asc': 
+                return (a.rating || 0) - (b.rating || 0);
+            case 'prog_desc': 
+                return (getProgress(b) || 0) - (getProgress(a) || 0);
+            case 'prog_asc': 
+                return (getProgress(a) || 0) - (getProgress(b) || 0);
+            default: 
+                return 0;
         }
-        if (sortVal === 'date_desc') return (b.last_modified || 0) - (a.last_modified || 0);
-        if (sortVal === 'prog_desc') return getProgress(b) - getProgress(a);
-        if (sortVal === 'prog_asc') return getProgress(a) - getProgress(b);
-        if (sortVal === 'title_asc') return (a.title_fr || a.title || '').localeCompare(b.title_fr || b.title || '');
-        if (sortVal === 'title_desc') return (b.title_fr || b.title || '').localeCompare(a.title_fr || a.title || '');
-        if (sortVal === 'date_asc') return (a.addedAt || 0) - (b.addedAt || 0);
-        if (sortVal === 'rating_desc') return getCalculatedRating(b) - getCalculatedRating(a);
-        if (sortVal === 'rating_asc') return getCalculatedRating(a) - getCalculatedRating(b);
-        return 0;
     });
 
-    const container = document.getElementById('libraryGrid');
-    container.innerHTML = '';
+    // 4. Mise à jour de l'UI (Compteur)
+    const countEl = document.getElementById('libCount');
+    if (countEl) {
+        countEl.textContent = filtered.length;
+        countEl.classList.remove('hidden');
+    }
+
+    // 5. Rendu HTML
+    grid.innerHTML = '';
+    if (filtered.length === 0) {
+        grid.innerHTML = `<div class="col-span-full text-center py-10 text-gray-500 font-bold text-sm bg-gray-800/50 rounded-xl border border-gray-700/50">Aucun média trouvé avec ces filtres.</div>`;
+        return;
+    }
+
     const frag = document.createDocumentFragment();
-    filtered.forEach(m => frag.appendChild(createMediaCard(m, 'library')));
-    container.appendChild(frag);
-    observeLazyImages();
+    filtered.forEach(item => {
+        if (typeof createMediaCard === 'function') {
+            frag.appendChild(createMediaCard(item, 'library'));
+        }
+    });
+    grid.appendChild(frag);
 }
 
-function applyGlobalFilter(type, value) {
-    window.activeGlobalFilter = { type, value };
-    document.getElementById('globalFilterActive').classList.remove('hidden');
-    document.getElementById('globalFilterText').textContent = `${type}: ${value}`;
+// ============================================================
+// OUTILS DE GESTION DES FILTRES
+// ============================================================
+
+function resetLibFilters() {
+    // Réinitialisation de tous les champs aux valeurs par défaut
+    const searchInput = document.getElementById('librarySearch');
+    if (searchInput) searchInput.value = '';
     
-    if (type === 'genre') document.getElementById('smartGenreFilter').value = value;
-    if (type === 'network') document.getElementById('smartNetworkFilter').value = value;
-    renderLibrary();
-    switchTab('library');
+    document.getElementById('libraryTypeFilter').value = 'all';
+    document.getElementById('libraryStatusFilter').value = 'all'; // Forcé à 'all' pour éviter les disparitions
+    document.getElementById('libraryDiffusionFilter').value = 'all';
+    document.getElementById('librarySortFilter').value = 'date_desc';
+    document.getElementById('smartGenreFilter').value = 'all';
+    document.getElementById('smartNetworkFilter').value = 'all';
+    
+    const clearBtn = document.getElementById('clearLibSearchBtn');
+    if (clearBtn) clearBtn.classList.add('hidden');
+    
+    clearGlobalFilter(); // Cette fonction appellera renderLibrary() automatiquement
 }
 
 function clearGlobalFilter() {
     window.activeGlobalFilter = null;
-    document.getElementById('globalFilterActive').classList.add('hidden');
-    document.getElementById('smartGenreFilter').value = 'all';
-    document.getElementById('smartNetworkFilter').value = 'all';
+    const globalActiveEl = document.getElementById('globalFilterActive');
+    if (globalActiveEl) globalActiveEl.classList.add('hidden');
     renderLibrary();
 }
 
-function resetLibFilters() {
-    document.getElementById('libraryTypeFilter').value = 'all';
-    document.getElementById('libraryStatusFilter').value = 'not_finished';
-    document.getElementById('libraryDiffusionFilter').value = 'all';
-    document.getElementById('librarySortFilter').value = 'smart';
-    document.getElementById('smartGenreFilter').value = 'all';
-    document.getElementById('smartNetworkFilter').value = 'all';
-    document.getElementById('librarySearch').value = '';
-    document.getElementById('clearLibSearchBtn').classList.add('hidden');
-    window.activeGlobalFilter = null;
-    document.getElementById('globalFilterActive').classList.add('hidden');
+function setGlobalFilter(type, value, label) {
+    window.activeGlobalFilter = { type, value };
+    
+    const textEl = document.getElementById('globalFilterText');
+    const activeEl = document.getElementById('globalFilterActive');
+    
+    if (textEl) textEl.textContent = `Filtre actif : ${label}`;
+    if (activeEl) activeEl.classList.remove('hidden');
+    
+    if (typeof switchTab === 'function') switchTab('library');
     renderLibrary();
 }
