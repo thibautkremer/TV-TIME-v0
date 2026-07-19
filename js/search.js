@@ -5,25 +5,34 @@
 
 window.currentSearchType = 'series';
 
-function ensureSearchAnimeButton() {
-    const btnSeries = document.getElementById('btn-search-type-series');
-    const container = btnSeries?.parentElement;
-    if (container && !document.getElementById('btn-search-type-anime')) {
-        const btnAnime = document.createElement('button');
-        btnAnime.id = 'btn-search-type-anime';
-        btnAnime.onclick = () => setSearchType('anime');
-        btnAnime.textContent = 'Animes';
-        btnAnime.className = 'px-5 py-1.5 text-xs font-bold rounded text-gray-400 hover:text-white transition';
-        container.appendChild(btnAnime);
+// Initialisation au chargement
+document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('searchInput');
+    let timeout = null;
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => performSearch(e.target.value.trim()), 500);
+            
+            const clearBtn = document.getElementById('clearSearchBtn');
+            if (clearBtn) clearBtn.classList.toggle('hidden', e.target.value.length === 0);
+        });
     }
-}
+});
 
 function setSearchType(type) {
-    ensureSearchAnimeButton();
     window.currentSearchType = type;
-    ['series', 'movie', 'anime'].forEach(t => {
+    
+    // Mise à jour visuelle des boutons
+    ['series', 'anime', 'movie'].forEach(t => {
         const btn = document.getElementById(`btn-search-type-${t}`);
-        if (btn) btn.className = type === t ? 'px-5 py-1.5 text-xs font-bold rounded shadow bg-teal-600 text-white transition' : 'px-5 py-1.5 text-xs font-bold rounded text-gray-400 hover:text-white transition';
+        if (btn) {
+            if (type === t) {
+                btn.className = 'py-2 px-1 text-[10px] font-black rounded-lg bg-teal-600 text-white shadow transition flex items-center justify-center text-center';
+            } else {
+                btn.className = 'py-2 px-1 text-[10px] font-bold rounded-lg text-gray-400 hover:bg-gray-700 transition flex items-center justify-center text-center';
+            }
+        }
     });
     
     const input = document.getElementById('searchInput');
@@ -44,25 +53,19 @@ async function performSearch(query) {
 
     if (typeof displayLoadingSkeletons === 'function') displayLoadingSkeletons('searchResults', 6);
 
-    // TMDB ne permet pas de filtrer /search/multi par genre facilement. 
-    // On utilise les points d'entrée spécifiques et on filtre localement pour les animes.
     let endpoint = window.currentSearchType === 'movie' ? 'movie' : 'tv';
     let url = `${TMDB_BASE}/search/${endpoint}?api_key=${TMDB_API_KEY}&language=fr-FR&query=${encodeURIComponent(query)}&page=1`;
 
     try {
         const res = await fetch(url);
         const data = await res.json();
-        
         let results = data.results || [];
 
-        // Filtre strict pour l'onglet actif
         results = results.filter(m => {
-            if (window.currentSearchType === 'movie') return true; // C'est déjà filtré par l'endpoint
-            
+            if (window.currentSearchType === 'movie') return true;
             const isAnime = (m.genre_ids || []).includes(16) || m.original_language === 'ja';
             if (window.currentSearchType === 'anime') return isAnime;
             if (window.currentSearchType === 'series') return !isAnime;
-            
             return true;
         });
 
@@ -80,12 +83,9 @@ async function performSearch(query) {
                 genres: m.genre_ids
             }));
         }
-
         renderSearchGrid();
-
     } catch (error) {
         console.error("Erreur de recherche:", error);
-        grid.innerHTML = '<p class="text-center text-red-500 text-xs w-full py-4">Erreur de connexion.</p>';
     }
 }
 
@@ -107,16 +107,3 @@ function renderSearchGrid() {
     
     if (typeof observeLazyImages === 'function') observeLazyImages();
 }
-
-// Initialisation au chargement
-document.addEventListener('DOMContentLoaded', () => {
-    ensureSearchAnimeButton();
-    const searchInput = document.getElementById('searchInput');
-    let timeout = null;
-    if (searchInput) {
-        searchInput.addEventListener('input', (e) => {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => performSearch(e.target.value.trim()), 500);
-        });
-    }
-});
