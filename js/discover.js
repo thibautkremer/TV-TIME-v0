@@ -1,6 +1,6 @@
 'use strict';
 // ============================================================
-// DISCOVER — onglet "Découvrir" avec Skeletons UI et Pagination
+// DISCOVER — Suggestions intelligentes et Tops
 // ============================================================
 
 function ensureDiscoverAnimeButton() {
@@ -41,9 +41,12 @@ function setDiscoverMode(mode) {
 
 function displayLoadingSkeletons(containerId, count = 15) {
     const container = document.getElementById(containerId);
+    if (!container) return;
     container.innerHTML = '';
     const frag = document.createDocumentFragment();
-    for (let i = 0; i < count; i++) frag.appendChild(createSkeletonCard());
+    for (let i = 0; i < count; i++) {
+        if (typeof createSkeletonCard === 'function') frag.appendChild(createSkeletonCard());
+    }
     container.appendChild(frag);
 }
 
@@ -58,22 +61,20 @@ async function renderDiscoverTab(isAppend = false) {
     if (discoverMediaType === 'anime') {
         extraParams = '&with_genres=16&with_original_language=ja';
     } else if (discoverMediaType === 'series') {
-        extraParams = '&without_genres=16'; // Exclure les animes pour les séries classiques
+        extraParams = '&without_genres=16';
     }
 
     let baseApiUrl = '';
     if (currentDiscoverMode === 'top') {
-        baseApiUrl = `${TMDB_BASE}/discover/${endpoint}?api_key=${TMDB_API_KEY}&language=fr-FR&sort_by=vote_average.desc&vote_count.gte=300${extraParams}`;
+        // EXIGENCE : Ne prend en compte que les médias avec beaucoup de notes (>= 500)
+        baseApiUrl = `${TMDB_BASE}/discover/${endpoint}?api_key=${TMDB_API_KEY}&language=fr-FR&sort_by=vote_average.desc&vote_count.gte=500${extraParams}`;
     } else if (currentDiscoverMode === 'trending') {
         baseApiUrl = `${TMDB_BASE}/trending/${endpoint}/week?api_key=${TMDB_API_KEY}&language=fr-FR`;
     } else {
-        // Mode "Pour Vous" (mix) : On récupère un bassin large et on calcule le "Match" localement 
-        // pour ne pas faire crasher l'API avec des noms de genres en texte.
         baseApiUrl = `${TMDB_BASE}/discover/${endpoint}?api_key=${TMDB_API_KEY}&language=fr-FR&sort_by=popularity.desc&vote_count.gte=100${extraParams}`;
     }
 
     try {
-        // Appeler 3 pages d'un coup pour garantir un volume de ~60 résultats
         const pages = [discoverPage, discoverPage + 1, discoverPage + 2];
         const fetchPromises = pages.map(p => fetch(`${baseApiUrl}&page=${p}`).then(r => r.json()).catch(() => ({})));
         const resultsArray = await Promise.all(fetchPromises);
@@ -81,7 +82,6 @@ async function renderDiscoverTab(isAppend = false) {
         let rawResults = [];
         resultsArray.forEach(data => { if (data.results) rawResults.push(...data.results); });
         
-        // Filtre manuel pour les tendances qui n'acceptent pas de paramètres d'exclusion (Anime vs Série)
         if (currentDiscoverMode === 'trending') {
             rawResults = rawResults.filter(m => {
                 const isAnime = (m.genre_ids || []).includes(16) || m.original_language === 'ja';
@@ -103,65 +103,51 @@ async function renderDiscoverTab(isAppend = false) {
             network: m.networks?.[0]?.name || 'TMDB',
             original_language: m.original_language,
             genres: m.genre_ids 
-        })).filter(v => !isMediaInLibrary(v));
+        })).filter(v => typeof isMediaInLibrary === 'function' && !isMediaInLibrary(v));
 
-        // Déduplication de sécurité
         pool = pool.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
 
         let scoredPool = pool;
         
         if (currentDiscoverMode === 'mix') {
-            // --- ALGORITHME DE MATCH INTELLIGENT ---
-            // 1. Analyse de votre librairie pour déduire vos genres favoris et les mapper en IDs TMDB
             const userGenreScore = {};
-            library.forEach(item => {
-                if (item.type === (discoverMediaType === 'movie' ? 'movie' : 'series')) {
-                    (item.genres || []).forEach(g => {
-                        let id = null;
-                        if (!isNaN(g)) id = parseInt(g);
-                        else {
-                            const str = String(g).toLowerCase();
-                            if (str.includes('anime') || str.includes('animation')) id = 16;
-                            else if (str.includes('drama') || str.includes('drame')) id = 18;
-                            else if (str.includes('comed') || str.includes('coméd')) id = 35;
-                            else if (str.includes('action') || str.includes('aventure')) id = discoverMediaType === 'movie' ? 28 : 10759;
-                            else if (str.includes('sci-fi') || str.includes('science') || str.includes('fantasy')) id = discoverMediaType === 'movie' ? 878 : 10765;
-                            else if (str.includes('crime')) id = 80;
-                            else if (str.includes('mystery') || str.includes('mystère')) id = 9648;
-                            else if (str.includes('thriller')) id = 53;
-                            else if (str.includes('horror') || str.includes('horreur')) id = 27;
-                            else if (str.includes('romance')) id = 10749;
-                        }
-                        if (id) userGenreScore[id] = (userGenreScore[id] || 0) + 1;
-                    });
-                }
-            });
+            if (typeof library !== 'undefined') {
+                library.forEach(item => {
+                    if (item.type === (discoverMediaType === 'movie' ? 'movie' : 'series')) {
+                        (item.genres || []).forEach(g => {
+                            let id = null;
+                            if (!isNaN(g)) id = parseInt(g);
+                            else {
+                                const str = String(g).toLowerCase();
+                                if (str.includes('anime') || str.includes('animation')) id = 16;
+                                else if (str.includes('drama') || str.includes('drame')) id = 18;
+                                else if (str.includes('comed') || str.includes('coméd')) id = 35;
+                                else if (str.includes('action') || str.includes('aventure')) id = discoverMediaType === 'movie' ? 28 : 10759;
+                                else if (str.includes('sci-fi') || str.includes('science') || str.includes('fantasy')) id = discoverMediaType === 'movie' ? 878 : 10765;
+                                else if (str.includes('crime')) id = 80;
+                                else if (str.includes('mystery') || str.includes('mystère')) id = 9648;
+                                else if (str.includes('thriller')) id = 53;
+                                else if (str.includes('horror') || str.includes('horreur')) id = 27;
+                                else if (str.includes('romance')) id = 10749;
+                            }
+                            if (id) userGenreScore[id] = (userGenreScore[id] || 0) + 1;
+                        });
+                    }
+                });
+            }
 
-            // 2. Normalisation du score max (le genre le plus vu donne 100% du bonus)
             const maxGScore = Math.max(...Object.values(userGenreScore), 1);
 
-            // 3. Attribution du "Match %" à chaque média suggéré
             scoredPool = pool.map(m => {
                 let gScore = 0;
                 (m.genres || []).forEach(gId => {
-                    if (userGenreScore[gId]) {
-                        gScore += (userGenreScore[gId] / maxGScore) * 6; // Bonus d'affinité jusqu'à 6 points
-                    }
+                    if (userGenreScore[gId]) gScore += (userGenreScore[gId] / maxGScore) * 6;
                 });
-                
-                // La note TMDB sur 10 + Le bonus d'affinité sur 6 = Score sur 16 
                 let rawScore = m.rating + Math.min(gScore, 6); 
-                
-                // Transformation en pourcentage
                 let match = Math.min(99, Math.max(15, Math.round((rawScore / 16) * 100)));
-                
-                // Petite variation organique (+ ou - 2%) pour casser la monotonie
                 match += Math.floor(Math.random() * 5) - 2; 
-
                 return { ...m, matchPercent: Math.min(99, Math.max(10, match)) }; 
             });
-            
-            // 4. Tri du flux pour afficher vos meilleurs matchs en premier
             scoredPool.sort((a, b) => b.matchPercent - a.matchPercent);
             
         } else if (currentDiscoverMode === 'top') {
@@ -177,27 +163,32 @@ async function renderDiscoverTab(isAppend = false) {
             discoverResults = scoredPool;
             renderDiscoverGrid(true, discoverResults); 
         }
-        
         discoverPage += 3;
         
     } catch (e) {
-        if (!isAppend) document.getElementById('discoverGrid').innerHTML = '<p class="text-center text-gray-500">Erreur de chargement.</p>';
+        if (!isAppend) {
+            const grid = document.getElementById('discoverGrid');
+            if (grid) grid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Erreur de chargement.</p>';
+        }
     }
 }
 
 function renderDiscoverGrid(clear = false, itemsToRender = []) {
     const container = document.getElementById('discoverGrid'); 
+    if (!container) return;
     if (clear) container.innerHTML = '';
     
     const frag = document.createDocumentFragment(); 
-    itemsToRender.forEach(m => frag.appendChild(createMediaCard(m, 'discover')));
+    itemsToRender.forEach(m => {
+        if (typeof createMediaCard === 'function') frag.appendChild(createMediaCard(m, 'discover'));
+    });
     container.appendChild(frag); 
     
-    observeLazyImages();
+    if (typeof observeLazyImages === 'function') observeLazyImages();
 }
 
 const discoverObserver = new IntersectionObserver(entries => { 
-    if (entries[0].isIntersecting && discoverResults.length > 0) { 
+    if (entries[0].isIntersecting && typeof discoverResults !== 'undefined' && discoverResults.length > 0) { 
         renderDiscoverTab(true); 
     } 
 });
