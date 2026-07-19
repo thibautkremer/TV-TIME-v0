@@ -42,14 +42,17 @@
             </div>
         </div>
         <div id="searchResults" class="media-grid"></div>
+        <div id="searchSentinel" class="h-4"></div>
     </div>
 
     <!-- DÉCOUVRIR -->
     <div id="tab-discover" class="space-y-4 hidden">
-        <div class="bg-gray-800 p-3 rounded-xl border border-gray-700 flex flex-col gap-3">
-            <div class="flex justify-center bg-gray-900 rounded-lg p-0.5 border border-gray-700">
-                <button onclick="setDiscoverType('series')" id="btn-disc-type-series" class="flex-1 py-1.5 text-xs font-bold rounded bg-teal-600 text-white shadow">Séries</button>
-                <button onclick="setDiscoverType('movie')" id="btn-disc-type-movie" class="flex-1 py-1.5 text-xs font-bold rounded text-gray-400">Films</button>
+        <div class="bg-gray-800 p-3 sm:p-4 rounded-xl border border-gray-700 flex flex-col gap-3">
+            <div class="flex justify-center items-center mb-1">                
+                <div class="flex bg-gray-900 rounded-lg p-0.5 border border-gray-700">
+                    <button onclick="setDiscoverType('series')" id="btn-disc-type-series" class="px-5 py-1.5 text-xs font-bold rounded shadow bg-teal-600 text-white transition">Séries</button>
+                    <button onclick="setDiscoverType('movie')" id="btn-disc-type-movie" class="px-5 py-1.5 text-xs font-bold rounded text-gray-400 hover:text-white transition">Films</button>
+                </div>
             </div>
             <div class="grid grid-cols-3 gap-2">
                 <button onclick="setDiscoverMode('mix')" id="btn-disc-mix" class="py-1.5 text-xs font-bold rounded bg-teal-600 text-white shadow">Pour vous</button>
@@ -58,6 +61,7 @@
             </div>
         </div>
         <div id="discoverGrid" class="media-grid"></div>
+        <div id="discoverSentinel" class="h-4"></div>
     </div>
 
     <!-- CALENDRIER -->
@@ -77,114 +81,176 @@
     <!-- ========================================== -->
         <!-- ONGLET : SUIVIS (LIBRARY) -->
         <!-- ========================================== -->
-        <section id="tab-library" class="p-4">
-            
-            <!-- Alerte Filtre Global depuis Profil -->
-            <div id="globalFilterActive" class="hidden mb-4 bg-teal-900/30 border border-teal-800 rounded-xl p-3 flex justify-between items-center">
-                <span id="globalFilterText" class="text-xs font-bold text-teal-400">Filtre actif : ...</span>
-                <button id="clearLibSearchBtn" onclick="clearGlobalFilter()" class="text-[10px] bg-teal-800 hover:bg-teal-700 text-white px-2 py-1 rounded">✕ Annuler</button>
+        <div id="tab-library" class="space-y-3 hidden">
+        <div id="globalFilterActive" class="hidden bg-indigo-900/50 border border-indigo-700 text-indigo-200 px-3 py-2 rounded-lg text-xs flex justify-between items-center mb-1">
+            <span id="globalFilterText" class="font-bold"></span>
+            <button onclick="clearGlobalFilter()" class="font-bold bg-indigo-700 hover:bg-indigo-600 px-2 py-1 rounded text-white transition">✕ Effacer</button>
+        </div>
+
+        <div class="flex gap-2 items-center overflow-x-auto hide-scroll pb-2 border-b border-gray-800">
+            <select id="libraryTypeFilter" onchange="renderLibrary()" class="bg-gray-800 border border-gray-700 rounded-lg text-[10px] px-2 py-1.5 text-gray-300 shrink-0">
+                <option value="all">Tous types</option>
+                <option value="series">Séries</option>
+                <option value="movie">Films</option>
+            </select>
+            <select id="libraryStatusFilter" onchange="renderLibrary()" class="bg-gray-800 border border-gray-700 rounded-lg text-[10px] px-2 py-1.5 text-gray-300 shrink-0">
+                <option value="all">Tous visionnages</option>
+                <option value="not_finished" selected>En cours</option>
+                <option value="watched">Terminé</option>
+                <option value="abandoned">Abandonné</option>
+            </select>
+            <select id="libraryDiffusionFilter" onchange="renderLibrary()" class="bg-gray-800 border border-gray-700 rounded-lg text-[10px] px-2 py-1.5 text-gray-300 shrink-0">
+                <option value="all">Toutes diffusions</option>
+                <option value="running">En cours</option>
+                <option value="ended">Terminée</option>
+                <option value="canceled">Annulée</option>
+            </select>
+        </div>
+        
+        <div class="flex gap-2 overflow-x-auto pb-1 hide-scroll">
+            <select id="librarySortFilter" onchange="renderLibrary()" class="bg-gray-800 border border-gray-700 rounded-lg text-[10px] px-2 py-1 text-gray-300 shrink-0">
+                <option value="date_desc" selected>Dernière activité</option>
+                <option value="prog_desc">Avancée (Max ➔ Min)</option>
+                <option value="prog_asc">Avancée (Min ➔ Max)</option>
+                <option value="title_asc">Titre (A ➔ Z)</option>
+                <option value="title_desc">Titre (Z ➔ A)</option>
+                <option value="date_asc">Ajout (Plus ancien)</option>
+                <option value="rating_desc">Note (Meilleure)</option>
+                <option value="rating_asc">Note (Moins bonne)</option>
+            </select>
+            <select id="smartGenreFilter" onchange="renderLibrary()" class="bg-gray-800 border border-gray-700 rounded-lg text-[10px] px-2 py-1 text-gray-300 shrink-0">
+                <option value="all">Tous les Genres</option>
+                <option value="Action">Action</option>
+                <option value="Anime">Anime</option>
+                <option value="Comedy">Comédie</option>
+                <option value="Drama">Drame</option>
+                <option value="Fantasy">Fantasy</option>
+                <option value="Science-Fiction">Sci-Fi</option>
+            </select>
+            <select id="smartNetworkFilter" onchange="renderLibrary()" class="bg-gray-800 border border-gray-700 rounded-lg text-[10px] px-2 py-1 text-gray-300 shrink-0">
+                <option value="all">Plateformes</option>
+                <option value="Netflix">Netflix</option>
+                <option value="HBO">HBO</option>
+                <option value="Amazon">Amazon</option>
+                <option value="Disney+">Disney+</option>
+                <option value="Apple TV+">Apple TV+</option>
+            </select>
+        </div>
+
+        <div class="mb-3 flex gap-2 items-center">
+            <div class="relative flex-1">
+                <input type="text" id="librarySearch" oninput="document.getElementById('clearLibSearchBtn').classList.toggle('hidden', this.value.length === 0); renderLibrary()" placeholder="Rechercher (Titre FR ou VO)..." class="bg-gray-800 border border-gray-700 rounded-lg text-xs px-3 py-2 w-full text-white pr-10">
+                <button id="clearLibSearchBtn" onclick="document.getElementById('librarySearch').value=''; this.classList.add('hidden'); renderLibrary()" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white font-bold hidden text-sm">✕</button>
             </div>
+            <button onclick="resetLibFilters()" class="shrink-0 text-[11px] font-bold px-3 py-2 rounded-lg bg-gray-700 text-white hover:bg-gray-600 transition shadow">✕ Reset</button>
+        </div>
+        <div id="libraryGrid" class="media-grid"></div>
+    </div>
 
-            <!-- Barre de recherche locale -->
-            <input type="text" id="librarySearch" onkeyup="renderLibrary()" placeholder="Filtrer mes suivis..." class="w-full bg-gray-900 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 mb-4 focus:outline-none focus:border-teal-500 transition shadow-inner">
-            
-            <!-- Menu de filtres -->
-            <div class="grid grid-cols-2 gap-2 mb-6">
-                <select id="libraryTypeFilter" onchange="renderLibrary()" class="bg-gray-800 text-xs text-white border border-gray-700 rounded-lg px-2 py-2 focus:outline-none">
-                    <option value="all">Tous les types</option>
-                    <option value="series">Séries</option>
-                    <option value="anime">Animes</option>
-                    <option value="movie">Films</option>
-                </select>
-                <select id="libraryStatusFilter" onchange="renderLibrary()" class="bg-gray-800 text-xs text-white border border-gray-700 rounded-lg px-2 py-2 focus:outline-none">
-                    <option value="all">Tous les statuts</option>
-                    <option value="not_finished">En cours</option>
-                    <option value="watched">Terminés / Vus</option>
-                    <option value="abandoned">Abandonnés</option>
-                </select>
-                <select id="librarySortFilter" onchange="renderLibrary()" class="bg-gray-800 text-xs text-white border border-gray-700 rounded-lg px-2 py-2 focus:outline-none">
-                    <option value="date_desc">Intelligent (Défaut)</option>
-                    <option value="date_asc">Moins récent</option>
-                    <option value="title_asc">A-Z</option>
-                    <option value="title_desc">Z-A</option>
-                    <option value="rating_desc">Mieux notés</option>
-                    <option value="prog_desc">Plus avancés</option>
-                </select>
-                <select id="libraryDiffusionFilter" onchange="renderLibrary()" class="bg-gray-800 text-xs text-white border border-gray-700 rounded-lg px-2 py-2 focus:outline-none">
-                    <option value="all">Toutes diffusions</option>
-                    <option value="running">En production</option>
-                    <option value="ended">Série Terminée</option>
-                    <option value="canceled">Annulée</option>
-                </select>
-                <!-- Filtres cachés utilisés par la logique JS -->
-                <select id="smartGenreFilter" class="hidden"></select>
-                <select id="smartNetworkFilter" class="hidden"></select>
+        <div id="tab-profile" class="space-y-4 hidden">       
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center">
+                <div id="stat-hours" class="text-lg font-black text-teal-400 tracking-wide">0 h</div>
+                <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Temps regardé</div>
             </div>
-
-            <div id="libraryGrid" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3"></div>
-        </section>
-
-        <!-- ========================================== -->
-        <!-- ONGLET : PROFIL (Statistiques) -->
-        <!-- ========================================== -->
-        <section id="tab-profile" class="p-4 hidden">
-            <h2 class="text-xl font-black mb-6 border-b border-gray-800 pb-2">Statistiques</h2>
-            <div id="statsContainer" class="space-y-6">
-                <!-- Rempli par le JS (profile.js) -->
+            <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center">
+                <div id="stat-backlog-hours" class="text-lg font-black text-purple-400 tracking-wide">0 h</div>
+                <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Backlog</div>
             </div>
-        </section>
-
-        <!-- ========================================== -->
-        <!-- ONGLET : ADMIN & RÉGLAGES -->
-        <!-- ========================================== -->
-        <section id="tab-admin" class="p-4 hidden">
-            <h2 class="text-xl font-black mb-6 border-b border-gray-800 pb-2">Administration</h2>
-            
-            <div class="space-y-4 mb-8">
-                <button id="btn-mass-update-series" onclick="massUpdateLibrary('series')" class="w-full bg-teal-900/50 hover:bg-teal-800 text-teal-400 border border-teal-800 font-bold py-3 rounded-xl text-sm transition">🔄 Mettre à jour Séries</button>
-                <button id="btn-mass-update-movie" onclick="massUpdateLibrary('movie')" class="w-full bg-blue-900/50 hover:bg-blue-800 text-blue-400 border border-blue-800 font-bold py-3 rounded-xl text-sm transition">🔄 Mettre à jour Films</button>
-                <label class="w-full block text-center cursor-pointer bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 font-bold py-3 rounded-xl text-sm transition">
-                    📥 Importer Progression (JSON)
-                    <input type="file" class="hidden" accept=".json" onchange="importProgressionOnly(event)">
-                </label>
+            <div class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center">
+                <div id="stat-avg-rating" class="text-lg font-black text-yellow-400 tracking-wide">0.0</div>
+                <div class="text-[9px] uppercase text-gray-400 mt-1 tracking-wider">Note globale</div>
             </div>
+            <div id="stat-movies-finished" class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center"></div>
 
-            <div class="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden flex flex-col h-64 shadow-inner">
-                <div class="bg-gray-800 px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest flex justify-between">
-                    <span>Console Log</span>
-                    <button onclick="document.getElementById('adminConsoleBox').innerHTML=''" class="hover:text-white">Clear</button>
+            <div id="stat-series-grid" class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center"></div>
+            <div id="stat-series-eps-grid" class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center"></div>
+            <div id="stat-anime-grid" class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center"></div>
+            <div id="stat-anime-eps-grid" class="bg-gray-800 p-4 rounded-xl text-center border border-gray-700 shadow-md flex flex-col justify-center"></div>
+        </div>
+
+        <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-md space-y-2">
+            <h3 class="text-[11px] font-bold text-teal-400 uppercase tracking-wider mb-3">🏷️ Répartition par genres (Clic pour filtrer)</h3>
+            <div id="stat-genre-bars" class="space-y-3"></div>
+        </div>
+        
+        <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-md space-y-2">
+            <h3 class="text-[11px] font-bold text-blue-400 uppercase tracking-wider mb-3">🌐 Plateformes (Clic pour filtrer)</h3>
+            <div id="stat-network-bars" class="space-y-3"></div>
+        </div>
+
+        <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-md space-y-2">
+            <h3 class="text-[11px] font-bold text-yellow-400 uppercase tracking-wider mb-3">⭐ Répartition par notes (Clic pour filtrer)</h3>
+            <div id="stat-rating-bars" class="space-y-3"></div>
+        </div>
+
+        <!-- ADMINISTRATION -->
+        <div class="bg-gray-800 p-3 rounded-xl border border-gray-700 shadow-md">
+            <button onclick="document.getElementById('adminPanel').classList.toggle('hidden')" class="w-full text-center text-[11px] uppercase tracking-wider font-bold text-gray-400 hover:text-white py-1">⚙️ Administration ▾</button>
+            <div id="adminPanel" class="hidden mt-4 pt-3 border-t border-gray-700 space-y-4">
+                
+                <!-- Section MAJ API -->
+                <div class="space-y-2">
+                    <h4 class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Mises à jour API</h4>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button id="btn-mass-update-series" onclick="massUpdateLibrary('series')" class="bg-purple-800 hover:bg-purple-700 border border-purple-600 text-purple-100 text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition flex justify-center items-center px-2 overflow-hidden">
+                            <span class="truncate">🔄 MAJ API (Séries)</span>
+                        </button>
+                        <button id="btn-mass-update-movie" onclick="massUpdateLibrary('movie')" class="bg-amber-800 hover:bg-amber-700 border border-amber-600 text-amber-100 text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition flex justify-center items-center px-2 overflow-hidden">
+                            <span class="truncate">🔄 MAJ API (Films)</span>
+                        </button>
+                    </div>
                 </div>
-                <div id="adminConsoleBox" class="p-3 overflow-y-auto flex-1 font-mono text-xs"></div>
+
+                <!-- Section Données Locales -->
+                <div class="space-y-2">
+                    <h4 class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Données & Sauvegardes</h4>
+                    <div class="grid grid-cols-2 gap-2">
+                        <!-- Bouton Import Normal -->
+                        <label class="bg-teal-700 hover:bg-teal-600 border border-teal-600 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition flex justify-center items-center gap-2 cursor-pointer shadow">
+                            <span class="truncate">📂 Import Total</span><input type="file" multiple onchange="importLibrary(event)" class="hidden" accept=".json,.csv" />
+                        </label>
+                        <!-- Bouton Import Progression -->
+                        <label class="bg-indigo-700 hover:bg-indigo-600 border border-indigo-600 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition flex justify-center items-center gap-2 cursor-pointer shadow">
+                            <span class="truncate">📂 Import Prog.</span><input type="file" onchange="importProgressionOnly(event)" class="hidden" accept=".json" />
+                        </label>
+                        <button onclick="exportLibrary()" class="bg-blue-700 hover:bg-blue-600 border border-blue-600 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow flex justify-center items-center gap-2">
+                            <span class="truncate">💾 Export JSON</span>
+                        </button>
+                        <button onclick="clearAll()" class="bg-gray-800 hover:bg-red-950 border border-red-900/40 text-red-400 text-[10px] sm:text-xs font-bold py-3 rounded-xl transition shadow flex justify-center items-center gap-2">
+                            <span class="truncate">🗑 Vider Cache</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Section Outils -->
+                <div class="space-y-2">
+                    <h4 class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Outils & Notifications</h4>
+                    <button onclick="requestNotificationPermission()" class="w-full bg-yellow-600 hover:bg-yellow-500 text-white text-[10px] sm:text-xs font-bold py-3 rounded-xl shadow transition flex justify-center items-center gap-2">
+                        <span>🔔 Activer Notifications de Sortie</span>
+                    </button>
+                </div>
+
+                <!-- Section Préférences -->
+                <div class="bg-gray-900 p-3 rounded-xl border border-gray-700">
+                    <h4 class="text-[10px] font-bold text-teal-400 mb-2 uppercase tracking-wider">⭐ Plateformes (Boost Recherche)</h4>
+                    <div id="adminPlatformList" class="flex flex-wrap gap-2 max-h-36 overflow-y-auto hide-scroll pr-1"></div>
+                    <button onclick="savePlatformPrefs()" class="w-full mt-3 bg-teal-600 hover:bg-teal-500 text-white text-[10px] font-bold py-2 rounded-lg transition">💾 Enregistrer & Sync</button>
+                </div>
+
+                <!-- Section Console -->
+                <div class="bg-black/50 p-3 rounded-xl border border-gray-700">
+                    <div class="flex justify-between items-center mb-2">
+                        <h4 class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Console Logs</h4>
+                        <button onclick="document.getElementById('adminConsoleBox').innerHTML=''" class="text-[9px] text-gray-400 hover:text-white px-2 py-1 bg-gray-800 rounded">Effacer</button>
+                    </div>
+                    <div id="adminConsoleBox" class="h-32 overflow-y-auto bg-black p-2 rounded border border-gray-800 hide-scroll break-all"></div>
+                </div>
+
             </div>
-        </section>
-
-    </main>
-
-    <!-- ========================================== -->
-    <!-- BOTTOM NAVIGATION -->
-    <!-- ========================================== -->
-    <nav class="fixed bottom-0 w-full bg-gray-950 border-t border-gray-800 flex justify-around items-center pt-2 pb-3 z-50">
-        <button onclick="switchTab('discover')" class="flex flex-col items-center p-2 text-gray-500 hover:text-teal-400 transition">
-            <span class="text-xl mb-1">🧭</span>
-            <span class="text-[9px] font-bold uppercase tracking-wide">Découvrir</span>
-        </button>
-        <button onclick="switchTab('search')" class="flex flex-col items-center p-2 text-gray-500 hover:text-teal-400 transition">
-            <span class="text-xl mb-1">🔍</span>
-            <span class="text-[9px] font-bold uppercase tracking-wide">Chercher</span>
-        </button>
-        <button onclick="switchTab('library')" class="flex flex-col items-center p-2 text-teal-400 transition">
-            <span class="text-xl mb-1">📚</span>
-            <span class="text-[9px] font-bold uppercase tracking-wide">Suivis</span>
-        </button>
-        <button onclick="switchTab('profile')" class="flex flex-col items-center p-2 text-gray-500 hover:text-teal-400 transition">
-            <span class="text-xl mb-1">👤</span>
-            <span class="text-[9px] font-bold uppercase tracking-wide">Profil</span>
-        </button>
-        <button onclick="switchTab('admin')" class="flex flex-col items-center p-2 text-gray-500 hover:text-teal-400 transition">
-            <span class="text-xl mb-1">⚙️</span>
-            <span class="text-[9px] font-bold uppercase tracking-wide">Admin</span>
-        </button>
-    </nav>
+        </div>
+    </div>
+</main>
 
     <!-- ========================================== -->
     <!-- MODAL MÉDIA UNIVERSELLE -->
