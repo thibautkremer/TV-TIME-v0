@@ -3,7 +3,6 @@
 // ADMIN — MAJ de masse API (Metadata + Épisodes + Notes Hybrides)
 // ============================================================
 
-// Surcharge console pour UI Admin
 const _originalLog = console.log;
 const _originalWarn = console.warn;
 const _originalError = console.error;
@@ -49,7 +48,6 @@ function normalizePlatform(name) {
     return name;
 }
 
-// Fonction unifiée de synchro
 async function syncSingleMediaData(item) {
     const tmdbType = item.type === 'series' ? 'tv' : 'movie';
     const url = `${TMDB_BASE}/${tmdbType}/${item.apiId}?api_key=${TMDB_API_KEY}&language=fr-FR&append_to_response=watch/providers`;
@@ -59,7 +57,6 @@ async function syncSingleMediaData(item) {
     
     let changes = [];
     
-    // Récupération ID IMDB pour le système hybride
     let imdbId = null;
     try {
         const idsRes = await fetch(`${TMDB_BASE}/${tmdbType}/${item.apiId}/external_ids?api_key=${TMDB_API_KEY}`);
@@ -67,7 +64,7 @@ async function syncSingleMediaData(item) {
         imdbId = idsData.imdb_id;
     } catch (e) { console.warn("ID IMDB introuvable."); }
 
-    // Traitement Hybride
+    // Logique hybride de notation
     if (item.type === 'movie') {
         let bestRating = Math.round((data.vote_average || 0) * 10) / 10;
         if (imdbId) {
@@ -84,10 +81,8 @@ async function syncSingleMediaData(item) {
         (item.episodes || []).forEach(ep => { if (ep.watched) watchedMap.set(`${ep.season}-${ep.number}`, true); });
 
         for (let ep of freshEpisodes) {
-            // Restauration du statut "Vu"
             if (watchedMap.has(`${ep.season}-${ep.number}`)) ep.watched = true;
             
-            // Comparaison hybride par épisode
             if (imdbId) {
                 const omdbEpRating = await getImdbEpisodeRating(imdbId, ep.season, ep.number);
                 if (omdbEpRating && omdbEpRating > ep.rating) ep.rating = omdbEpRating;
@@ -105,7 +100,7 @@ async function syncSingleMediaData(item) {
         item.episodes = freshEpisodes;
     }
     
-    // Mise à jour Métadonnées
+    // Métadonnées
     if (data.overview && item.summary !== data.overview) { changes.push("Résumé"); item.summary = data.overview; }
     const newImage = `https://image.tmdb.org/t/p/w500${data.poster_path}`;
     if (data.poster_path && item.image !== newImage) { changes.push("Image"); item.image = newImage; }
@@ -117,7 +112,6 @@ async function syncSingleMediaData(item) {
     return changes;
 }
 
-// Single Update
 async function singleUpdateMedia(mediaId) {
     const item = libraryIndex.get(mediaId);
     if (!item) return;
@@ -149,7 +143,6 @@ async function singleUpdateMedia(mediaId) {
     }
 }
 
-// Mass Update
 async function massUpdateLibrary(type, silent = false) {
     const btn = document.getElementById(type === 'series' ? 'btn-mass-update-series' : 'btn-mass-update-movie');
     const itemsToProcess = library.filter(i => i.type === type);
@@ -171,7 +164,6 @@ async function massUpdateLibrary(type, silent = false) {
     if (!silent) location.reload();
 }
 
-// Mini-Import Progression
 async function importProgressionOnly(event) {
     const file = event.target.files[0];
     if (!file) return;
