@@ -17,10 +17,8 @@ function renderLibrary() {
     const grid = document.getElementById('libraryGrid');
     if (!grid) return;
 
-    // Ajout dynamique du filtre Anime s'il n'existe pas
     ensureAnimeFilterExists();
 
-    // 1. Récupération de tous les filtres actifs
     const query = (document.getElementById('librarySearch')?.value || '').toLowerCase().trim();
     const typeFilter = document.getElementById('libraryTypeFilter')?.value || 'all';
     const statusFilter = document.getElementById('libraryStatusFilter')?.value || 'all';
@@ -29,17 +27,14 @@ function renderLibrary() {
     const genreFilter = document.getElementById('smartGenreFilter')?.value || 'all';
     const networkFilter = document.getElementById('smartNetworkFilter')?.value || 'all';
 
-    // 2. Le filtrage "Pare-balles"
     let filtered = library.filter(item => {
         
-        // --- Recherche Texte ---
         if (query) {
             const titleFr = (item.title_fr || '').toLowerCase();
             const titleVo = (item.title || '').toLowerCase();
             if (!titleFr.includes(query) && !titleVo.includes(query)) return false;
         }
 
-        // --- Filtres Type avec séparation Series/Animes ---
         const isAnime = (item.genres || []).includes('Anime') || (item.genres || []).includes('Animation') || item.original_language === 'ja';
 
         if (typeFilter !== 'all') {
@@ -48,7 +43,6 @@ function renderLibrary() {
             if (typeFilter === 'movie' && item.type !== 'movie') return false;
         }
         
-        // --- Filtres Standards ---
         if (statusFilter !== 'all') {
             if (statusFilter === 'not_finished' && item.status !== 'In Progress') return false;
             if (statusFilter === 'watched' && item.status !== 'Watched') return false;
@@ -70,7 +64,7 @@ function renderLibrary() {
             if (!item.network || !item.network.includes(networkFilter)) return false;
         }
 
-        // --- Filtre Global (depuis la page Profil) ---
+        // Filtre Global (depuis la page Profil)
         if (window.activeGlobalFilter) {
             if (window.activeGlobalFilter.type === 'genre' && (!item.genres || !item.genres.includes(window.activeGlobalFilter.value))) return false;
             if (window.activeGlobalFilter.type === 'network' && item.network !== window.activeGlobalFilter.value) return false;
@@ -84,7 +78,6 @@ function renderLibrary() {
         return true; 
     });
 
-    // 3. Tri des résultats
     filtered.sort((a, b) => {
         switch (sortFilter) {
             case 'date_desc': return (b.last_modified || 0) - (a.last_modified || 0);
@@ -99,10 +92,9 @@ function renderLibrary() {
         }
     });
 
-    // 4. Force l'affichage du TOTAL en haut à droite, peu importe les filtres
+    // Force la MAJ du compteur du Header
     if (typeof updateHeaderCount === 'function') updateHeaderCount();
 
-    // 5. Rendu HTML
     grid.innerHTML = '';
     if (filtered.length === 0) {
         grid.innerHTML = `<div class="col-span-full text-center py-10 text-gray-500 font-bold text-sm bg-gray-800/50 rounded-xl border border-gray-700/50">Aucun média trouvé avec ces filtres.</div>`;
@@ -117,6 +109,7 @@ function renderLibrary() {
     });
     grid.appendChild(frag);
 
+    // Force le chargement des images
     if (typeof observeLazyImages === 'function') observeLazyImages();
 }
 
@@ -161,6 +154,7 @@ function setGlobalFilter(type, value, label) {
     renderLibrary();
 }
 
+// Pont sécurisé pour les clics depuis la page de Profil
 window.applyGlobalFilter = function(type, value) {
     let parsedValue = value;
     if (type === 'rating') {
