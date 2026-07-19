@@ -181,3 +181,9 @@ function toggleEpCascade(epId, seasonStr) {
     const prog = getProgress(item); document.getElementById('modalProgressText').textContent = `${prog}%`; document.getElementById('modalProgressBar').style.width = `${prog}%`;
     renderEpisodes(item.episodes.filter(e => e.season === parseInt(seasonStr)), true); if (!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
 }
+
+// ✅ À AJOUTER À LA FIN DE JS/MODAL.JS
+function toggleEpisodeDescription(element) {
+    const desc = element.querySelector('.episode-desc');
+    if (desc) desc.classList.toggle('hidden');
+}
