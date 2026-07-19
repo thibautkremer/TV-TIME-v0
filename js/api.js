@@ -113,10 +113,11 @@ async function quickAdd(mediaId, allWatched = false) {
     newItem.status = allWatched ? 'Watched' : 'In Progress';
     newItem.last_modified = Date.now();
     
-    // Suppression du "window." fautif : on utilise la vraie variable library
+    // On s'assure que la librairie existe et on ajoute
     if (typeof library === 'undefined' || library === null) library = [];
     library.push(newItem);
     
+    // Mises à jour globale
     if (typeof rebuildLibraryIndex === 'function') rebuildLibraryIndex();
     if (typeof saveLocalDB === 'function') await saveLocalDB(newItem);
     if (typeof updateHeaderCount === 'function') updateHeaderCount(); // Force la MAJ du compteur en haut
