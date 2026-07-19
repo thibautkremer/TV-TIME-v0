@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TV TIME REBORN</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M30 40 L70 40 L65 90 L35 90 Z' fill='%230D9488'/><path d='M20 40 Q50 10 80 40' fill='%23FBBF24'/><circle cx='40' cy='30' r='10' fill='%23FBBF24'/><circle cx='60' cy='25' r='12' fill='%23FBBF24'/></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="css/style.css">
 </head>
@@ -47,8 +48,18 @@
                 <button onclick="setDiscoverType('series')" id="btn-disc-type-series" class="flex-1 py-1.5 text-xs font-bold rounded bg-teal-600 text-white shadow">Séries</button>
                 <button onclick="setDiscoverType('movie')" id="btn-disc-type-movie" class="flex-1 py-1.5 text-xs font-bold rounded text-gray-400">Films</button>
             </div>
+            <div class="grid grid-cols-3 gap-2">
+                <button onclick="setDiscoverMode('mix')" id="btn-disc-mix" class="py-1.5 text-xs font-bold rounded bg-teal-600 text-white shadow">Pour vous</button>
+                <button onclick="setDiscoverMode('top')" id="btn-disc-top" class="py-1.5 text-xs font-bold rounded bg-gray-700 text-gray-300">Mieux notés</button>
+                <button onclick="setDiscoverMode('trending')" id="btn-disc-trending" class="py-1.5 text-xs font-bold rounded bg-gray-700 text-gray-300">Tendances</button>
+            </div>
         </div>
         <div id="discoverGrid" class="media-grid"></div>
+    </div>
+
+    <!-- CALENDRIER -->
+    <div id="tab-calendar" class="space-y-4 hidden">
+        <div id="calendarTimeline" class="space-y-2"></div>
     </div>
 
     <!-- LIBRAIRIE -->
@@ -56,23 +67,36 @@
         <div id="libraryGrid" class="media-grid"></div>
     </div>
 
-    <!-- ... (reste des onglets tab-profile, tab-admin identiques) -->
+    <!-- PROFIL -->
+    <div id="tab-profile" class="space-y-4 hidden"></div>
+
+    <!-- ADMIN -->
+    <div id="tab-admin" class="space-y-4 hidden">
+        <div id="adminConsoleBox" class="h-64 overflow-y-auto bg-black p-2 rounded border border-gray-800 text-xs font-mono"></div>
+    </div>
 </main>
 
-<!-- NAVIGATION -->
-<nav class="fixed bottom-0 w-full bg-gray-800 border-t border-gray-700 flex justify-around p-3 z-50">
-    <button onclick="switchTab('search')" class="text-xs text-gray-400">🔍 Rechercher</button>
-    <button onclick="switchTab('discover')" class="text-xs text-gray-400">✨ Découvrir</button>
-    <button onclick="switchTab('library')" class="text-xs text-teal-400 font-bold">📚 Suivis</button>
-    <button onclick="switchTab('profile')" class="text-xs text-gray-400">👤 Profil</button>
+<nav class="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 h-16 flex items-center justify-around z-40 pb-safe">
+    <button onclick="switchTab('search')" class="flex flex-col items-center text-xs text-gray-400"><span>🔍</span>Chercher</button>
+    <button onclick="switchTab('discover')" class="flex flex-col items-center text-xs text-gray-400"><span>✨</span>Découvrir</button>
+    <button onclick="switchTab('library')" class="flex flex-col items-center text-xs text-teal-400 font-bold"><span>📚</span>Suivis</button>
+    <button onclick="switchTab('profile')" class="flex flex-col items-center text-xs text-gray-400"><span>👤</span>Profil</button>
+    <button onclick="switchTab('admin')" class="flex flex-col items-center text-xs text-gray-400"><span>⚙️</span>Admin</button>
 </nav>
+
+<!-- MODAL -->
+<div id="mediaModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 hidden">
+    <!-- Contenu modal -->
+</div>
 
 <script>
     function switchTab(tabId) {
         document.querySelectorAll('main > div').forEach(el => el.classList.add('hidden'));
-        document.getElementById('tab-' + tabId).classList.remove('hidden');
+        const target = document.getElementById('tab-' + tabId);
+        if (target) target.classList.remove('hidden');
     }
 </script>
+
 <script src="js/utils.js"></script>
 <script src="js/api.js"></script>
 <script src="js/cards.js"></script>
