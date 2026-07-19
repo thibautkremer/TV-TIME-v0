@@ -1,6 +1,6 @@
 'use strict';
 // ============================================================
-// ADMIN — MAJ de masse API (Metadata + Épisodes + Notes Hybrides)
+// ADMIN — Console, MAJ de masse, Sécurité des statuts
 // ============================================================
 
 const _originalLog = console.log;
@@ -11,7 +11,7 @@ function addLogToUI(args, type='log') {
     const consoleEl = document.getElementById('adminConsoleBox');
     if (!consoleEl) return;
     const msg = Array.from(args).map(a => {
-        if (a instanceof Error) return `${a.name}: ${a.message}`; 
+        if (a instanceof Error) return `${a.name}: ${a.message}\n${a.stack || ''}`; 
         if (typeof a === 'object' && a !== null) {
             try { return JSON.stringify(a, null, 2); } catch(e) { return '[Objet]'; }
         }
@@ -19,9 +19,9 @@ function addLogToUI(args, type='log') {
     }).join(' ');
 
     const div = document.createElement('div');
-    let colorClass = type === 'error' ? 'text-red-400 font-bold' : (type === 'warn' ? 'text-yellow-400' : 'text-gray-300');
+    let colorClass = type === 'error' ? 'text-red-400 font-bold bg-red-900/20 p-1 rounded' : (type === 'warn' ? 'text-yellow-400' : 'text-gray-300');
     if (msg.includes('✅')) colorClass = 'text-emerald-400';
-    else if (msg.includes('---')) colorClass = 'text-teal-400 font-bold';
+    else if (msg.includes('---')) colorClass = 'text-teal-400 font-bold mt-2';
     else if (msg.includes('➖')) colorClass = 'text-gray-500';
 
     div.className = `text-[10px] mb-1 pb-1 border-b border-gray-700/50 font-mono whitespace-pre-wrap break-words ${colorClass}`;
@@ -33,6 +33,15 @@ function addLogToUI(args, type='log') {
 console.log = function(...args) { _originalLog.apply(console, args); addLogToUI(args, 'log'); };
 console.warn = function(...args) { _originalWarn.apply(console, args); addLogToUI(args, 'warn'); };
 console.error = function(...args) { _originalError.apply(console, args); addLogToUI(args, 'error'); };
+
+// EXIGENCE : Interception globale des erreurs non gérées
+window.onerror = function(message, source, lineno, colno, error) {
+    console.error(`💥 CRASH APP : ${message}\nFichier: ${source}\nLigne: ${lineno}`);
+    return false; 
+};
+window.addEventListener('unhandledrejection', function(event) {
+    console.error(`💥 PROMISE REJETÉE : ${event.reason}`);
+});
 
 function normalizePlatform(name) {
     if (!name) return name;
@@ -77,7 +86,6 @@ async function syncSingleMediaData(item) {
     } else if (item.type === 'series') {
         const freshEpisodes = await fetchAllTmdbEpisodes(item.apiId);
         
-        // SÉCURITÉ 1 : Ne pas écraser si l'API TMDB plante et renvoie vide
         if (freshEpisodes.length === 0 && item.episodes && item.episodes.length > 0) {
             console.warn(`⚠️ TMDB a renvoyé 0 épisode pour ${item.title}. Conservation des anciennes données.`);
         } else {
@@ -89,14 +97,12 @@ async function syncSingleMediaData(item) {
             let allAiredAreWatched = true;
 
             for (let ep of freshEpisodes) {
-                // SÉCURITÉ 2 : Si la série était 'Vu', on s'assure que les épisodes sortis sont cochés
                 if (watchedMap.has(`${ep.season}-${ep.number}`)) {
                     ep.watched = true;
                 } else if (wasGloballyWatched && ep.airdate && ep.airdate <= todayString) {
                     ep.watched = true;
                 }
                 
-                // Analyse stricte pour le statut de la série
                 if (ep.airdate && ep.airdate <= todayString) {
                     hasAiredEpisodes = true;
                     if (!ep.watched) allAiredAreWatched = false;
@@ -113,7 +119,6 @@ async function syncSingleMediaData(item) {
             
             item.episodes = freshEpisodes;
 
-            // SÉCURITÉ 3 : Calcul infaillible du statut global
             if (item.status !== 'Abandoned') {
                 let newStatus = 'In Progress';
                 if (hasAiredEpisodes && allAiredAreWatched) newStatus = 'Watched';
@@ -154,12 +159,12 @@ async function singleUpdateMedia(mediaId) {
             console.log(`➖ Inchangé : ${item.title_fr || item.title}`);
         }
         
-        populateModalBase(item); 
-        if (item.type === 'series' && item.episodes) {
+        if (typeof populateModalBase === 'function') populateModalBase(item); 
+        if (item.type === 'series' && item.episodes && typeof buildSeasonTabs === 'function') {
             currentSeriesAvgRating = computeAvgEpisodeRating(item.episodes); 
             buildSeasonTabs(item.episodes, true); 
         }
-        if (!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
+        if (typeof renderLibrary === 'function' && !document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
         
         if (btn) { btn.innerHTML = '✅ OK'; setTimeout(() => { btn.innerHTML = '🔄 MAJ'; btn.disabled = false; }, 2000); }
     } catch (e) {
