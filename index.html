@@ -19,7 +19,6 @@
         }
     </script>
     <style>
-        /* Optimisation Mobile & Scrollbars invisibles */
         ::-webkit-scrollbar { width: 3px; height: 3px; }
         ::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -27,10 +26,10 @@
         .lazy-image { transition: opacity 0.3s ease-in-out; }
     </style>
 </head>
-<body class="flex flex-col h-screen overflow-hidden">
+<body class="bg-gray-950 text-gray-100 antialiased pb-24">
 
     <!-- HEADER RÉDUIT -->
-    <header class="flex items-center justify-between px-4 py-2 border-b border-gray-800 bg-gray-950 sticky top-0 z-50 shadow-sm">
+    <header class="flex items-center justify-between px-4 py-2 border-b border-gray-800 bg-gray-950 sticky top-0 z-40 shadow-sm">
         <h1 class="text-sm font-black text-teal-400 tracking-tighter uppercase">TV TIME <span class="text-white">REBORN</span></h1>
         
         <div class="flex items-center gap-3">
@@ -40,7 +39,7 @@
     </header>
 
     <!-- MAIN CONTENT -->
-    <main class="flex-1 overflow-y-auto pb-24 relative">
+    <main id="main-content" class="relative">
         
         <!-- ========================================== -->
         <!-- ONGLET : DÉCOUVRIR -->
@@ -120,7 +119,7 @@
                     <option value="ended">Série Terminée</option>
                     <option value="canceled">Annulée</option>
                 </select>
-                <!-- Filtres cachés utilisés par la logique JS (à afficher si besoin via un bouton 'Plus de filtres') -->
+                <!-- Filtres cachés utilisés par la logique JS -->
                 <select id="smartGenreFilter" class="hidden"></select>
                 <select id="smartNetworkFilter" class="hidden"></select>
             </div>
@@ -167,7 +166,7 @@
     <!-- ========================================== -->
     <!-- BOTTOM NAVIGATION -->
     <!-- ========================================== -->
-    <nav class="fixed bottom-0 w-full bg-gray-950 border-t border-gray-800 flex justify-around items-center pb-safe pt-2 pb-2 z-40">
+    <nav class="fixed bottom-0 w-full bg-gray-950 border-t border-gray-800 flex justify-around items-center pt-2 pb-3 z-50">
         <button onclick="switchTab('discover')" class="flex flex-col items-center p-2 text-gray-500 hover:text-teal-400 transition">
             <span class="text-xl mb-1">🧭</span>
             <span class="text-[9px] font-bold uppercase tracking-wide">Découvrir</span>
@@ -193,13 +192,11 @@
     <!-- ========================================== -->
     <!-- MODAL MÉDIA UNIVERSELLE -->
     <!-- ========================================== -->
-    <div id="mediaModal" class="fixed inset-0 bg-black/95 z-50 hidden flex flex-col transition-opacity">
-        <!-- Close Button -->
+    <div id="mediaModal" class="fixed inset-0 bg-black/95 z-[60] hidden flex flex-col transition-opacity">
         <button onclick="closeModal()" class="absolute top-4 right-4 bg-gray-800/80 hover:bg-gray-700 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold z-50 backdrop-blur">✕</button>
         
         <div id="modalScrollable" class="flex-1 overflow-y-auto pb-24">
             
-            <!-- Couverture & Infos de base -->
             <div class="relative w-full aspect-[2/3] max-h-[50vh] bg-gray-900">
                 <img id="modalPoster" src="" class="w-full h-full object-cover object-top opacity-50">
                 <div class="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/60 to-transparent"></div>
@@ -213,7 +210,6 @@
                     </div>
                     <h2 id="modalTitle" class="text-2xl font-black text-white leading-tight drop-shadow-md"></h2>
                     
-                    <!-- Rating Bar -->
                     <div class="mt-3 flex items-center gap-3">
                         <div class="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden flex-1">
                             <div id="modalGlobalRatingBar" class="h-full bg-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.5)]" style="width: 0%"></div>
@@ -224,16 +220,13 @@
             </div>
 
             <div class="p-6 space-y-6">
-                <!-- Boutons d'action principaux (Admin & Movix) -->
                 <div class="flex gap-2">
                     <button id="btnMovixRedirect" class="flex-1 bg-indigo-900/50 text-indigo-300 border border-indigo-800/50 hover:bg-indigo-800 text-xs font-bold py-2 rounded-lg transition">▶ Movix</button>
                     <button id="modalSingleUpdateBtn" class="flex-1 bg-gray-800 text-gray-300 border border-gray-700 hover:bg-gray-700 text-xs font-bold py-2 rounded-lg transition hidden">🔄 MAJ</button>
                 </div>
 
-                <!-- Résumé -->
                 <p id="modalSummary" class="text-sm text-gray-300 leading-relaxed"></p>
 
-                <!-- Barre de Progression (Séries uniquement) -->
                 <div id="modalProgressContainer" class="hidden bg-gray-900 rounded-xl p-4 border border-gray-800">
                     <div class="flex justify-between items-end mb-2">
                         <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Progression</span>
@@ -244,13 +237,11 @@
                     </div>
                 </div>
 
-                <!-- Actions Spécifiques Films -->
                 <div id="modalMovieActions" class="hidden flex gap-2">
                     <button id="modalMovieTrailerBtn" class="flex-1 bg-gray-800 text-white text-xs font-bold py-2.5 rounded-lg border border-gray-700">Bande Annonce</button>
                     <button id="modalMovieSummaryBtn" class="flex-1 bg-gray-800 text-white text-xs font-bold py-2.5 rounded-lg border border-gray-700">Résumé YT</button>
                 </div>
 
-                <!-- Contenu Séries (Graphes et Saisons) -->
                 <div id="modalSeriesContent" class="hidden space-y-6">
                     <div>
                         <h4 class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-3">Qualité Globale</h4>
@@ -268,12 +259,10 @@
                         
                         <div id="modalSeasonTabs" class="flex gap-2 overflow-x-auto pb-2 no-scrollbar"></div>
                         <div id="modalSeasonGraph" class="h-16 flex items-end gap-1 border-b border-gray-800 pb-1 mb-4 mt-2"></div>
-                        
                         <div id="modalEpisodesList" class="space-y-2"></div>
                     </div>
                 </div>
 
-                <!-- Bloc Suggestions (Optionnel) -->
                 <div id="modalSuggestionsBlock" class="hidden pt-4 border-t border-gray-800">
                     <h3 class="text-sm font-bold text-white mb-4">Titres similaires</h3>
                     <div id="modalSuggestionsList" class="flex overflow-x-auto gap-3 pb-4 no-scrollbar"></div>
@@ -281,8 +270,7 @@
             </div>
         </div>
 
-        <!-- Boutons d'Action Fixes en Bas -->
-        <div class="fixed bottom-0 w-full bg-gray-950 border-t border-gray-800 p-4 pb-safe flex gap-3 z-50">
+        <div class="fixed bottom-0 w-full bg-gray-950 border-t border-gray-800 p-4 pb-safe flex gap-3 z-[60]">
             <button id="modalActionFollowBtn" class="flex-1 py-3 bg-teal-600 text-white font-bold rounded-xl text-xs shadow transition">+ À regarder</button>
             <button id="modalActionAllWatchedBtn" class="flex-1 py-3 bg-emerald-600 text-white font-bold rounded-xl text-xs shadow transition">✓ Déjà vu</button>
         </div>
@@ -292,30 +280,12 @@
     <!-- SCRIPTS JS -->
     <!-- ========================================== -->
     <script>
-        // Fonction basique pour changer d'onglet
-        function switchTab(tabId) {
-            ['library', 'discover', 'search', 'profile', 'admin'].forEach(id => {
-                const el = document.getElementById(`tab-${id}`);
-                if (el) el.classList.add('hidden');
-            });
-            const target = document.getElementById(`tab-${tabId}`);
-            if (target) target.classList.remove('hidden');
-            
-            // Relancer les rendus ou lazyloads spécifiques si besoin
-            if (tabId === 'library' && typeof renderLibrary === 'function') renderLibrary();
-            if (tabId === 'discover' && typeof renderDiscoverTab === 'function') renderDiscoverTab(false);
-            if (typeof observeLazyImages === 'function') observeLazyImages();
-            window.scrollTo(0,0);
-        }
-        
-        // Gérer le clic sur le résumé de l'épisode
         function toggleEpisodeDescription(element) {
             const desc = element.querySelector('.episode-desc');
             if (desc) desc.classList.toggle('hidden');
         }
     </script>
     
-    <!-- Modifiez les chemins si vos fichiers JS sont dans un sous-dossier (ex: src/js/) -->
     <script src="js/utils.js"></script>
     <script src="js/api.js"></script>
     <script src="js/cards.js"></script>
@@ -323,6 +293,7 @@
     <script src="js/library.js"></script>
     <script src="js/discover.js"></script>
     <script src="js/search.js"></script>
+    <script src="js/profile.js"></script>
     <script src="js/admin.js"></script>
     <script src="js/main.js"></script>
 
