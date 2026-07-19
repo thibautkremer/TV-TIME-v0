@@ -5,7 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TV TIME REBORN</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M30 40 L70 40 L65 90 L35 90 Z' fill='%230D9488'/><path d='M20 40 Q50 10 80 40' fill='%23FBBF24'/><circle cx='40' cy='30' r='10' fill='%23FBBF24'/><circle cx='60' cy='25' r='12' fill='%23FBBF24'/></svg>">
+    <link rel="manifest" href="manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js"></script>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body class="bg-gray-900 text-gray-100 font-sans pb-20 overflow-x-hidden">
@@ -13,7 +16,7 @@
 <header class="bg-gray-800 border-b border-gray-700 sticky top-0 z-40 shadow-md">
     <div class="max-w-screen-2xl mx-auto px-4 py-1.5 flex justify-between items-center">
         <h1 class="text-sm font-black tracking-wider text-teal-400 flex items-center gap-1.5 uppercase">
-            TV TIME <span class="text-white text-[10px] px-1.5 py-0.5 bg-teal-600 rounded">REBORN</span>
+            🍿 TV TIME <span class="text-white text-[10px] px-1.5 py-0.5 bg-teal-600 rounded">REBORN</span>
         </h1>
         <div class="flex items-center gap-2">
             <button onclick="forceSync()" id="cloudStatus" class="cursor-pointer text-[10px] px-2 py-0.5 bg-gray-900 text-gray-400 rounded-full font-bold shadow border border-gray-700">○ Local</button>
@@ -59,6 +62,15 @@
 
     <!-- CALENDRIER -->
     <div id="tab-calendar" class="space-y-4 hidden">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+            <h2 class="text-lg font-bold text-white">📅 Calendrier des Sorties</h2>
+        </div>
+        <div class="flex gap-2 overflow-x-auto pb-1 hide-scroll" id="calFilterRow">
+            <button onclick="setCalFilter('all')" id="cal-all" class="shrink-0 text-[11px] px-3 py-1.5 rounded-lg font-bold bg-teal-600 text-white transition">Tout</button>
+            <button onclick="setCalFilter('today')" id="cal-today" class="shrink-0 text-[11px] px-3 py-1.5 rounded-lg font-bold bg-gray-800 text-gray-400 border border-gray-700">Aujourd'hui</button>
+            <button onclick="setCalFilter('week')" id="cal-week" class="shrink-0 text-[11px] px-3 py-1.5 rounded-lg font-bold bg-gray-800 text-gray-400 border border-gray-700">Cette semaine</button>
+            <button onclick="setCalFilter('month')" id="cal-month" class="shrink-0 text-[11px] px-3 py-1.5 rounded-lg font-bold bg-gray-800 text-gray-400 border border-gray-700">Ce mois</button>
+        </div>
         <div id="calendarTimeline" class="space-y-2"></div>
     </div>
 
@@ -260,23 +272,30 @@
             <button id="modalActionAllWatchedBtn" class="flex-1 py-3 bg-emerald-600 text-white font-bold rounded-xl text-xs shadow transition">✓ Déjà vu</button>
         </div>
     </div>
+	
+<nav class="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 h-16 flex items-center justify-around z-40 pb-safe">
+    <button onclick="switchTab('search')" id="nav-search" class="flex flex-col items-center text-xs text-gray-400 flex-1 transition-colors"><span class="text-lg">🔍</span><span class="text-[10px]">Chercher</span></button>
+    <button onclick="switchTab('discover')" id="nav-discover" class="flex flex-col items-center text-xs text-gray-400 flex-1 transition-colors"><span class="text-lg">✨</span><span class="text-[10px]">Découvrir</span></button>
+    <button onclick="switchTab('calendar')" id="nav-calendar" class="flex flex-col items-center text-xs text-gray-400 flex-1 transition-colors"><span class="text-lg">📅</span><span class="text-[10px]">Sorties</span></button>
+    <button onclick="switchTab('library')" id="nav-library" class="flex flex-col items-center text-xs text-teal-400 font-bold flex-1 transition-colors"><span class="text-lg">📚</span><span class="text-[10px]">Suivis</span></button>
+    <button onclick="switchTab('profile')" id="nav-profile" class="flex flex-col items-center text-xs text-gray-400 flex-1 transition-colors"><span class="text-lg">📊</span><span class="text-[10px]">Profil</span></button>
+</nav>
 
-<script>
-    function switchTab(tabId) {
-        document.querySelectorAll('main > div').forEach(el => el.classList.add('hidden'));
-        const target = document.getElementById('tab-' + tabId);
-        if (target) target.classList.remove('hidden');
-    }
-</script>
-
-<script src="js/utils.js"></script>
-<script src="js/api.js"></script>
-<script src="js/cards.js"></script>
-<script src="js/modal.js"></script>
-<script src="js/library.js"></script>
-<script src="js/discover.js"></script>
-<script src="js/search.js"></script>
 <script src="js/admin.js"></script>
+<script src="js/api.js"></script>
+<script src="js/calendar.js"></script>
+<script src="js/cards.js"></script>
+<script src="js/config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/discover.js"></script>
+<script src="js/library.js"></script>
 <script src="js/main.js"></script>
+<script src="js/modal.js"></script>
+<script src="js/notifications.js"></script>
+<script src="js/profile.js"></script>
+<script src="js/search.js"></script>
+<script src="js/state.js"></script>
+<script src="js/suggestions.js"></script>
+<script src="js/utils.js"></script>
 </body>
 </html>
