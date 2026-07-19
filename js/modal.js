@@ -5,8 +5,6 @@
 
 function populateModalBase(media) {
     currentModalMediaId = media.id; 
-    
-    // Variables globales sécurisées pour quickAdd et redirection Movix
     window.currentModalMediaObj = media; 
     window.currentModalApiId = media.apiId;
 
@@ -85,8 +83,30 @@ function openLibraryModal(id) {
     const fBtn = document.getElementById('modalActionFollowBtn'); const wBtn = document.getElementById('modalActionAllWatchedBtn');
     fBtn.textContent = '✕ Retirer'; fBtn.className = "w-full py-3 bg-gray-900 text-red-400 border border-red-900/50 font-bold rounded-xl text-xs"; fBtn.onclick = async () => { await handleRemove(item.id); closeModal(); };
 
-    if (item.status === 'Watched') { wBtn.textContent = '↺ Marquer Non Vu'; wBtn.className = "w-full py-3 bg-gray-900 text-amber-400 border border-amber-900/50 font-bold rounded-xl text-xs"; wBtn.onclick = () => { if (item.episodes) item.episodes.forEach(e => e.watched = false); item.status = 'In Progress'; item.last_modified = Date.now(); saveLocalDB(item); closeModal(); renderLibrary(); }; }
-    else { wBtn.textContent = '✓ Marquer Vu'; wBtn.className = "w-full py-3 bg-emerald-600 text-white font-bold rounded-xl text-xs shadow transition"; wBtn.onclick = () => { if (item.episodes) item.episodes.forEach(e => e.watched = true); item.status = 'Watched'; item.last_modified = Date.now(); saveLocalDB(item); closeModal(); renderLibrary(); }; }
+    if (item.status === 'Watched') { 
+        wBtn.textContent = '↺ Marquer Non Vu'; 
+        wBtn.className = "w-full py-3 bg-gray-900 text-amber-400 border border-amber-900/50 font-bold rounded-xl text-xs"; 
+        wBtn.onclick = () => { 
+            if (item.episodes) item.episodes.forEach(e => e.watched = false); 
+            item.status = 'In Progress'; 
+            item.last_modified = Date.now(); 
+            saveLocalDB(item); closeModal(); renderLibrary(); 
+        }; 
+    } else { 
+        wBtn.textContent = '✓ Marquer Vu'; 
+        wBtn.className = "w-full py-3 bg-emerald-600 text-white font-bold rounded-xl text-xs shadow transition"; 
+        wBtn.onclick = () => { 
+            if (item.episodes) {
+                // SÉCURITÉ : Coche uniquement les épisodes sortis
+                item.episodes.forEach(e => {
+                    if (e.airdate && e.airdate <= todayString) e.watched = true;
+                });
+            }
+            item.status = 'Watched'; 
+            item.last_modified = Date.now(); 
+            saveLocalDB(item); closeModal(); renderLibrary(); 
+        }; 
+    }
 
     if (item.type === 'series' && item.episodes) {
         document.getElementById('modalSeriesContent').classList.remove('hidden');
@@ -119,7 +139,6 @@ function renderEpisodes(eps, isLib) {
     const list = document.getElementById('modalEpisodesList'); 
     renderSeasonGraph(eps);
     
-    // CORRECTION : S'assurer d'utiliser le vrai API ID
     const item = library[activeModalMediaIndex]; 
     const targetId = (item && item.apiId) ? item.apiId : window.currentModalApiId; 
 
@@ -146,8 +165,19 @@ function renderEpisodes(eps, isLib) {
 
 function toggleEpCascade(epId, seasonStr) {
     const item = library[activeModalMediaIndex]; const epIndex = item.episodes.findIndex(e => e.id === epId); if (epIndex === -1) return;
-    const targetState = !item.episodes[epIndex].watched; if (targetState) { for (let i = 0; i <= epIndex; i++) item.episodes[i].watched = true; } else { for (let i = epIndex; i < item.episodes.length; i++) item.episodes[i].watched = false; }
-    item.status = item.episodes.every(e => e.watched || (!e.airdate || e.airdate > todayString)) ? 'Watched' : 'In Progress'; item.last_modified = Date.now(); saveLocalDB(item);
+    const targetState = !item.episodes[epIndex].watched; 
+    
+    if (targetState) { 
+        for (let i = 0; i <= epIndex; i++) item.episodes[i].watched = true; 
+    } else { 
+        for (let i = epIndex; i < item.episodes.length; i++) item.episodes[i].watched = false; 
+    }
+    
+    // SÉCURITÉ : Ne considère que les épisodes sortis pour évaluer le statut global "Watched"
+    const airedEps = item.episodes.filter(e => e.airdate && e.airdate <= todayString);
+    item.status = (airedEps.length > 0 && airedEps.every(e => e.watched)) ? 'Watched' : 'In Progress';
+    
+    item.last_modified = Date.now(); saveLocalDB(item);
     const prog = getProgress(item); document.getElementById('modalProgressText').textContent = `${prog}%`; document.getElementById('modalProgressBar').style.width = `${prog}%`;
     renderEpisodes(item.episodes.filter(e => e.season === parseInt(seasonStr)), true); if (!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
 }
