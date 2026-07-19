@@ -6,9 +6,9 @@
 function populateModalBase(media) {
     currentModalMediaId = media.id; 
     
-    // CORRECTIONS : Sécurisation de l'API ID (pour Movix) et de l'objet (pour l'ajout)
-    window.currentModalApiId = media.apiId; 
-    window.currentModalMediaObj = media;
+    // Variables globales sécurisées pour quickAdd et redirection Movix
+    window.currentModalMediaObj = media; 
+    window.currentModalApiId = media.apiId;
 
     document.getElementById('modalTitle').textContent = media.title_fr || media.title;
     
@@ -40,6 +40,7 @@ function populateModalBase(media) {
     document.getElementById('modalMovieActions').classList.add('hidden');
     
     document.getElementById('modalSingleUpdateBtn').classList.add('hidden');
+    
     document.getElementById('modalScrollable').scrollTop = 0;
 
     const btnMovix = document.getElementById('btnMovixRedirect');
