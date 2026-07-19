@@ -64,7 +64,6 @@ async function syncSingleMediaData(item) {
         imdbId = idsData.imdb_id;
     } catch (e) { console.warn("ID IMDB introuvable."); }
 
-    // Logique hybride de notation
     if (item.type === 'movie') {
         let bestRating = Math.round((data.vote_average || 0) * 10) / 10;
         if (imdbId) {
@@ -77,30 +76,56 @@ async function syncSingleMediaData(item) {
         }
     } else if (item.type === 'series') {
         const freshEpisodes = await fetchAllTmdbEpisodes(item.apiId);
-        const watchedMap = new Map();
-        (item.episodes || []).forEach(ep => { if (ep.watched) watchedMap.set(`${ep.season}-${ep.number}`, true); });
+        
+        // SÉCURITÉ 1 : Ne pas écraser si l'API TMDB plante et renvoie vide
+        if (freshEpisodes.length === 0 && item.episodes && item.episodes.length > 0) {
+            console.warn(`⚠️ TMDB a renvoyé 0 épisode pour ${item.title}. Conservation des anciennes données.`);
+        } else {
+            const watchedMap = new Map();
+            (item.episodes || []).forEach(ep => { if (ep.watched) watchedMap.set(`${ep.season}-${ep.number}`, true); });
 
-        for (let ep of freshEpisodes) {
-            if (watchedMap.has(`${ep.season}-${ep.number}`)) ep.watched = true;
+            const wasGloballyWatched = (item.status === 'Watched');
+            let hasAiredEpisodes = false;
+            let allAiredAreWatched = true;
+
+            for (let ep of freshEpisodes) {
+                // SÉCURITÉ 2 : Si la série était 'Vu', on s'assure que les épisodes sortis sont cochés
+                if (watchedMap.has(`${ep.season}-${ep.number}`)) {
+                    ep.watched = true;
+                } else if (wasGloballyWatched && ep.airdate && ep.airdate <= todayString) {
+                    ep.watched = true;
+                }
+                
+                // Analyse stricte pour le statut de la série
+                if (ep.airdate && ep.airdate <= todayString) {
+                    hasAiredEpisodes = true;
+                    if (!ep.watched) allAiredAreWatched = false;
+                }
+
+                if (imdbId) {
+                    const omdbEpRating = await getImdbEpisodeRating(imdbId, ep.season, ep.number);
+                    if (omdbEpRating && omdbEpRating > ep.rating) ep.rating = omdbEpRating;
+                }
+            }
             
-            if (imdbId) {
-                const omdbEpRating = await getImdbEpisodeRating(imdbId, ep.season, ep.number);
-                if (omdbEpRating && omdbEpRating > ep.rating) ep.rating = omdbEpRating;
+            const newAvg = computeAvgEpisodeRating(freshEpisodes);
+            if (item.rating !== newAvg) { changes.push(`Note Globale (${item.rating} -> ${newAvg})`); item.rating = newAvg; }
+            
+            item.episodes = freshEpisodes;
+
+            // SÉCURITÉ 3 : Calcul infaillible du statut global
+            if (item.status !== 'Abandoned') {
+                let newStatus = 'In Progress';
+                if (hasAiredEpisodes && allAiredAreWatched) newStatus = 'Watched';
+                
+                if (item.status !== newStatus) {
+                    changes.push(`Statut (${item.status} -> ${newStatus})`);
+                    item.status = newStatus;
+                }
             }
         }
-        
-        const newAvg = computeAvgEpisodeRating(freshEpisodes);
-        if (item.rating !== newAvg) { changes.push(`Note Globale (${item.rating} -> ${newAvg})`); item.rating = newAvg; }
-        
-        const allAiredWatched = freshEpisodes.every(e => e.watched || (!e.airdate || e.airdate > todayString));
-        if (item.status !== (allAiredWatched ? 'Watched' : 'In Progress') && item.status !== 'Abandoned') {
-            item.status = allAiredWatched ? 'Watched' : 'In Progress';
-            changes.push(`Statut (${item.status})`);
-        }
-        item.episodes = freshEpisodes;
     }
     
-    // Métadonnées
     if (data.overview && item.summary !== data.overview) { changes.push("Résumé"); item.summary = data.overview; }
     const newImage = `https://image.tmdb.org/t/p/w500${data.poster_path}`;
     if (data.poster_path && item.image !== newImage) { changes.push("Image"); item.image = newImage; }
@@ -191,4 +216,3 @@ async function importProgressionOnly(event) {
     };
     reader.readAsText(file);
 }
- 
