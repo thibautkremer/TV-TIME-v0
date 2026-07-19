@@ -46,10 +46,11 @@ async function checkNextEp(mediaId) {
             item.episodes[i].watched = true;
         }
         
-        const allAiredWatched = item.episodes.every(e => e.watched || (!e.airdate || e.airdate > todayString));
-        item.status = allAiredWatched ? 'Watched' : 'In Progress';
-        item.last_modified = Date.now();
+        // SÉCURITÉ : Validation du statut "Watched" basée sur les épisodes sortis
+        const airedEps = item.episodes.filter(e => e.airdate && e.airdate <= todayString);
+        item.status = (airedEps.length > 0 && airedEps.every(e => e.watched)) ? 'Watched' : 'In Progress';
         
+        item.last_modified = Date.now();
         await saveLocalDB(item);
         
         if (typeof processSyncQueue === 'function') processSyncQueue(); 
@@ -63,7 +64,6 @@ function createMediaCard(media, context = 'library') {
     const libItem = isMediaInLibrary(media);
     const m = libItem || media;
     
-    // Utilisation de la nouvelle logique Anime globale
     const isAnime = (m.genres || []).includes('Anime') || (m.genres || []).includes('Animation') || m.original_language === 'ja';
     const colorClass = m.type === 'movie' ? 'bg-red-900/40' : (isAnime ? 'bg-purple-900/40' : 'bg-blue-900/40');
     
@@ -78,7 +78,6 @@ function createMediaCard(media, context = 'library') {
         topLeft = `<div class="absolute top-1 left-1 bg-black/70 text-yellow-400 text-[9px] font-bold px-1.5 py-0.5 rounded z-10 border border-yellow-700/50 shadow">★ ${rating.toFixed(1)}</div>`;
     }
     
-    // Affichage de l'année uniquement
     let displayYear = 'N/A';
     if (m.releaseDate && typeof m.releaseDate === 'string') {
         displayYear = m.releaseDate.substring(0,4);
