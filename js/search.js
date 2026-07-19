@@ -1,88 +1,122 @@
 'use strict';
 // ============================================================
-// SEARCH — onglet "Chercher" (recherche 100% TMDB)
+// SEARCH — Moteur de recherche (Séries, Films, Animes)
 // ============================================================
 
-function setMediaType(type) {
-    currentMediaType = type;
-    document.getElementById('btn-series').className = type === 'series' ? 'py-2 text-sm font-bold rounded-lg bg-teal-600 text-white shadow' : 'py-2 text-sm font-bold rounded-lg text-gray-400';
-    document.getElementById('btn-movie').className = type === 'movie' ? 'py-2 text-sm font-bold rounded-lg bg-teal-600 text-white shadow' : 'py-2 text-sm font-bold rounded-lg text-gray-400';
-    resetAndDisplaySearch();
-}
+window.currentSearchType = 'series';
 
-async function triggerFuzzySearch(query) {
-    try {
-        const q = query.toLowerCase(); 
-        let results = [];
-
-        const [tmdbTvRes, tmdbMovieRes] = await Promise.all([
-            fetch(`${TMDB_BASE}/search/tv?api_key=${TMDB_API_KEY}&language=fr-FR&query=${encodeURIComponent(query)}`).then(r => r.json()).catch(() => ({ results: [] })),
-            fetch(`${TMDB_BASE}/search/movie?api_key=${TMDB_API_KEY}&language=fr-FR&query=${encodeURIComponent(query)}`).then(r => r.json()).catch(() => ({ results: [] }))
-        ]);
-
-        let tmdbTvItems = tmdbTvRes.results ? tmdbTvRes.results.map(s => ({
-            id: `series-${s.id}`, 
-            apiId: s.id,
-            title: s.original_name || s.name, 
-            title_fr: s.name, 
-            type: 'series',
-            image: s.poster_path ? `https://image.tmdb.org/t/p/w500${s.poster_path}` : '', 
-            rating: s.vote_average || 0, 
-            genres: [], 
-            premiered: s.first_air_date ? s.first_air_date.split('-')[0] : 'N/A', 
-            runtime: 0, 
-            summary: s.overview || '',
-            original_language: s.original_language
-        })) : [];
-
-        let tmdbMovieItems = tmdbMovieRes.results ? tmdbMovieRes.results.map(m => ({
-            id: `movie-${m.id}`, 
-            apiId: m.id, 
-            title: m.original_title || m.title, 
-            title_fr: m.title, 
-            type: 'movie',
-            image: m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : '', 
-            rating: m.vote_average || 0, 
-            genres: [], 
-            premiered: m.release_date ? m.release_date.split('-')[0] : 'N/A', 
-            runtime: 120, 
-            summary: m.overview || '',
-            original_language: m.original_language
-        })) : [];
-
-        results = [...tmdbTvItems, ...tmdbMovieItems];
-
-        searchResults = results.filter((v, i, a) => a.findIndex(t => (t.id === v.id) || (t.title && v.title && t.title.toLowerCase() === v.title.toLowerCase() && t.type === v.type)) === i);
-        searchResults.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-        
-        resetAndDisplaySearch();
-    } catch (e) {
-        console.error("Erreur lors de la recherche TMDB:", e);
+function ensureSearchAnimeButton() {
+    const btnSeries = document.getElementById('btn-search-type-series');
+    const container = btnSeries?.parentElement;
+    if (container && !document.getElementById('btn-search-type-anime')) {
+        const btnAnime = document.createElement('button');
+        btnAnime.id = 'btn-search-type-anime';
+        btnAnime.onclick = () => setSearchType('anime');
+        btnAnime.textContent = 'Animes';
+        btnAnime.className = 'px-5 py-1.5 text-xs font-bold rounded text-gray-400 hover:text-white transition';
+        container.appendChild(btnAnime);
     }
 }
 
-function resetAndDisplaySearch() { searchPage = 1; renderSearchGrid(true); }
-
-function renderSearchGrid(clear = false) {
-    const container = document.getElementById('searchResults'); 
-    if (clear) container.innerHTML = '';
+function setSearchType(type) {
+    ensureSearchAnimeButton();
+    window.currentSearchType = type;
+    ['series', 'movie', 'anime'].forEach(t => {
+        const btn = document.getElementById(`btn-search-type-${t}`);
+        if (btn) btn.className = type === t ? 'px-5 py-1.5 text-xs font-bold rounded shadow bg-teal-600 text-white transition' : 'px-5 py-1.5 text-xs font-bold rounded text-gray-400 hover:text-white transition';
+    });
     
-    let filtered = searchResults.filter(r => r.type === currentMediaType);
-    const start = clear ? 0 : (searchPage - 1) * PAGE_SIZE; 
-    const limit = clear ? searchPage * PAGE_SIZE : start + PAGE_SIZE;
-    
-    const slice = filtered.slice(start, limit); 
-    const frag = document.createDocumentFragment();
-    
-    slice.forEach(m => frag.appendChild(createMediaCard(m, 'search'))); 
-    container.appendChild(frag);
-    
-    observeLazyImages();
+    const input = document.getElementById('searchInput');
+    if (input && input.value.trim() !== '') {
+        performSearch(input.value.trim());
+    }
 }
 
-const searchObserver = new IntersectionObserver(entries => { 
-    if (entries[0].isIntersecting && searchPage * PAGE_SIZE < searchResults.length) { 
-        searchPage++; 
-        renderSearchGrid(false); 
-    } 
+async function performSearch(query) {
+    const grid = document.getElementById('searchResults');
+    if (!grid) return;
+    
+    if (!query) {
+        grid.innerHTML = '';
+        if (typeof searchResults !== 'undefined') searchResults = [];
+        return;
+    }
+
+    if (typeof displayLoadingSkeletons === 'function') displayLoadingSkeletons('searchResults', 6);
+
+    // TMDB ne permet pas de filtrer /search/multi par genre facilement. 
+    // On utilise les points d'entrée spécifiques et on filtre localement pour les animes.
+    let endpoint = window.currentSearchType === 'movie' ? 'movie' : 'tv';
+    let url = `${TMDB_BASE}/search/${endpoint}?api_key=${TMDB_API_KEY}&language=fr-FR&query=${encodeURIComponent(query)}&page=1`;
+
+    try {
+        const res = await fetch(url);
+        const data = await res.json();
+        
+        let results = data.results || [];
+
+        // Filtre strict pour l'onglet actif
+        results = results.filter(m => {
+            if (window.currentSearchType === 'movie') return true; // C'est déjà filtré par l'endpoint
+            
+            const isAnime = (m.genre_ids || []).includes(16) || m.original_language === 'ja';
+            if (window.currentSearchType === 'anime') return isAnime;
+            if (window.currentSearchType === 'series') return !isAnime;
+            
+            return true;
+        });
+
+        if (typeof searchResults !== 'undefined') {
+            searchResults = results.map(m => ({
+                id: `${window.currentSearchType === 'movie' ? 'movie' : 'series'}-${m.id}`,
+                apiId: m.id,
+                title: m.title || m.name,
+                title_fr: m.title || m.name,
+                type: window.currentSearchType === 'movie' ? 'movie' : 'series',
+                image: m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : '',
+                rating: m.vote_average || 0,
+                premiered: (m.release_date || m.first_air_date || 'N/A').split('-')[0],
+                original_language: m.original_language,
+                genres: m.genre_ids
+            }));
+        }
+
+        renderSearchGrid();
+
+    } catch (error) {
+        console.error("Erreur de recherche:", error);
+        grid.innerHTML = '<p class="text-center text-red-500 text-xs w-full py-4">Erreur de connexion.</p>';
+    }
+}
+
+function renderSearchGrid() {
+    const grid = document.getElementById('searchResults');
+    if (!grid) return;
+    grid.innerHTML = '';
+    
+    if (!searchResults || searchResults.length === 0) {
+        grid.innerHTML = '<p class="text-center text-gray-500 text-xs w-full py-4">Aucun résultat trouvé.</p>';
+        return;
+    }
+
+    const frag = document.createDocumentFragment();
+    searchResults.forEach(m => {
+        if (typeof createMediaCard === 'function') frag.appendChild(createMediaCard(m, 'search'));
+    });
+    grid.appendChild(frag);
+    
+    if (typeof observeLazyImages === 'function') observeLazyImages();
+}
+
+// Initialisation au chargement
+document.addEventListener('DOMContentLoaded', () => {
+    ensureSearchAnimeButton();
+    const searchInput = document.getElementById('searchInput');
+    let timeout = null;
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => performSearch(e.target.value.trim()), 500);
+        });
+    }
 });
