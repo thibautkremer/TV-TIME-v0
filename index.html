@@ -62,32 +62,204 @@
         <div id="calendarTimeline" class="space-y-2"></div>
     </div>
 
-    <!-- LIBRAIRIE -->
-    <div id="tab-library" class="space-y-3">
-        <div id="libraryGrid" class="media-grid"></div>
+    <!-- ========================================== -->
+        <!-- ONGLET : SUIVIS (LIBRARY) -->
+        <!-- ========================================== -->
+        <section id="tab-library" class="p-4">
+            
+            <!-- Alerte Filtre Global depuis Profil -->
+            <div id="globalFilterActive" class="hidden mb-4 bg-teal-900/30 border border-teal-800 rounded-xl p-3 flex justify-between items-center">
+                <span id="globalFilterText" class="text-xs font-bold text-teal-400">Filtre actif : ...</span>
+                <button id="clearLibSearchBtn" onclick="clearGlobalFilter()" class="text-[10px] bg-teal-800 hover:bg-teal-700 text-white px-2 py-1 rounded">✕ Annuler</button>
+            </div>
+
+            <!-- Barre de recherche locale -->
+            <input type="text" id="librarySearch" onkeyup="renderLibrary()" placeholder="Filtrer mes suivis..." class="w-full bg-gray-900 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 mb-4 focus:outline-none focus:border-teal-500 transition shadow-inner">
+            
+            <!-- Menu de filtres -->
+            <div class="grid grid-cols-2 gap-2 mb-6">
+                <select id="libraryTypeFilter" onchange="renderLibrary()" class="bg-gray-800 text-xs text-white border border-gray-700 rounded-lg px-2 py-2 focus:outline-none">
+                    <option value="all">Tous les types</option>
+                    <option value="series">Séries</option>
+                    <option value="anime">Animes</option>
+                    <option value="movie">Films</option>
+                </select>
+                <select id="libraryStatusFilter" onchange="renderLibrary()" class="bg-gray-800 text-xs text-white border border-gray-700 rounded-lg px-2 py-2 focus:outline-none">
+                    <option value="all">Tous les statuts</option>
+                    <option value="not_finished">En cours</option>
+                    <option value="watched">Terminés / Vus</option>
+                    <option value="abandoned">Abandonnés</option>
+                </select>
+                <select id="librarySortFilter" onchange="renderLibrary()" class="bg-gray-800 text-xs text-white border border-gray-700 rounded-lg px-2 py-2 focus:outline-none">
+                    <option value="date_desc">Intelligent (Défaut)</option>
+                    <option value="date_asc">Moins récent</option>
+                    <option value="title_asc">A-Z</option>
+                    <option value="title_desc">Z-A</option>
+                    <option value="rating_desc">Mieux notés</option>
+                    <option value="prog_desc">Plus avancés</option>
+                </select>
+                <select id="libraryDiffusionFilter" onchange="renderLibrary()" class="bg-gray-800 text-xs text-white border border-gray-700 rounded-lg px-2 py-2 focus:outline-none">
+                    <option value="all">Toutes diffusions</option>
+                    <option value="running">En production</option>
+                    <option value="ended">Série Terminée</option>
+                    <option value="canceled">Annulée</option>
+                </select>
+                <!-- Filtres cachés utilisés par la logique JS -->
+                <select id="smartGenreFilter" class="hidden"></select>
+                <select id="smartNetworkFilter" class="hidden"></select>
+            </div>
+
+            <div id="libraryGrid" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3"></div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- ONGLET : PROFIL (Statistiques) -->
+        <!-- ========================================== -->
+        <section id="tab-profile" class="p-4 hidden">
+            <h2 class="text-xl font-black mb-6 border-b border-gray-800 pb-2">Statistiques</h2>
+            <div id="statsContainer" class="space-y-6">
+                <!-- Rempli par le JS (profile.js) -->
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- ONGLET : ADMIN & RÉGLAGES -->
+        <!-- ========================================== -->
+        <section id="tab-admin" class="p-4 hidden">
+            <h2 class="text-xl font-black mb-6 border-b border-gray-800 pb-2">Administration</h2>
+            
+            <div class="space-y-4 mb-8">
+                <button id="btn-mass-update-series" onclick="massUpdateLibrary('series')" class="w-full bg-teal-900/50 hover:bg-teal-800 text-teal-400 border border-teal-800 font-bold py-3 rounded-xl text-sm transition">🔄 Mettre à jour Séries</button>
+                <button id="btn-mass-update-movie" onclick="massUpdateLibrary('movie')" class="w-full bg-blue-900/50 hover:bg-blue-800 text-blue-400 border border-blue-800 font-bold py-3 rounded-xl text-sm transition">🔄 Mettre à jour Films</button>
+                <label class="w-full block text-center cursor-pointer bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 font-bold py-3 rounded-xl text-sm transition">
+                    📥 Importer Progression (JSON)
+                    <input type="file" class="hidden" accept=".json" onchange="importProgressionOnly(event)">
+                </label>
+            </div>
+
+            <div class="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden flex flex-col h-64 shadow-inner">
+                <div class="bg-gray-800 px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest flex justify-between">
+                    <span>Console Log</span>
+                    <button onclick="document.getElementById('adminConsoleBox').innerHTML=''" class="hover:text-white">Clear</button>
+                </div>
+                <div id="adminConsoleBox" class="p-3 overflow-y-auto flex-1 font-mono text-xs"></div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ========================================== -->
+    <!-- BOTTOM NAVIGATION -->
+    <!-- ========================================== -->
+    <nav class="fixed bottom-0 w-full bg-gray-950 border-t border-gray-800 flex justify-around items-center pt-2 pb-3 z-50">
+        <button onclick="switchTab('discover')" class="flex flex-col items-center p-2 text-gray-500 hover:text-teal-400 transition">
+            <span class="text-xl mb-1">🧭</span>
+            <span class="text-[9px] font-bold uppercase tracking-wide">Découvrir</span>
+        </button>
+        <button onclick="switchTab('search')" class="flex flex-col items-center p-2 text-gray-500 hover:text-teal-400 transition">
+            <span class="text-xl mb-1">🔍</span>
+            <span class="text-[9px] font-bold uppercase tracking-wide">Chercher</span>
+        </button>
+        <button onclick="switchTab('library')" class="flex flex-col items-center p-2 text-teal-400 transition">
+            <span class="text-xl mb-1">📚</span>
+            <span class="text-[9px] font-bold uppercase tracking-wide">Suivis</span>
+        </button>
+        <button onclick="switchTab('profile')" class="flex flex-col items-center p-2 text-gray-500 hover:text-teal-400 transition">
+            <span class="text-xl mb-1">👤</span>
+            <span class="text-[9px] font-bold uppercase tracking-wide">Profil</span>
+        </button>
+        <button onclick="switchTab('admin')" class="flex flex-col items-center p-2 text-gray-500 hover:text-teal-400 transition">
+            <span class="text-xl mb-1">⚙️</span>
+            <span class="text-[9px] font-bold uppercase tracking-wide">Admin</span>
+        </button>
+    </nav>
+
+    <!-- ========================================== -->
+    <!-- MODAL MÉDIA UNIVERSELLE -->
+    <!-- ========================================== -->
+    <div id="mediaModal" class="fixed inset-0 bg-black/95 z-[60] hidden flex flex-col transition-opacity">
+        <button onclick="closeModal()" class="absolute top-4 right-4 bg-gray-800/80 hover:bg-gray-700 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold z-50 backdrop-blur">✕</button>
+        
+        <div id="modalScrollable" class="flex-1 overflow-y-auto pb-24">
+            
+            <div class="relative w-full aspect-[2/3] max-h-[50vh] bg-gray-900">
+                <img id="modalPoster" src="" class="w-full h-full object-cover object-top opacity-50">
+                <div class="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/60 to-transparent"></div>
+                
+                <div class="absolute bottom-0 left-0 w-full p-6">
+                    <div class="flex flex-wrap gap-2 mb-2 items-center">
+                        <span id="modalProductionBadge" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-700 text-gray-300"></span>
+                        <span id="modalNetwork" class="text-[10px] font-bold text-gray-300 bg-black/50 px-2 py-0.5 rounded backdrop-blur"></span>
+                        <span id="modalPremiereDate" class="text-[10px] text-gray-400 bg-black/50 px-2 py-0.5 rounded backdrop-blur"></span>
+                        <span id="modalRuntime" class="text-[10px] text-gray-400 bg-black/50 px-2 py-0.5 rounded backdrop-blur"></span>
+                    </div>
+                    <h2 id="modalTitle" class="text-2xl font-black text-white leading-tight drop-shadow-md"></h2>
+                    
+                    <div class="mt-3 flex items-center gap-3">
+                        <div class="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden flex-1">
+                            <div id="modalGlobalRatingBar" class="h-full bg-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.5)]" style="width: 0%"></div>
+                        </div>
+                        <span class="text-xs font-bold text-yellow-400 shrink-0">★ <span id="modalGlobalRatingText"></span></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-6 space-y-6">
+                <div class="flex gap-2">
+                    <button id="btnMovixRedirect" class="flex-1 bg-indigo-900/50 text-indigo-300 border border-indigo-800/50 hover:bg-indigo-800 text-xs font-bold py-2 rounded-lg transition">▶ Movix</button>
+                    <button id="modalSingleUpdateBtn" class="flex-1 bg-gray-800 text-gray-300 border border-gray-700 hover:bg-gray-700 text-xs font-bold py-2 rounded-lg transition hidden">🔄 MAJ</button>
+                </div>
+
+                <p id="modalSummary" class="text-sm text-gray-300 leading-relaxed"></p>
+
+                <div id="modalProgressContainer" class="hidden bg-gray-900 rounded-xl p-4 border border-gray-800">
+                    <div class="flex justify-between items-end mb-2">
+                        <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Progression</span>
+                        <span id="modalProgressText" class="text-sm font-black text-teal-400">0%</span>
+                    </div>
+                    <div class="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
+                        <div id="modalProgressBar" class="h-full bg-teal-500 shadow-[0_0_10px_rgba(20,184,166,0.5)] transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <div id="modalMovieActions" class="hidden flex gap-2">
+                    <button id="modalMovieTrailerBtn" class="flex-1 bg-gray-800 text-white text-xs font-bold py-2.5 rounded-lg border border-gray-700">Bande Annonce</button>
+                    <button id="modalMovieSummaryBtn" class="flex-1 bg-gray-800 text-white text-xs font-bold py-2.5 rounded-lg border border-gray-700">Résumé YT</button>
+                </div>
+
+                <div id="modalSeriesContent" class="hidden space-y-6">
+                    <div>
+                        <h4 class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-3">Qualité Globale</h4>
+                        <div id="modalGlobalGraph" class="h-10 flex items-end gap-0.5 border-b border-gray-800 pb-1"></div>
+                    </div>
+                    
+                    <div id="modalEpisodesBlock" class="hidden">
+                        <div class="flex items-center justify-between mb-3">
+                            <h4 class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Saisons</h4>
+                            <div class="flex gap-2">
+                                <button id="modalTrailerBtn" class="hidden text-[9px] bg-gray-800 text-gray-300 px-2 py-1 rounded">Trailer</button>
+                                <button id="modalSeasonSummaryBtn" class="hidden text-[9px] bg-gray-800 text-gray-300 px-2 py-1 rounded">Résumé YT</button>
+                            </div>
+                        </div>
+                        
+                        <div id="modalSeasonTabs" class="flex gap-2 overflow-x-auto pb-2 no-scrollbar"></div>
+                        <div id="modalSeasonGraph" class="h-16 flex items-end gap-1 border-b border-gray-800 pb-1 mb-4 mt-2"></div>
+                        <div id="modalEpisodesList" class="space-y-2"></div>
+                    </div>
+                </div>
+
+                <div id="modalSuggestionsBlock" class="hidden pt-4 border-t border-gray-800">
+                    <h3 class="text-sm font-bold text-white mb-4">Titres similaires</h3>
+                    <div id="modalSuggestionsList" class="flex overflow-x-auto gap-3 pb-4 no-scrollbar"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="fixed bottom-0 w-full bg-gray-950 border-t border-gray-800 p-4 pb-safe flex gap-3 z-[60]">
+            <button id="modalActionFollowBtn" class="flex-1 py-3 bg-teal-600 text-white font-bold rounded-xl text-xs shadow transition">+ À regarder</button>
+            <button id="modalActionAllWatchedBtn" class="flex-1 py-3 bg-emerald-600 text-white font-bold rounded-xl text-xs shadow transition">✓ Déjà vu</button>
+        </div>
     </div>
-
-    <!-- PROFIL -->
-    <div id="tab-profile" class="space-y-4 hidden"></div>
-
-    <!-- ADMIN -->
-    <div id="tab-admin" class="space-y-4 hidden">
-        <div id="adminConsoleBox" class="h-64 overflow-y-auto bg-black p-2 rounded border border-gray-800 text-xs font-mono"></div>
-    </div>
-</main>
-
-<nav class="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 h-16 flex items-center justify-around z-40 pb-safe">
-    <button onclick="switchTab('search')" class="flex flex-col items-center text-xs text-gray-400"><span>🔍</span>Chercher</button>
-    <button onclick="switchTab('discover')" class="flex flex-col items-center text-xs text-gray-400"><span>✨</span>Découvrir</button>
-    <button onclick="switchTab('library')" class="flex flex-col items-center text-xs text-teal-400 font-bold"><span>📚</span>Suivis</button>
-    <button onclick="switchTab('profile')" class="flex flex-col items-center text-xs text-gray-400"><span>👤</span>Profil</button>
-    <button onclick="switchTab('admin')" class="flex flex-col items-center text-xs text-gray-400"><span>⚙️</span>Admin</button>
-</nav>
-
-<!-- MODAL -->
-<div id="mediaModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 hidden">
-    <!-- Contenu modal -->
-</div>
 
 <script>
     function switchTab(tabId) {
