@@ -1,6 +1,6 @@
 'use strict';
 // ============================================================
-// LIBRARY — Affichage, filtrage et tri des médias suivis
+// LIBRARY — Affichage, filtrage et tri intelligent des médias
 // ============================================================
 
 function ensureAnimeFilterExists() {
@@ -64,7 +64,6 @@ function renderLibrary() {
             if (!item.network || !item.network.includes(networkFilter)) return false;
         }
 
-        // Filtre Global (depuis la page Profil)
         if (window.activeGlobalFilter) {
             if (window.activeGlobalFilter.type === 'genre' && (!item.genres || !item.genres.includes(window.activeGlobalFilter.value))) return false;
             if (window.activeGlobalFilter.type === 'network' && item.network !== window.activeGlobalFilter.value) return false;
@@ -79,8 +78,26 @@ function renderLibrary() {
     });
 
     filtered.sort((a, b) => {
+        if (sortFilter === 'date_desc') {
+            // TRI INTELLIGENT PERSONNALISÉ
+            const getPriority = (item) => {
+                if (item.type === 'series') {
+                    const prog = typeof getProgress === 'function' ? getProgress(item) : 0;
+                    if (item.status === 'In Progress' && prog > 0) return 1; // Commencés (en cours)
+                    if (prog === 0) return 2; // Non commencés
+                    return 3; // Terminés ou Abandonnés
+                }
+                return 4; // Films en dernier
+            };
+
+            const pA = getPriority(a);
+            const pB = getPriority(b);
+
+            if (pA !== pB) return pA - pB;
+            return (b.last_modified || 0) - (a.last_modified || 0); // Les plus récents d'abord dans leur catégorie
+        }
+        
         switch (sortFilter) {
-            case 'date_desc': return (b.last_modified || 0) - (a.last_modified || 0);
             case 'date_asc': return (a.last_modified || 0) - (b.last_modified || 0);
             case 'title_asc': return (a.title_fr || a.title || '').localeCompare(b.title_fr || b.title || '');
             case 'title_desc': return (b.title_fr || b.title || '').localeCompare(a.title_fr || a.title || '');
@@ -92,7 +109,6 @@ function renderLibrary() {
         }
     });
 
-    // Force la MAJ du compteur du Header
     if (typeof updateHeaderCount === 'function') updateHeaderCount();
 
     grid.innerHTML = '';
@@ -109,13 +125,8 @@ function renderLibrary() {
     });
     grid.appendChild(frag);
 
-    // Force le chargement des images
     if (typeof observeLazyImages === 'function') observeLazyImages();
 }
-
-// ============================================================
-// OUTILS DE GESTION DES FILTRES
-// ============================================================
 
 function resetLibFilters() {
     const searchInput = document.getElementById('librarySearch');
@@ -143,7 +154,6 @@ function clearGlobalFilter() {
 
 function setGlobalFilter(type, value, label) {
     window.activeGlobalFilter = { type, value };
-    
     const textEl = document.getElementById('globalFilterText');
     const activeEl = document.getElementById('globalFilterActive');
     
@@ -154,7 +164,6 @@ function setGlobalFilter(type, value, label) {
     renderLibrary();
 }
 
-// Pont sécurisé pour les clics depuis la page de Profil
 window.applyGlobalFilter = function(type, value) {
     let parsedValue = value;
     if (type === 'rating') {
