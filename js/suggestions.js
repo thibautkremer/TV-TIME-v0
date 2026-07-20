@@ -36,7 +36,6 @@ async function renderSuggestions(currentId) {
         const baseMedia = libraryIndex.get(currentId) || searchResults.find(i => i.id === currentId) || discoverResults.find(i => i.id === currentId);
         if (!baseMedia) return;
 
-        // Amélioration des suggestions avec getSmartSuggestions
         const tmdbType = baseMedia.type === 'series' ? 'tv' : 'movie';
         const smartResults = await getSmartSuggestions(baseMedia.apiId, tmdbType);
         
@@ -62,44 +61,62 @@ async function renderSuggestions(currentId) {
                 image: m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : '',
                 premiered: (m.release_date || m.first_air_date || 'N/A').split('-')[0],
                 rating: m.vote_average || 0,
-                original_language: m.original_language
+                original_language: m.original_language,
+                genres: m.genre_ids
             };
         });
 
         modalSuggestionsPage = 1;
-        appendSuggestions();
+        refreshSuggestionsUI(); 
 
     } catch (e) {
         document.getElementById('modalSuggestionsList').innerHTML = '<p class="text-xs text-gray-500 text-center py-4">Pas de suggestions disponibles.</p>';
     }
 }
 
-function appendSuggestions() {
+// Nouvelle fonction globale pour gérer l'action sans rafraichir la liste
+window.handleSuggestionAction = async function(mediaId, watched, container) {
+    container.innerHTML = `<span class="text-[9px] text-teal-400 font-bold w-full text-center block">Mise à jour...</span>`;
+    const libItem = isMediaInLibrary({id: mediaId});
+    
+    if (libItem) {
+        await handleRemove(mediaId);
+    } else {
+        await quickAdd(mediaId, watched);
+        if (typeof processSyncQueue === 'function') processSyncQueue();
+    }
+    
+    // Recharge uniquement l'UI des suggestions, on ne scroll pas
+    refreshSuggestionsUI();
+};
+
+function refreshSuggestionsUI() {
     const list = document.getElementById('modalSuggestionsList');
-    if (modalSuggestionsPage === 1) list.innerHTML = '';
+    list.innerHTML = '';
     
     if (modalSuggestionsPool.length === 0) { 
         list.innerHTML = '<p class="text-xs text-gray-500 text-center py-4">Aucune recommandation trouvée.</p>'; return; 
     }
     
-    const start = (modalSuggestionsPage - 1) * 10;
-    const items = modalSuggestionsPool.slice(start, start + 10);
+    const end = modalSuggestionsPage * 10;
+    const items = modalSuggestionsPool.slice(0, end);
 
+    const frag = document.createDocumentFragment();
     items.forEach(n => {
         const libItem = isMediaInLibrary(n);
-        const div = document.createElement('div');
-        
-        const isAnime = (n.genres || []).includes('Anime') || (n.genres || []).includes('Animation') || n.original_language === 'ja';
+        const isAnime = (n.genres || []).includes(16) || (n.genres || []).includes('Anime') || (n.genres || []).includes('Animation') || n.original_language === 'ja';
         const colorClass = n.type === 'movie' ? 'bg-red-900/30' : (isAnime ? 'bg-purple-900/30' : 'bg-blue-900/30');
+        
+        const div = document.createElement('div');
         div.className = `border border-gray-700 p-2 rounded-xl flex gap-3 items-center hover:border-teal-700 transition ${colorClass}`;
         
         let actionsHTML = '';
         if (libItem) {
-            actionsHTML = `<button onclick="event.stopPropagation(); handleRemove('${n.id}'); setTimeout(() => renderSuggestions(currentModalMediaId), 300)" class="w-full text-center text-[10px] bg-gray-900 text-red-400 border border-red-900/50 py-1.5 rounded transition">Retirer</button>`;
+            actionsHTML = `<button onclick="event.stopPropagation(); handleSuggestionAction('${n.id}', null, this.parentElement)" class="w-full text-center text-[10px] bg-gray-900 text-red-400 border border-red-900/50 py-1.5 rounded transition shadow-sm">Retirer</button>`;
         } else {
             actionsHTML = `<div class="flex gap-1.5 w-full">
-                <button onclick="event.stopPropagation(); handleQuickAdd(this.parentElement.parentElement, '${n.id}', false); setTimeout(() => renderSuggestions(currentModalMediaId), 300)" class="flex-1 text-center text-[10px] bg-teal-600 hover:bg-teal-500 text-white font-bold py-1.5 rounded shadow-sm">+ Voir</button>
-                <button onclick="event.stopPropagation(); handleQuickAdd(this.parentElement.parentElement, '${n.id}', true); setTimeout(() => renderSuggestions(currentModalMediaId), 300)" class="flex-1 text-center text-[10px] bg-emerald-700 hover:bg-emerald-600 text-white font-bold py-1.5 rounded shadow-sm">✓ Vu</button>
+                <button onclick="event.stopPropagation(); handleSuggestionAction('${n.id}', false, this.parentElement.parentElement)" class="flex-1 text-center text-[10px] bg-teal-600 hover:bg-teal-500 text-white font-bold py-1.5 rounded shadow-sm">+ Voir</button>
+                <button onclick="event.stopPropagation(); handleSuggestionAction('${n.id}', true, this.parentElement.parentElement)" class="flex-1 text-center text-[10px] bg-emerald-700 hover:bg-emerald-600 text-white font-bold py-1.5 rounded shadow-sm">✓ Vu</button>
             </div>`;
         }
 
@@ -107,10 +124,15 @@ function appendSuggestions() {
             <img src="${getOptimizedImageUrl(n.image, 100)}" class="w-10 h-14 object-cover rounded cursor-pointer" onclick="closeModal(); openPreviewModal(${JSON.stringify(n).replace(/"/g, '&quot;')})" />
             <div class="flex-1 min-w-0 cursor-pointer" onclick="closeModal(); openPreviewModal(${JSON.stringify(n).replace(/"/g, '&quot;')})">
                 <h4 class="text-[11px] font-bold text-white truncate">${n.title_fr || n.title || 'Inconnu'}</h4>
-                <div class="text-[9px] text-gray-400">★ ${n.rating.toFixed(1)}</div>
-                <div class="text-[8px] mt-0.5 text-gray-500 uppercase">${n.type === 'movie' ? 'Film' : 'Série'}</div>
+                <div class="text-[10px] text-yellow-400 font-bold mt-0.5">★ ${n.rating.toFixed(1)}</div>
+                <div class="text-[9px] mt-0.5 text-gray-400 font-bold">${n.premiered && n.premiered !== 'N/A' ? n.premiered : ''}</div>
             </div>
-            <div class="w-24 shrink-0">${actionsHTML}</div>`;
-        list.appendChild(div);
+            <div class="w-24 shrink-0 flex items-center justify-center">${actionsHTML}</div>`;
+        frag.appendChild(div);
     });
+    list.appendChild(frag);
+}
+
+function appendSuggestions() {
+    refreshSuggestionsUI();
 }
