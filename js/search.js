@@ -6,6 +6,27 @@
 window.currentSearchType = 'series';
 
 // Déclaration globale pour éviter l'erreur "ReferenceError"
+window.setSearchType = function(type) {
+    window.currentSearchType = type;
+
+    // Mise à jour visuelle des boutons
+    ['series', 'anime', 'movie'].forEach(t => {
+        const btn = document.getElementById(`btn-search-type-${t}`);
+        if (btn) {
+            if (type === t) {
+                btn.className = 'py-1.5 text-[10px] font-black rounded-lg bg-teal-600 text-white shadow flex items-center justify-center text-center';
+            } else {
+                btn.className = 'py-1.5 text-[10px] font-bold rounded-lg text-gray-400 hover:bg-gray-700 transition flex items-center justify-center text-center';
+            }
+        }
+    });
+
+    const input = document.getElementById('searchInput');
+    if (input && input.value.trim() !== '') {
+        performSearch(input.value.trim());
+    }
+};
+
 window.searchObserver = new IntersectionObserver(entries => {
     // Réservé pour une future pagination infinie de la recherche
 });
@@ -24,27 +45,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
-
-function setSearchType(type) {
-    window.currentSearchType = type;
-    
-    // Mise à jour visuelle des boutons
-    ['series', 'anime', 'movie'].forEach(t => {
-        const btn = document.getElementById(`btn-search-type-${t}`);
-        if (btn) {
-            if (type === t) {
-                btn.className = 'py-2 px-1 text-[10px] font-black rounded-lg bg-teal-600 text-white shadow transition flex items-center justify-center text-center';
-            } else {
-                btn.className = 'py-2 px-1 text-[10px] font-bold rounded-lg text-gray-400 hover:bg-gray-700 transition flex items-center justify-center text-center';
-            }
-        }
-    });
-    
-    const input = document.getElementById('searchInput');
-    if (input && input.value.trim() !== '') {
-        performSearch(input.value.trim());
-    }
-}
 
 async function performSearch(query) {
     const grid = document.getElementById('searchResults');
@@ -66,10 +66,13 @@ async function performSearch(query) {
         const data = await res.json();
         let results = data.results || [];
 
+        // Filtrage plus précis par type
         results = results.filter(m => {
-            if (window.currentSearchType === 'movie') return true;
-            const isAnime = (m.genre_ids || []).includes(16) || m.original_language === 'ja';
+            const genres = m.genre_ids || [];
+            const isAnime = genres.includes(16) || m.original_language === 'ja';
+
             if (window.currentSearchType === 'anime') return isAnime;
+            if (window.currentSearchType === 'movie') return true; // C'est déjà filtré par l'endpoint movie
             if (window.currentSearchType === 'series') return !isAnime;
             return true;
         });
@@ -85,12 +88,13 @@ async function performSearch(query) {
                 rating: m.vote_average || 0,
                 premiered: (m.release_date || m.first_air_date || 'N/A').split('-')[0],
                 original_language: m.original_language,
-                genres: m.genre_ids
+                genres: m.genre_ids || []
             }));
         }
         renderSearchGrid();
     } catch (error) {
         console.error("Erreur de recherche:", error);
+        grid.innerHTML = '<p class="text-center text-red-500 text-xs w-full py-4">Erreur lors de la recherche.</p>';
     }
 }
 
