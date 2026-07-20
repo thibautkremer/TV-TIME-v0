@@ -1,223 +1,93 @@
 'use strict';
 // ============================================================
-// ADMIN — Console, MAJ de masse, Sécurité des statuts
+// MAIN — bootstrap asynchrone et gestes tactiles
 // ============================================================
 
-const _originalLog = console.log;
-const _originalWarn = console.warn;
-const _originalError = console.error;
+window.addEventListener('online', () => { loadFromCloud(); processSyncQueue(); });
+window.addEventListener('offline', updateOfflineStatus);
 
-function addLogToUI(args, type='log') {
-    const consoleEl = document.getElementById('adminConsoleBox');
-    if (!consoleEl) return;
-    const msg = Array.from(args).map(a => {
-        if (a instanceof Error) return `${a.name}: ${a.message}\n${a.stack || ''}`; 
-        if (typeof a === 'object' && a !== null) {
-            try { return JSON.stringify(a, null, 2); } catch(e) { return '[Objet]'; }
-        }
-        return a;
-    }).join(' ');
-
-    const div = document.createElement('div');
-    let colorClass = type === 'error' ? 'text-red-400 font-bold bg-red-900/20 p-1 rounded' : (type === 'warn' ? 'text-yellow-400' : 'text-gray-300');
-    if (msg.includes('✅')) colorClass = 'text-emerald-400';
-    else if (msg.includes('---')) colorClass = 'text-teal-400 font-bold mt-2';
-    else if (msg.includes('➖')) colorClass = 'text-gray-500';
-
-    div.className = `text-[10px] mb-1 pb-1 border-b border-gray-700/50 font-mono whitespace-pre-wrap break-words ${colorClass}`;
-    div.textContent = `[${new Date().toLocaleTimeString('fr-FR', { hour12: false })}] ${msg}`;
-    consoleEl.appendChild(div);
-    consoleEl.scrollTop = consoleEl.scrollHeight;
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(e => console.warn('Échec enregistrement Service Worker:', e));
+    });
 }
 
-console.log = function(...args) { _originalLog.apply(console, args); addLogToUI(args, 'log'); };
-console.warn = function(...args) { _originalWarn.apply(console, args); addLogToUI(args, 'warn'); };
-console.error = function(...args) { _originalError.apply(console, args); addLogToUI(args, 'error'); };
+// ARCHITECTURE : Chargement asynchrone complet pour attendre IndexedDB
+window.addEventListener('DOMContentLoaded', async () => {
+    // 1. Récupération de la base via IndexedDB avant d'afficher quoi que ce soit
+    library = (await localforage.getItem('personal_tracker_db')) || [];
+    rebuildLibraryIndex();
+    deduplicateLibrary(); 
+    updateHeaderCount();
+    
+    // 2. Synchronisation et mise à jour
+    loadFromCloud().then(() => { checkAutoMassUpdate(); });
+    processSyncQueue(); checkDailyNotifications();
+    
+    // 3. Observers
+    const sSentinel = document.getElementById('searchSentinel'); if (sSentinel) window.searchObserver?.observe(sSentinel);
+    const dSentinel = document.getElementById('discoverSentinel'); if (dSentinel) discoverObserver.observe(dSentinel);
+    
+    // 4. Initialisation interface
+    switchTab('library');
 
-// EXIGENCE : Interception globale des erreurs non gérées
-window.onerror = function(message, source, lineno, colno, error) {
-    console.error(`💥 CRASH APP : ${message}\nFichier: ${source}\nLigne: ${lineno}`);
-    return false; 
-};
-window.addEventListener('unhandledrejection', function(event) {
-    console.error(`💥 PROMISE REJETÉE : ${event.reason}`);
+    document.getElementById('modalViewSuggestionsBtn').onclick = () => {
+        const block = document.getElementById('modalSuggestionsBlock');
+        if (block.classList.contains('hidden')) { renderSuggestions(currentModalMediaId); block.classList.remove('hidden'); setTimeout(() => block.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100); } else { block.classList.add('hidden'); }
+    };
+
+    // UX : Gestes tactiles pour fermer la modale
+    let modalStartX = 0, modalEndX = 0;
+    const modalEl = document.getElementById('mediaModal');
+    modalEl.addEventListener('touchstart', e => { modalStartX = e.changedTouches[0].screenX; }, { passive: true });
+    modalEl.addEventListener('touchend', e => { modalEndX = e.changedTouches[0].screenX; if (modalEndX - modalStartX > 100 && !modalEl.classList.contains('hidden')) closeModal(); }, { passive: true });
+
+    // UX : NOUVEAU - Swipe Gestures pour naviguer entre les onglets
+    setupTabSwiping();
 });
 
-function normalizePlatform(name) {
-    if (!name) return name;
-    const lower = name.toLowerCase();
-    if (lower.includes('disney')) return 'Disney+';
-    if (lower.includes('prime') || lower.includes('amazon')) return 'Prime Video';
-    if (lower.includes('apple')) return 'Apple TV+';
-    if (lower.includes('netflix')) return 'Netflix';
-    if (lower.includes('hbo') || lower === 'max') return 'Max';
-    if (lower.includes('paramount')) return 'Paramount+';
-    if (lower.includes('crunchyroll') || lower.includes('wakanim')) return 'Crunchyroll';
-    if (lower.includes('adn')) return 'ADN';
-    return name;
-}
+function setupTabSwiping() {
+    let touchstartX = 0;
+    let touchendX = 0;
+    const tabsList = ['search', 'discover', 'calendar', 'library', 'profile'];
+    const mainContainer = document.getElementById('mainContainer');
 
-async function syncSingleMediaData(item) {
-    const tmdbType = item.type === 'series' ? 'tv' : 'movie';
-    const url = `${TMDB_BASE}/${tmdbType}/${item.apiId}?api_key=${TMDB_API_KEY}&language=fr-FR&append_to_response=watch/providers`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Erreur TMDB ${res.status}`);
-    const data = await res.json();
-    
-    let changes = [];
-    
-    let imdbId = null;
-    try {
-        const idsRes = await fetch(`${TMDB_BASE}/${tmdbType}/${item.apiId}/external_ids?api_key=${TMDB_API_KEY}`);
-        const idsData = await idsRes.json();
-        imdbId = idsData.imdb_id;
-    } catch (e) { console.warn("ID IMDB introuvable."); }
+    function handleGlobalSwipe() {
+        if (!document.getElementById('mediaModal').classList.contains('hidden')) return;
 
-    if (item.type === 'movie') {
-        let bestRating = Math.round((data.vote_average || 0) * 10) / 10;
-        if (imdbId) {
-            const omdbRating = await getImdbRating(imdbId);
-            if (omdbRating && omdbRating > bestRating) bestRating = omdbRating;
-        }
-        if (item.rating !== bestRating) {
-            changes.push(`Note Globale (${item.rating} -> ${bestRating})`);
-            item.rating = bestRating;
-        }
-    } else if (item.type === 'series') {
-        const freshEpisodes = await fetchAllTmdbEpisodes(item.apiId);
+        const diffX = touchstartX - touchendX;
         
-        if (freshEpisodes.length === 0 && item.episodes && item.episodes.length > 0) {
-            console.warn(`⚠️ TMDB a renvoyé 0 épisode pour ${item.title}. Conservation des anciennes données.`);
-        } else {
-            const watchedMap = new Map();
-            (item.episodes || []).forEach(ep => { if (ep.watched) watchedMap.set(`${ep.season}-${ep.number}`, true); });
-
-            const wasGloballyWatched = (item.status === 'Watched');
-            let hasAiredEpisodes = false;
-            let allAiredAreWatched = true;
-
-            for (let ep of freshEpisodes) {
-                if (watchedMap.has(`${ep.season}-${ep.number}`)) {
-                    ep.watched = true;
-                } else if (wasGloballyWatched && ep.airdate && ep.airdate <= todayString) {
-                    ep.watched = true;
-                }
-                
-                if (ep.airdate && ep.airdate <= todayString) {
-                    hasAiredEpisodes = true;
-                    if (!ep.watched) allAiredAreWatched = false;
-                }
-
-                if (imdbId) {
-                    const omdbEpRating = await getImdbEpisodeRating(imdbId, ep.season, ep.number);
-                    if (omdbEpRating && omdbEpRating > ep.rating) ep.rating = omdbEpRating;
-                }
-            }
+        if (Math.abs(diffX) > 80) {
+            const currentTab = tabsList.find(t => !document.getElementById(`tab-${t}`).classList.contains('hidden'));
+            const currentIdx = tabsList.indexOf(currentTab);
             
-            const newAvg = computeAvgEpisodeRating(freshEpisodes);
-            if (item.rating !== newAvg) { changes.push(`Note Globale (${item.rating} -> ${newAvg})`); item.rating = newAvg; }
-            
-            item.episodes = freshEpisodes;
-
-            if (item.status !== 'Abandoned') {
-                let newStatus = 'In Progress';
-                if (hasAiredEpisodes && allAiredAreWatched) newStatus = 'Watched';
-                
-                if (item.status !== newStatus) {
-                    changes.push(`Statut (${item.status} -> ${newStatus})`);
-                    item.status = newStatus;
-                }
+            if (diffX > 0 && currentIdx < tabsList.length - 1) {
+                switchTab(tabsList[currentIdx + 1]); 
+            } else if (diffX < 0 && currentIdx > 0) {
+                switchTab(tabsList[currentIdx - 1]); 
             }
         }
     }
-    
-    if (data.overview && item.summary !== data.overview) { changes.push("Résumé"); item.summary = data.overview; }
-    const newImage = `https://image.tmdb.org/t/p/w500${data.poster_path}`;
-    if (data.poster_path && item.image !== newImage) { changes.push("Image"); item.image = newImage; }
-    
-    let newNetwork = item.network;
-    if (data['watch/providers']?.results?.FR?.flatrate?.[0]?.provider_name) newNetwork = normalizePlatform(data['watch/providers'].results.FR.flatrate[0].provider_name);
-    if (item.network !== newNetwork) { changes.push(`Plateforme (${newNetwork})`); item.network = newNetwork; }
-    
-    return changes;
+
+    mainContainer.addEventListener('touchstart', e => { touchstartX = e.changedTouches[0].screenX; }, { passive: true });
+    mainContainer.addEventListener('touchend', e => { touchendX = e.changedTouches[0].screenX; handleGlobalSwipe(); }, { passive: true });
 }
 
-async function singleUpdateMedia(mediaId) {
-    const item = libraryIndex.get(mediaId);
-    if (!item) return;
-    const btn = document.getElementById('modalSingleUpdateBtn');
-    if (btn) { btn.disabled = true; btn.innerHTML = '⏳...'; }
-    
-    console.log(`--- SINGLE UPDATE : ${item.title_fr || item.title} ---`);
-    try {
-        const changes = await syncSingleMediaData(item);
-        if (changes.length > 0) {
-            item.last_modified = Date.now();
-            await saveLocalDB(item);
-            console.log(`✅ ${item.title_fr || item.title} : ${changes.join(' | ')}`);
-        } else {
-            console.log(`➖ Inchangé : ${item.title_fr || item.title}`);
-        }
-        
-        if (typeof populateModalBase === 'function') populateModalBase(item); 
-        if (item.type === 'series' && item.episodes && typeof buildSeasonTabs === 'function') {
-            currentSeriesAvgRating = computeAvgEpisodeRating(item.episodes); 
-            buildSeasonTabs(item.episodes, true); 
-        }
-        if (typeof renderLibrary === 'function' && !document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
-        
-        if (btn) { btn.innerHTML = '✅ OK'; setTimeout(() => { btn.innerHTML = '🔄 MAJ'; btn.disabled = false; }, 2000); }
-    } catch (e) {
-        console.error(e);
-        if (btn) { btn.innerHTML = '❌ Err'; setTimeout(() => { btn.innerHTML = '🔄 MAJ'; btn.disabled = false; }, 2000); }
+async function checkAutoMassUpdate() {
+    const lastUpdate = localStorage.getItem('last_mass_update_time');
+    if (navigator.onLine && (!lastUpdate || (Date.now() - parseInt(lastUpdate)) > 10 * 24 * 60 * 60 * 1000)) {
+        localStorage.setItem('last_mass_update_time', Date.now().toString());
+        const statusEl = document.getElementById('cloudStatus');
+        if (statusEl) { statusEl.textContent = '⏳ Auto-MAJ...'; statusEl.className = 'cursor-pointer text-[10px] px-2 py-0.5 bg-gray-900 text-yellow-400 rounded-full font-bold transition-colors shadow border border-yellow-900/50'; }
+        await massUpdateLibrary('series', true); await massUpdateLibrary('movie', true);
+        if (statusEl) { statusEl.textContent = '🟢 Cloud'; statusEl.className = 'cursor-pointer text-[10px] px-2 py-0.5 bg-gray-900 text-emerald-400 rounded-full font-bold transition-colors shadow border border-emerald-900/50'; }
+        if (!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
+        if (!document.getElementById('tab-profile').classList.contains('hidden')) renderProfile();
     }
 }
 
-async function massUpdateLibrary(type, silent = false) {
-    const btn = document.getElementById(type === 'series' ? 'btn-mass-update-series' : 'btn-mass-update-movie');
-    const itemsToProcess = library.filter(i => i.type === type);
-    if (itemsToProcess.length === 0) { alert("Aucun média."); return; }
-
-    console.log(`--- DÉBUT MAJ COMPLETE (${type.toUpperCase()}) ---`);
-    for (let i = 0; i < itemsToProcess.length; i++) {
-        try {
-            const changes = await syncSingleMediaData(itemsToProcess[i]);
-            if (changes.length > 0) {
-                itemsToProcess[i].last_modified = Date.now();
-                await saveLocalDB(itemsToProcess[i]);
-                console.log(`✅ ${itemsToProcess[i].title_fr || itemsToProcess[i].title} : ${changes.join(' | ')}`);
-            }
-        } catch (e) { console.error(e); }
-        await new Promise(r => setTimeout(r, 500));
-    }
-    console.log(`--- FIN MAJ COMPLETE ---`);
-    if (!silent) location.reload();
-}
-
-async function importProgressionOnly(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-        try {
-            const importedData = JSON.parse(e.target.result);
-            let updatedCount = 0;
-            for (let localItem of library) {
-                const backupItem = importedData.find(i => i.id === localItem.id || i.apiId === localItem.apiId);
-                if (backupItem) {
-                    let changed = false;
-                    if (localItem.status !== backupItem.status) { localItem.status = backupItem.status; changed = true; }
-                    if (localItem.type === 'series' && localItem.episodes && backupItem.episodes) {
-                        const bMap = new Map(backupItem.episodes.filter(ep => ep.watched).map(ep => [`${ep.season}-${ep.number}`, true]));
-                        localItem.episodes.forEach(le => {
-                            if (le.watched !== bMap.has(`${le.season}-${le.number}`)) { le.watched = bMap.has(`${le.season}-${le.number}`); changed = true; }
-                        });
-                    }
-                    if (changed) { await saveLocalDB(localItem); updatedCount++; }
-                }
-            }
-            alert(`Mini-Import terminé : ${updatedCount} médias restaurés.`);
-        } catch (e) { console.error(e); alert("Erreur import JSON."); }
-    };
-    reader.readAsText(file);
+function switchTab(name) {
+    ['search', 'discover', 'calendar', 'library', 'profile'].forEach(t => { document.getElementById(`tab-${t}`).classList.add('hidden'); document.getElementById(`nav-${t}`).classList.replace('text-teal-400', 'text-gray-400'); document.getElementById(`nav-${t}`).classList.remove('font-bold'); });
+    document.getElementById(`tab-${name}`).classList.remove('hidden'); document.getElementById(`nav-${name}`).classList.replace('text-gray-400', 'text-teal-400'); document.getElementById(`nav-${name}`).classList.add('font-bold');
+    if (name === 'library') renderLibrary(); if (name === 'discover') renderDiscoverTab(); if (name === 'profile') renderProfile(); if (name === 'calendar') renderCalendar();
 }
