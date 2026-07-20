@@ -60,8 +60,8 @@ async function openPreviewModal(media) {
     modalMode = 'preview'; activeModalMediaIndex = null;
     populateModalBase(media);
     const fBtn = document.getElementById('modalActionFollowBtn'); const wBtn = document.getElementById('modalActionAllWatchedBtn');
-    fBtn.textContent = '+ À regarder'; fBtn.className = "w-full py-3 bg-teal-600 text-white font-bold rounded-xl text-xs"; fBtn.onclick = async () => { fBtn.textContent = 'Ajout...'; await quickAdd(media.id, false); closeModal(); };
-    wBtn.textContent = '✓ Déjà vu'; wBtn.className = "w-full py-3 bg-emerald-600 text-white font-bold rounded-xl text-xs"; wBtn.onclick = async () => { wBtn.textContent = 'Ajout...'; await quickAdd(media.id, true); closeModal(); };
+    fBtn.textContent = '+ À regarder'; fBtn.className = "flex-1 py-3 bg-teal-600 text-white font-bold rounded-xl text-xs shadow transition"; fBtn.onclick = async () => { fBtn.textContent = 'Ajout...'; await quickAdd(media.id, false); closeModal(); };
+    wBtn.textContent = '✓ Déjà vu'; wBtn.className = "flex-1 py-3 bg-emerald-600 text-white font-bold rounded-xl text-xs shadow transition"; wBtn.onclick = async () => { wBtn.textContent = 'Ajout...'; await quickAdd(media.id, true); closeModal(); };
 
     if (media.type === 'series') {
         document.getElementById('modalSeriesContent').classList.remove('hidden');
@@ -81,11 +81,11 @@ function openLibraryModal(id) {
     singleUpdateBtn.onclick = () => singleUpdateMedia(item.id);
     
     const fBtn = document.getElementById('modalActionFollowBtn'); const wBtn = document.getElementById('modalActionAllWatchedBtn');
-    fBtn.textContent = '✕ Retirer'; fBtn.className = "w-full py-3 bg-gray-900 text-red-400 border border-red-900/50 font-bold rounded-xl text-xs"; fBtn.onclick = async () => { await handleRemove(item.id); closeModal(); };
+    fBtn.textContent = '✕ Retirer'; fBtn.className = "flex-1 py-3 bg-gray-900 text-red-400 border border-red-900/50 font-bold rounded-xl text-xs shadow transition"; fBtn.onclick = async () => { await handleRemove(item.id); closeModal(); };
 
     if (item.status === 'Watched') { 
         wBtn.textContent = '↺ Marquer Non Vu'; 
-        wBtn.className = "w-full py-3 bg-gray-900 text-amber-400 border border-amber-900/50 font-bold rounded-xl text-xs"; 
+        wBtn.className = "flex-1 py-3 bg-gray-900 text-amber-400 border border-amber-900/50 font-bold rounded-xl text-xs shadow transition"; 
         wBtn.onclick = () => { 
             if (item.episodes) item.episodes.forEach(e => e.watched = false); 
             item.status = 'In Progress'; 
@@ -94,10 +94,9 @@ function openLibraryModal(id) {
         }; 
     } else { 
         wBtn.textContent = '✓ Marquer Vu'; 
-        wBtn.className = "w-full py-3 bg-emerald-600 text-white font-bold rounded-xl text-xs shadow transition"; 
+        wBtn.className = "flex-1 py-3 bg-emerald-600 text-white font-bold rounded-xl text-xs shadow transition"; 
         wBtn.onclick = () => { 
             if (item.episodes) {
-                // SÉCURITÉ : Coche uniquement les épisodes sortis
                 item.episodes.forEach(e => {
                     if (e.airdate && e.airdate <= todayString) e.watched = true;
                 });
@@ -117,8 +116,36 @@ function openLibraryModal(id) {
 }
 
 function closeModal() { window.suggestionsObserver?.disconnect(); document.getElementById('mediaModal').classList.add('hidden'); const posterEl = document.getElementById('modalPoster'); if (posterEl.classList.contains('fixed')) togglePosterSize(posterEl); }
-function renderGlobalGraph(eps) { const container = document.getElementById('modalGlobalGraph'); const frag = document.createDocumentFragment(); eps.forEach(ep => { const val = (typeof ep.rating === 'object' && ep.rating !== null) ? (ep.rating.average || 0) : (parseFloat(ep.rating) || 0); const r = val > 0 ? val : currentSeriesAvgRating; const h = Math.max(10, (r / 10) * 100); const colorClass = seasonColors[(ep.season - 1) % seasonColors.length] || 'bg-teal-500'; const bar = document.createElement('div'); bar.className = `flex-1 min-w-[4px] ${colorClass} hover:opacity-80 rounded-t cursor-pointer relative z-10`; bar.style.height = `${h}%`; bar.title = `S${ep.season}E${ep.number}: ${r}`; frag.appendChild(bar); }); container.innerHTML = ''; container.appendChild(frag); }
-function renderSeasonGraph(eps) { const container = document.getElementById('modalSeasonGraph'); container.innerHTML = ''; eps.forEach(ep => { const val = (typeof ep.rating === 'object' && ep.rating !== null) ? (ep.rating.average || 0) : (ep.rating || 0); const r = val > 0 ? val : currentSeriesAvgRating; const h = Math.max(10, (r / 10) * 100); const colorClass = seasonColors[(ep.season - 1) % seasonColors.length] || 'bg-cyan-600'; container.innerHTML += `<div class="flex-1 min-w-[12px] ${colorClass} transition rounded-t cursor-pointer flex flex-col justify-end items-center relative z-10" style="height: ${h}%" title="E${ep.number}: ${r}"><span class="text-[8px] text-white font-bold mb-0.5 opacity-80">${r > 0 ? r : ''}</span></div>`; }); }
+
+function renderGlobalGraph(eps) { 
+    const container = document.getElementById('modalGlobalGraph'); 
+    const frag = document.createDocumentFragment(); 
+    eps.forEach(ep => { 
+        const val = (typeof ep.rating === 'object' && ep.rating !== null) ? (ep.rating.average || 0) : (parseFloat(ep.rating) || 0); 
+        const r = val > 0 ? val : currentSeriesAvgRating; 
+        const h = Math.max(10, (r / 10) * 100); 
+        const colorClass = seasonColors[(ep.season - 1) % seasonColors.length] || 'bg-teal-500'; 
+        const bar = document.createElement('div'); 
+        bar.className = `flex-1 min-w-[1px] ${colorClass} hover:opacity-80 rounded-t cursor-pointer relative z-10`; 
+        bar.style.height = `${h}%`; 
+        bar.title = `S${ep.season}E${ep.number}: ${r}`; 
+        frag.appendChild(bar); 
+    }); 
+    container.innerHTML = ''; 
+    container.appendChild(frag); 
+}
+
+function renderSeasonGraph(eps) { 
+    const container = document.getElementById('modalSeasonGraph'); 
+    container.innerHTML = ''; 
+    eps.forEach(ep => { 
+        const val = (typeof ep.rating === 'object' && ep.rating !== null) ? (ep.rating.average || 0) : (ep.rating || 0); 
+        const r = val > 0 ? val : currentSeriesAvgRating; 
+        const h = Math.max(10, (r / 10) * 100); 
+        const colorClass = seasonColors[(ep.season - 1) % seasonColors.length] || 'bg-cyan-600'; 
+        container.innerHTML += `<div class="flex-1 min-w-[4px] ${colorClass} transition rounded-t cursor-pointer flex flex-col justify-end items-center relative z-10" style="height: ${h}%" title="E${ep.number}: ${r}"><span class="text-[8px] text-white font-bold mb-0.5 opacity-80 overflow-hidden">${r > 0 ? r : ''}</span></div>`; 
+    }); 
+}
 
 function buildSeasonTabs(episodes, isLib) {
     const seasons = [...new Set(episodes.map(e => e.season))]; const tabs = document.getElementById('modalSeasonTabs'); tabs.innerHTML = ''; document.getElementById('modalEpisodesBlock').classList.remove('hidden');
@@ -173,7 +200,6 @@ function toggleEpCascade(epId, seasonStr) {
         for (let i = epIndex; i < item.episodes.length; i++) item.episodes[i].watched = false; 
     }
     
-    // SÉCURITÉ : Ne considère que les épisodes sortis pour évaluer le statut global "Watched"
     const airedEps = item.episodes.filter(e => e.airdate && e.airdate <= todayString);
     item.status = (airedEps.length > 0 && airedEps.every(e => e.watched)) ? 'Watched' : 'In Progress';
     
@@ -182,7 +208,6 @@ function toggleEpCascade(epId, seasonStr) {
     renderEpisodes(item.episodes.filter(e => e.season === parseInt(seasonStr)), true); if (!document.getElementById('tab-library').classList.contains('hidden')) renderLibrary();
 }
 
-// ✅ À AJOUTER À LA FIN DE JS/MODAL.JS
 function toggleEpisodeDescription(element) {
     const desc = element.querySelector('.episode-desc');
     if (desc) desc.classList.toggle('hidden');
