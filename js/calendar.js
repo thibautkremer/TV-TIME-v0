@@ -25,34 +25,12 @@ function getCalendarEntries() {
     return entries;
 }
 
-function setCalFilter(filter) {
-    calFilter = filter;
-    ['all', 'today', 'week', 'month'].forEach(f => {
-        const btn = document.getElementById(`cal-${f}`);
-        btn.className = f === filter
-            ? "shrink-0 text-[11px] px-3 py-1.5 rounded-lg font-bold bg-teal-600 text-white transition"
-            : "shrink-0 text-[11px] px-3 py-1.5 rounded-lg font-bold bg-gray-800 text-gray-400 border border-gray-700";
-    });
-    renderCalendar();
-}
-
 function renderCalendar() {
     const container = document.getElementById('calendarTimeline');
     let entries = getCalendarEntries();
-    const now = new Date(todayString + 'T00:00:00');
 
-    if (calFilter === 'today') {
-        entries = entries.filter(e => e.date === todayString);
-    } else if (calFilter === 'week') {
-        const weekLater = new Date(now); weekLater.setDate(weekLater.getDate() + 7);
-        entries = entries.filter(e => e.date >= todayString && new Date(e.date + 'T00:00:00') <= weekLater);
-    } else if (calFilter === 'month') {
-        const monthLater = new Date(now); monthLater.setMonth(monthLater.getMonth() + 1);
-        entries = entries.filter(e => e.date >= todayString && new Date(e.date + 'T00:00:00') <= monthLater);
-    } else {
-        // 'all' : on n'affiche plus que ce qui est >= aujourd'hui
-        entries = entries.filter(e => e.date >= todayString);
-    }
+    // On affiche par défaut uniquement les sorties à partir d'aujourd'hui
+    entries = entries.filter(e => e.date >= todayString);
 
     if (entries.length === 0) { container.innerHTML = '<p class="text-center text-gray-500 text-sm py-10">Aucune sortie à afficher.</p>'; return; }
 
