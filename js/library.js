@@ -68,7 +68,7 @@ function renderLibrary() {
             if (window.activeGlobalFilter.type === 'genre' && (!item.genres || !item.genres.includes(window.activeGlobalFilter.value))) return false;
             if (window.activeGlobalFilter.type === 'network' && item.network !== window.activeGlobalFilter.value) return false;
             if (window.activeGlobalFilter.type === 'rating') {
-                const rate = item.rating || 0;
+                const rate = typeof getCalculatedRating === 'function' ? getCalculatedRating(item) : (item.rating || 0);
                 const [min, max] = window.activeGlobalFilter.value;
                 if (rate < min || rate >= max) return false;
             }
