@@ -5,18 +5,20 @@
 
 function getCalendarEntries() {
     const entries = [];
+    const currentToday = new Date().toISOString().split('T')[0];
+
     library.forEach(item => {
         if (item.status === 'Abandoned') return;
         if (item.type === 'series') {
             (item.episodes || []).forEach(ep => {
                 // Seulement les épisodes non vus avec une date >= aujourd'hui
-                if (!ep.watched && ep.airdate && ep.airdate >= todayString) {
+                if (!ep.watched && ep.airdate && ep.airdate >= currentToday) {
                     entries.push({ date: ep.airdate, type: 'episode', mediaId: item.id, title: item.title_fr || item.title, subtitle: `S${ep.season}E${ep.number}${ep.name ? ' – ' + ep.name : ''}`, image: item.image, original_language: item.original_language, genres: item.genres });
                 }
             });
         } else if (item.type === 'movie') {
             // Seulement les films non vus avec une date de sortie complète >= aujourd'hui
-            if (item.releaseDate && item.releaseDate >= todayString && item.status !== 'Watched') {
+            if (item.releaseDate && item.releaseDate >= currentToday && item.status !== 'Watched') {
                 entries.push({ date: item.releaseDate, type: 'movie', mediaId: item.id, title: item.title_fr || item.title, subtitle: 'Sortie film', image: item.image, original_language: item.original_language, genres: item.genres });
             }
         }
@@ -27,12 +29,13 @@ function getCalendarEntries() {
 
 function renderCalendar() {
     const container = document.getElementById('calendarTimeline');
+    const currentToday = new Date().toISOString().split('T')[0];
     let entries = getCalendarEntries();
 
     // On affiche par défaut uniquement les sorties à partir d'aujourd'hui
-    entries = entries.filter(e => e.date >= todayString);
+    entries = entries.filter(e => e.date >= currentToday);
 
-    if (entries.length === 0) { container.innerHTML = '<p class="text-center text-gray-500 text-sm py-10">Aucune sortie à afficher.</p>'; return; }
+    if (entries.length === 0) { container.innerHTML = '<p class="text-center text-gray-500 text-sm py-10">Aucune sortie prévue prochainement.</p>'; return; }
 
     const grouped = {};
     entries.forEach(e => { (grouped[e.date] = grouped[e.date] || []).push(e); });
@@ -40,13 +43,13 @@ function renderCalendar() {
     const frag = document.createDocumentFragment();
     Object.keys(grouped).sort().forEach(date => {
         const dayWrap = document.createElement('div');
-        const isToday = date === todayString;
+        const isToday = date === currentToday;
         const dateObj = new Date(date + 'T00:00:00');
         const label = isToday ? "Aujourd'hui" : dateObj.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
         dayWrap.innerHTML = `<h3 class="text-xs font-bold ${isToday ? 'text-teal-400' : 'text-gray-400'} uppercase tracking-wider mb-1.5 mt-3">${label}</h3>`;
         const list = document.createElement('div'); list.className = 'space-y-1.5';
         grouped[date].forEach(e => {
-            const isAnime = (e.genres || []).includes('Anime') || (e.genres || []).includes('Animation') || e.original_language === 'ja';
+            const isAnime = (e.genres || []).includes(16) || (e.genres || []).includes('Anime') || (e.genres || []).includes('Animation') || e.original_language === 'ja';
             const colorClass = e.type === 'movie' ? 'bg-red-900/40' : (isAnime ? 'bg-purple-900/40' : 'bg-blue-900/40');
 
             const row = document.createElement('div');
