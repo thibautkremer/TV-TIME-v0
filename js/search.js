@@ -5,6 +5,11 @@
 
 window.currentSearchType = 'series';
 
+// Déclaration globale pour éviter l'erreur "ReferenceError"
+window.searchObserver = new IntersectionObserver(entries => {
+    // Réservé pour une future pagination infinie de la recherche
+});
+
 // Initialisation au chargement
 document.addEventListener('DOMContentLoaded', () => {
     const searchInput = document.getElementById('searchInput');
