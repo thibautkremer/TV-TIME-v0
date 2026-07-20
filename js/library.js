@@ -35,7 +35,7 @@ function renderLibrary() {
             if (!titleFr.includes(query) && !titleVo.includes(query)) return false;
         }
 
-        const isAnime = (item.genres || []).includes('Anime') || (item.genres || []).includes('Animation') || item.original_language === 'ja';
+        const isAnime = (item.genres || []).includes(16) || (item.genres || []).includes('Anime') || (item.genres || []).includes('Animation') || item.original_language === 'ja';
 
         if (typeFilter !== 'all') {
             if (typeFilter === 'anime' && !isAnime) return false;
@@ -79,22 +79,21 @@ function renderLibrary() {
 
     filtered.sort((a, b) => {
         if (sortFilter === 'date_desc') {
-            // TRI INTELLIGENT PERSONNALISÉ
             const getPriority = (item) => {
                 if (item.type === 'series') {
                     const prog = typeof getProgress === 'function' ? getProgress(item) : 0;
-                    if (item.status === 'In Progress' && prog > 0) return 1; // Commencés (en cours)
-                    if (prog === 0) return 2; // Non commencés
-                    return 3; // Terminés ou Abandonnés
+                    if (item.status === 'In Progress' && prog > 0) return 1; 
+                    if (prog === 0) return 2; 
+                    return 3; 
                 }
-                return 4; // Films en dernier
+                return 4; 
             };
 
             const pA = getPriority(a);
             const pB = getPriority(b);
 
             if (pA !== pB) return pA - pB;
-            return (b.last_modified || 0) - (a.last_modified || 0); // Les plus récents d'abord dans leur catégorie
+            return (b.last_modified || 0) - (a.last_modified || 0); 
         }
         
         switch (sortFilter) {
