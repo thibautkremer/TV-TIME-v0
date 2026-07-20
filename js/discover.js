@@ -3,21 +3,7 @@
 // DISCOVER — Suggestions intelligentes et Tops
 // ============================================================
 
-function ensureDiscoverAnimeButton() {
-    const btnSeries = document.getElementById('btn-disc-type-series');
-    const container = btnSeries?.parentElement;
-    if (container && !document.getElementById('btn-disc-type-anime')) {
-        const btnAnime = document.createElement('button');
-        btnAnime.id = 'btn-disc-type-anime';
-        btnAnime.onclick = () => setDiscoverType('anime');
-        btnAnime.textContent = 'Animes';
-        btnAnime.className = 'px-5 py-1.5 text-xs font-bold rounded text-gray-400 hover:text-white transition';
-        container.appendChild(btnAnime);
-    }
-}
-
-function setDiscoverType(type) {
-    ensureDiscoverAnimeButton();
+window.setDiscoverType = function(type) {
     discoverMediaType = type;
     ['series', 'movie', 'anime'].forEach(t => {
         const btn = document.getElementById(`btn-disc-type-${t}`);
@@ -26,9 +12,9 @@ function setDiscoverType(type) {
     discoverResults = [];
     discoverPage = 1; 
     renderDiscoverTab(false);
-}
+};
 
-function setDiscoverMode(mode) {
+window.setDiscoverMode = function(mode) {
     currentDiscoverMode = mode;
     ['mix', 'top', 'trending'].forEach(m => { 
         const btn = document.getElementById(`btn-disc-${m}`);
@@ -37,7 +23,7 @@ function setDiscoverMode(mode) {
     discoverResults = [];
     discoverPage = 1; 
     renderDiscoverTab(false);
-}
+};
 
 function displayLoadingSkeletons(containerId, count = 15) {
     const container = document.getElementById(containerId);
@@ -51,9 +37,11 @@ function displayLoadingSkeletons(containerId, count = 15) {
 }
 
 async function renderDiscoverTab(isAppend = false) {
-    ensureDiscoverAnimeButton();
     if (!isAppend && discoverResults.length > 0) return;
-    if (!isAppend) displayLoadingSkeletons('discoverGrid', 15);
+    if (!isAppend) {
+        displayLoadingSkeletons('discoverGrid', 20);
+        discoverPage = 1;
+    }
 
     let endpoint = discoverMediaType === 'movie' ? 'movie' : 'tv';
     let extraParams = '';
@@ -66,8 +54,8 @@ async function renderDiscoverTab(isAppend = false) {
 
     let baseApiUrl = '';
     if (currentDiscoverMode === 'top') {
-        // EXIGENCE : Ne prend en compte que les médias avec beaucoup de notes (>= 500)
-        baseApiUrl = `${TMDB_BASE}/discover/${endpoint}?api_key=${TMDB_API_KEY}&language=fr-FR&sort_by=vote_average.desc&vote_count.gte=500${extraParams}`;
+        // EXIGENCE : Ne prend en compte que les médias avec beaucoup de notes (>= 1000 pour plus de pertinence)
+        baseApiUrl = `${TMDB_BASE}/discover/${endpoint}?api_key=${TMDB_API_KEY}&language=fr-FR&sort_by=vote_average.desc&vote_count.gte=1000${extraParams}`;
     } else if (currentDiscoverMode === 'trending') {
         baseApiUrl = `${TMDB_BASE}/trending/${endpoint}/week?api_key=${TMDB_API_KEY}&language=fr-FR`;
     } else {
@@ -75,13 +63,15 @@ async function renderDiscoverTab(isAppend = false) {
     }
 
     try {
-        const pages = [discoverPage, discoverPage + 1, discoverPage + 2];
-        const fetchPromises = pages.map(p => fetch(`${baseApiUrl}&page=${p}`).then(r => r.json()).catch(() => ({})));
+        // Pour avoir ~50 résultats, on récupère 3 à 4 pages (TMDB = 20/page)
+        const pagesToFetch = isAppend ? [discoverPage, discoverPage + 1] : [1, 2, 3];
+        const fetchPromises = pagesToFetch.map(p => fetch(`${baseApiUrl}&page=${p}`).then(r => r.json()).catch(() => ({ results: [] })));
         const resultsArray = await Promise.all(fetchPromises);
         
         let rawResults = [];
         resultsArray.forEach(data => { if (data.results) rawResults.push(...data.results); });
         
+        // Filtrage manuel pour les tendances car TMDB ne permet pas de filtrer les genres sur l'endpoint trending
         if (currentDiscoverMode === 'trending') {
             rawResults = rawResults.filter(m => {
                 const isAnime = (m.genre_ids || []).includes(16) || m.original_language === 'ja';
@@ -102,9 +92,10 @@ async function renderDiscoverTab(isAppend = false) {
             premiered: (m.release_date || m.first_air_date || 'N/A').split('-')[0],
             network: m.networks?.[0]?.name || 'TMDB',
             original_language: m.original_language,
-            genres: m.genre_ids 
+            genres: m.genre_ids || []
         })).filter(v => typeof isMediaInLibrary === 'function' && !isMediaInLibrary(v));
 
+        // Déduplication
         pool = pool.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
 
         let scoredPool = pool;
@@ -113,26 +104,12 @@ async function renderDiscoverTab(isAppend = false) {
             const userGenreScore = {};
             if (typeof library !== 'undefined') {
                 library.forEach(item => {
-                    if (item.type === (discoverMediaType === 'movie' ? 'movie' : 'series')) {
-                        (item.genres || []).forEach(g => {
-                            let id = null;
-                            if (!isNaN(g)) id = parseInt(g);
-                            else {
-                                const str = String(g).toLowerCase();
-                                if (str.includes('anime') || str.includes('animation')) id = 16;
-                                else if (str.includes('drama') || str.includes('drame')) id = 18;
-                                else if (str.includes('comed') || str.includes('coméd')) id = 35;
-                                else if (str.includes('action') || str.includes('aventure')) id = discoverMediaType === 'movie' ? 28 : 10759;
-                                else if (str.includes('sci-fi') || str.includes('science') || str.includes('fantasy')) id = discoverMediaType === 'movie' ? 878 : 10765;
-                                else if (str.includes('crime')) id = 80;
-                                else if (str.includes('mystery') || str.includes('mystère')) id = 9648;
-                                else if (str.includes('thriller')) id = 53;
-                                else if (str.includes('horror') || str.includes('horreur')) id = 27;
-                                else if (str.includes('romance')) id = 10749;
-                            }
-                            if (id) userGenreScore[id] = (userGenreScore[id] || 0) + 1;
-                        });
-                    }
+                    (item.genres || []).forEach(g => {
+                        let id = parseInt(g);
+                        if (!isNaN(id)) {
+                            userGenreScore[id] = (userGenreScore[id] || 0) + 1;
+                        }
+                    });
                 });
             }
 
@@ -141,34 +118,39 @@ async function renderDiscoverTab(isAppend = false) {
             scoredPool = pool.map(m => {
                 let gScore = 0;
                 (m.genres || []).forEach(gId => {
-                    if (userGenreScore[gId]) gScore += (userGenreScore[gId] / maxGScore) * 6;
+                    if (userGenreScore[gId]) gScore += (userGenreScore[gId] / maxGScore) * 10;
                 });
-                let rawScore = m.rating + Math.min(gScore, 6); 
-                let match = Math.min(99, Math.max(15, Math.round((rawScore / 16) * 100)));
-                match += Math.floor(Math.random() * 5) - 2; 
+
+                // Algo de match intelligent : vote_average (0-10) + score_genre (0-10)
+                let rawScore = (m.rating || 5) + Math.min(gScore, 10);
+                let match = Math.round((rawScore / 20) * 100);
+
+                // Petite part d'aléatoire pour la découverte
+                match += Math.floor(Math.random() * 6) - 3;
+
                 return { ...m, matchPercent: Math.min(99, Math.max(10, match)) }; 
             });
-            scoredPool.sort((a, b) => b.matchPercent - a.matchPercent);
+            scoredPool.sort((a, b) => (b.matchPercent || 0) - (a.matchPercent || 0));
             
         } else if (currentDiscoverMode === 'top') {
             scoredPool.sort((a, b) => b.rating - a.rating);
-        } else {
-            scoredPool.sort(() => 0.5 - Math.random());
         }
 
         if (isAppend) {
             discoverResults = [...discoverResults, ...scoredPool];
             renderDiscoverGrid(false, scoredPool); 
+            discoverPage += pagesToFetch.length;
         } else {
             discoverResults = scoredPool;
             renderDiscoverGrid(true, discoverResults); 
+            discoverPage = pagesToFetch.length + 1;
         }
-        discoverPage += 3;
-        
+
     } catch (e) {
+        console.error("Erreur discover:", e);
         if (!isAppend) {
             const grid = document.getElementById('discoverGrid');
-            if (grid) grid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Erreur de chargement.</p>';
+            if (grid) grid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Erreur de chargement des suggestions.</p>';
         }
     }
 }
@@ -187,8 +169,8 @@ function renderDiscoverGrid(clear = false, itemsToRender = []) {
     if (typeof observeLazyImages === 'function') observeLazyImages();
 }
 
-const discoverObserver = new IntersectionObserver(entries => { 
+window.discoverObserver = new IntersectionObserver(entries => {
     if (entries[0].isIntersecting && typeof discoverResults !== 'undefined' && discoverResults.length > 0) { 
         renderDiscoverTab(true); 
     } 
-});
+}, { rootMargin: '400px' });
