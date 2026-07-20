@@ -51,6 +51,7 @@
             <div class="flex justify-center items-center mb-1">                
                 <div class="flex bg-gray-900 rounded-lg p-0.5 border border-gray-700">
                     <button onclick="setDiscoverType('series')" id="btn-disc-type-series" class="px-5 py-1.5 text-xs font-bold rounded shadow bg-teal-600 text-white transition">Séries</button>
+                    <button onclick="setDiscoverType('anime')" id="btn-disc-type-anime" class="px-5 py-1.5 text-xs font-bold rounded text-gray-400 hover:text-white transition">Animes</button>
                     <button onclick="setDiscoverType('movie')" id="btn-disc-type-movie" class="px-5 py-1.5 text-xs font-bold rounded text-gray-400 hover:text-white transition">Films</button>
                 </div>
             </div>
@@ -300,7 +301,7 @@
                 <div id="modalSeriesContent" class="hidden space-y-6">
                     <div>
                         <h4 class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-3">Qualité Globale</h4>
-                        <div id="modalGlobalGraph" class="h-10 flex items-end gap-0.5 border-b border-gray-800 pb-1 w-full overflow-hidden"></div>
+                        <div id="modalGlobalGraph" class="h-10 flex items-end gap-0.5 border-b border-gray-800 pb-1 w-full overflow-x-auto no-scrollbar"></div>
                     </div>
                     
                     <div id="modalEpisodesBlock" class="hidden">
@@ -313,7 +314,7 @@
                         </div>
                         
                         <div id="modalSeasonTabs" class="flex gap-2 overflow-x-auto pb-2 no-scrollbar"></div>
-                        <div id="modalSeasonGraph" class="h-16 flex items-end gap-1 border-b border-gray-800 pb-1 mb-4 mt-2 w-full overflow-hidden"></div>
+                        <div id="modalSeasonGraph" class="h-16 flex items-end gap-1 border-b border-gray-800 pb-1 mb-4 mt-2 w-full overflow-x-auto no-scrollbar"></div>
                         <div id="modalEpisodesList" class="space-y-2"></div>
                     </div>
                 </div>
