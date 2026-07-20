@@ -126,7 +126,8 @@ function renderGlobalGraph(eps) {
         const h = Math.max(10, (r / 10) * 100); 
         const colorClass = seasonColors[(ep.season - 1) % seasonColors.length] || 'bg-teal-500'; 
         const bar = document.createElement('div'); 
-        bar.className = `flex-1 min-w-[1px] ${colorClass} hover:opacity-80 rounded-t cursor-pointer relative z-10`; 
+        // min-w-[2px] pour s'assurer que même avec beaucoup d'épisodes, on peut scroller
+        bar.className = `flex-1 min-w-[2px] max-w-[6px] ${colorClass} hover:opacity-80 rounded-t cursor-pointer relative z-10`;
         bar.style.height = `${h}%`; 
         bar.title = `S${ep.season}E${ep.number}: ${r}`; 
         frag.appendChild(bar); 
@@ -143,7 +144,8 @@ function renderSeasonGraph(eps) {
         const r = val > 0 ? val : currentSeriesAvgRating; 
         const h = Math.max(10, (r / 10) * 100); 
         const colorClass = seasonColors[(ep.season - 1) % seasonColors.length] || 'bg-cyan-600'; 
-        container.innerHTML += `<div class="flex-1 min-w-[4px] ${colorClass} transition rounded-t cursor-pointer flex flex-col justify-end items-center relative z-10" style="height: ${h}%" title="E${ep.number}: ${r}"><span class="text-[8px] text-white font-bold mb-0.5 opacity-80 overflow-hidden">${r > 0 ? r : ''}</span></div>`; 
+        // min-w-[12px] pour le graphe de saison car on affiche la note
+        container.innerHTML += `<div class="flex-1 min-w-[14px] max-w-[24px] ${colorClass} transition rounded-t cursor-pointer flex flex-col justify-end items-center relative z-10" style="height: ${h}%" title="E${ep.number}: ${r}"><span class="text-[7px] text-white font-bold mb-0.5 opacity-90 overflow-hidden">${r > 0 ? r : ''}</span></div>`;
     }); 
 }
 
