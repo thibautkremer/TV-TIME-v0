@@ -31,14 +31,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     // 4. Initialisation interface
     switchTab('library');
 
-    document.getElementById('searchInput').addEventListener('input', e => {
-        const q = e.target.value.trim();
-        document.getElementById('clearSearchBtn').classList.toggle('hidden', q.length === 0);
-        clearTimeout(searchDebounceTimer);
-        if (q.length > 2) searchDebounceTimer = setTimeout(() => triggerFuzzySearch(q), 400);
-        else if (q.length === 0) { searchResults = []; resetAndDisplaySearch(); }
-    });
-
     document.getElementById('modalViewSuggestionsBtn').onclick = () => {
         const block = document.getElementById('modalSuggestionsBlock');
         if (block.classList.contains('hidden')) { renderSuggestions(currentModalMediaId); block.classList.remove('hidden'); setTimeout(() => block.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100); } else { block.classList.add('hidden'); }
